@@ -1,0 +1,81 @@
+/* Shell Layout */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background-color: var(--bg);
+  overflow: hidden;
+}
+
+/* Barre Haute : 48px */
+.top-bar {
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--gap-4);
+  gap: var(--gap-3);
+  z-index: 20;
+}
+
+/* Zone principale : occupe l'espace entre top-bar et ticker */
+.app-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Rail de gauche (Sources) : 280px */
+.source-rail {
+  width: 280px;
+  min-width: 240px;
+  max-width: 340px;
+  background-color: var(--surface);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Centre : fluide */
+.center-viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background-color: var(--bg);
+  overflow: hidden;
+}
+
+/* Inspecteur à droite : 440px */
+.inspector-pane {
+  width: 440px;
+  min-width: 320px;
+  max-width: 500px;
+  background-color: var(--surface);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Ticker en bas : 32px */
+.app-ticker {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  background-color: var(--surface);
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--gap-3);
+  overflow: hidden;
+  z-index: 10;
+}

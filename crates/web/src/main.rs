@@ -1,4 +1,8 @@
 mod app;
+mod components;
+mod net;
+mod state;
+mod views;
 
 use app::App;
 use leptos::prelude::*;

@@ -1,7 +1,9 @@
+pub mod assets;
 pub mod batcher;
 pub mod catalog;
 pub mod connectors;
 pub mod discovery;
+pub mod fixtures;
 pub mod redaction;
 pub mod riot_http;
 pub mod security;
@@ -39,6 +41,7 @@ pub struct AppState {
     pub riot_client: ReadOnlyRiotClient,
     pub ws_broadcast_tx: broadcast::Sender<ServerMsg>,
     pub security_config: SecurityConfig,
+    pub is_demo: bool,
 }
 
 impl AppState {
@@ -50,6 +53,7 @@ impl AppState {
         riot_client: ReadOnlyRiotClient,
         ws_broadcast_tx: broadcast::Sender<ServerMsg>,
         security_config: SecurityConfig,
+        is_demo: bool,
     ) -> Self {
         Self {
             discovery,
@@ -59,6 +63,7 @@ impl AppState {
             riot_client,
             ws_broadcast_tx,
             security_config,
+            is_demo,
         }
     }
 
@@ -83,9 +88,10 @@ impl AppState {
     }
 }
 
-pub async fn health_handler() -> Json<HealthResponse> {
+pub async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok".to_string(),
+        demo: state.is_demo,
     })
 }
 
@@ -343,6 +349,7 @@ async fn handle_ws_socket(socket: WebSocket, state: AppState) {
     let hello = ServerMsg::Hello {
         version: "0.1.0".to_string(),
         snapshot,
+        is_demo: state.is_demo,
     };
 
     if let Ok(hello_json) = serde_json::to_string(&hello) {
@@ -402,6 +409,7 @@ async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                         let hello = ServerMsg::Hello {
                             version: "0.1.0".to_string(),
                             snapshot,
+                            is_demo: state.is_demo,
                         };
                         if let Ok(json) = serde_json::to_string(&hello) {
                             if sender.send(Message::Text(json.into())).await.is_err() {
@@ -433,6 +441,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/call/{source}", get(call_handler))
         .route("/api/secrets/{id}/reveal", post(secret_reveal_handler))
         .route("/ws", get(ws_handler))
+        .route("/", get(assets::static_handler))
+        .fallback(assets::static_handler)
         .layer(axum::middleware::from_fn_with_state(
             sec_config,
             security_middleware,

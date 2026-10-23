@@ -24,6 +24,7 @@ pub enum InspectorTab {
 pub struct AppState {
     pub active_tab: RwSignal<NavTab>,
     pub is_connected: RwSignal<bool>,
+    pub is_demo: RwSignal<bool>,
     pub secrets_hidden: RwSignal<bool>,
     pub event_store: EventStore,
     pub source_store: SourceStore,
@@ -41,6 +42,7 @@ impl AppState {
         Self {
             active_tab: RwSignal::new(NavTab::Live),
             is_connected: RwSignal::new(false),
+            is_demo: RwSignal::new(false),
             secrets_hidden: RwSignal::new(true),
             event_store: EventStore::new(),
             source_store: SourceStore::new(),

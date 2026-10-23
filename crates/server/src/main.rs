@@ -11,6 +11,7 @@ use hypatia_server::connectors::{
     spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector_full,
 };
 use hypatia_server::discovery::DiscoveryManager;
+use hypatia_server::fixtures::spawn_demo_generator;
 use hypatia_server::redaction::SecretVault;
 use hypatia_server::riot_http::ReadOnlyRiotClient;
 use hypatia_server::security::SecurityConfig;
@@ -31,6 +32,12 @@ struct Cli {
 
     #[arg(long)]
     dev: bool,
+
+    #[arg(long)]
+    demo: bool,
+
+    #[arg(long, default_value_t = 10.0)]
+    demo_rate: f32,
 }
 
 async fn test_riot_client_connection(port: u16, password: &str) -> Result<()> {
@@ -106,10 +113,17 @@ async fn main() -> Result<()> {
     info!("Démarrage de hypatia-server...");
 
     let vault = SecretVault::new();
-    let (discovery, _snapshot_rx) = DiscoveryManager::new(vault.clone());
-
-    // Démarrage de la boucle de découverte en tâche de fond (intervalle 1 seconde)
-    discovery.spawn_loop(Duration::from_millis(1000));
+    let (discovery, _snapshot_rx) = if cli.demo {
+        info!(
+            "Mode Démonstration activé (données synthétiques, cadence : {:.1} évt/s)",
+            cli.demo_rate
+        );
+        DiscoveryManager::new_demo(vault.clone())
+    } else {
+        let (disc, rx) = DiscoveryManager::new(vault.clone());
+        disc.spawn_loop(Duration::from_millis(1000));
+        (disc, rx)
+    };
 
     // Initialisation du store et des flux WebSocket
     let (store_inner, event_rx) = EventStore::new();
@@ -128,50 +142,55 @@ async fn main() -> Result<()> {
         ws_broadcast_tx.clone(),
     );
 
-    // Démarrage des connecteurs WAMP pour RiotClient et LeagueClient avec intégration catalogue
-    spawn_wamp_connector_full(
-        SourceId::RiotClient,
-        discovery.clone(),
-        store.clone(),
-        vault.clone(),
-        Some(catalog.clone()),
-        Some(riot_client.clone()),
-        Some(ws_broadcast_tx.clone()),
-    );
-    spawn_wamp_connector_full(
-        SourceId::LeagueClient,
-        discovery.clone(),
-        store.clone(),
-        vault.clone(),
-        Some(catalog.clone()),
-        Some(riot_client.clone()),
-        Some(ws_broadcast_tx.clone()),
-    );
+    if cli.demo {
+        // En mode démo, injection du flux synthétique réaliste
+        spawn_demo_generator(store.clone(), catalog.clone(), vault.clone(), cli.demo_rate);
+    } else {
+        // Démarrage des connecteurs WAMP pour RiotClient et LeagueClient avec intégration catalogue
+        spawn_wamp_connector_full(
+            SourceId::RiotClient,
+            discovery.clone(),
+            store.clone(),
+            vault.clone(),
+            Some(catalog.clone()),
+            Some(riot_client.clone()),
+            Some(ws_broadcast_tx.clone()),
+        );
+        spawn_wamp_connector_full(
+            SourceId::LeagueClient,
+            discovery.clone(),
+            store.clone(),
+            vault.clone(),
+            Some(catalog.clone()),
+            Some(riot_client.clone()),
+            Some(ws_broadcast_tx.clone()),
+        );
 
-    // Démarrage des connecteurs Live Client Data et Replay
-    spawn_live_client_poller(
-        discovery.clone(),
-        store.clone(),
-        catalog.clone(),
-        vault.clone(),
-        riot_client.clone(),
-        ws_broadcast_tx.clone(),
-    );
-    spawn_replay_poller(
-        discovery.clone(),
-        store.clone(),
-        catalog.clone(),
-        vault.clone(),
-        riot_client.clone(),
-        ws_broadcast_tx.clone(),
-    );
+        // Démarrage des connecteurs Live Client Data et Replay
+        spawn_live_client_poller(
+            discovery.clone(),
+            store.clone(),
+            catalog.clone(),
+            vault.clone(),
+            riot_client.clone(),
+            ws_broadcast_tx.clone(),
+        );
+        spawn_replay_poller(
+            discovery.clone(),
+            store.clone(),
+            catalog.clone(),
+            vault.clone(),
+            riot_client.clone(),
+            ws_broadcast_tx.clone(),
+        );
 
-    // Test de connexion Riot Client au démarrage si disponible
-    if let Some(rc_source) = discovery.get_source(SourceId::RiotClient) {
-        if let (Some(port), Some(cred)) = (rc_source.port, rc_source.credential) {
-            if let Some(pwd) = vault.reveal(cred.id) {
-                if let Err(e) = test_riot_client_connection(port, &pwd).await {
-                    error!("Erreur lors de la requête de test vers Riot Client : {:?}", e);
+        // Test de connexion Riot Client au démarrage si disponible
+        if let Some(rc_source) = discovery.get_source(SourceId::RiotClient) {
+            if let (Some(port), Some(cred)) = (rc_source.port, rc_source.credential) {
+                if let Some(pwd) = vault.reveal(cred.id) {
+                    if let Err(e) = test_riot_client_connection(port, &pwd).await {
+                        error!("Erreur lors de la requête de test vers Riot Client : {:?}", e);
+                    }
                 }
             }
         }
@@ -194,9 +213,20 @@ async fn main() -> Result<()> {
         riot_client,
         ws_broadcast_tx,
         security_config,
+        is_demo: cli.demo,
     };
 
     let app = create_router(state);
+
+    if !cli.no_open {
+        let open_url = format!("http://127.0.0.1:{}", active_addr.port());
+        info!("Ouverture automatique du navigateur sur {}", open_url);
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = webbrowser::open(&open_url) {
+                warn!("Impossible d'ouvrir automatiquement le navigateur : {:?}", e);
+            }
+        });
+    }
 
     axum::serve(listener, app).await?;
 

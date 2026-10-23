@@ -62,6 +62,7 @@ async fn test_live_wamp_capture_and_routes() {
         riot_client,
         ws_broadcast_tx,
         security_config,
+        is_demo: false,
     };
 
     let app = create_router(state);
@@ -82,7 +83,7 @@ async fn test_live_wamp_capture_and_routes() {
     let hello_msg: ServerMsg = serde_json::from_str(&text).unwrap();
 
     match hello_msg {
-        ServerMsg::Hello { version, snapshot } => {
+        ServerMsg::Hello { version, snapshot, .. } => {
             println!("Received Hello version: {}", version);
             println!("Initial sources in Hello: {:?}", snapshot.sources.len());
             assert_eq!(version, "0.1.0");

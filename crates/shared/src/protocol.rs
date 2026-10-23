@@ -17,6 +17,8 @@ pub enum ServerMsg {
     Hello {
         version: String,
         snapshot: Snapshot,
+        #[serde(default)]
+        is_demo: bool,
     },
     Batch {
         events: Vec<EventMeta>,

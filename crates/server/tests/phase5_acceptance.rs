@@ -32,6 +32,7 @@ fn setup_test_server(allowed_port: u16) -> (AppState, SecretVault, Arc<RwLock<Ev
         riot_client,
         ws_broadcast_tx,
         security_config,
+        is_demo: false,
     };
 
     (state, vault, store, catalog)
@@ -211,6 +212,7 @@ async fn test_live_call_and_store_redaction_acceptance() {
                 riot_client,
                 ws_broadcast_tx,
                 security_config,
+                is_demo: false,
             };
 
             let app = create_router(state);
@@ -312,6 +314,7 @@ async fn test_live_server_network_hardening_with_client() {
         riot_client,
         ws_broadcast_tx,
         security_config,
+        is_demo: false,
     };
 
     let app = create_router(state);

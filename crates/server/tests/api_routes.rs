@@ -37,6 +37,7 @@ fn setup_test_state() -> (AppState, SecretVault, Arc<RwLock<EventStore>>) {
         riot_client,
         ws_broadcast_tx,
         security_config,
+        is_demo: false,
     };
 
     (state, vault, store)
@@ -372,7 +373,7 @@ async fn test_ws_connection_and_protocol() {
     let server_msg: ServerMsg = serde_json::from_str(&text).unwrap();
 
     match server_msg {
-        ServerMsg::Hello { version, snapshot } => {
+        ServerMsg::Hello { version, snapshot, .. } => {
             assert_eq!(version, "0.1.0");
             assert_eq!(snapshot.sources.len(), 4);
         }

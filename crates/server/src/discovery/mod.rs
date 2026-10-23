@@ -6,7 +6,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hypatia_shared::{SecretRef, SourceId, SourceState, SourceStatus, SystemSnapshot};
+use hypatia_shared::{
+    ListenSocket, ProcessInfo, RemoteConn, SecretRef, SourceId, SourceState, SourceStatus,
+    SystemSnapshot,
+};
 use sysinfo::System;
 use tokio::sync::watch;
 use tracing::{debug, info};
@@ -49,6 +52,188 @@ impl DiscoveryManager {
             sources,
             lcu_args,
             since_map,
+        };
+
+        let manager = Arc::new(Self {
+            state: Arc::new(RwLock::new(initial_state)),
+            vault,
+            snapshot_tx,
+        });
+
+        (manager, snapshot_rx)
+    }
+
+    /// Creates a demo `DiscoveryManager` pre-populated with realistic synthetic sources and processes.
+    pub fn new_demo(vault: SecretVault) -> (Arc<Self>, watch::Receiver<SystemSnapshot>) {
+        let now_sec = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        let rc_cred = vault.store(
+            "demo-riot-client-token-xyz789".to_string(),
+            "rc_demo_token".to_string(),
+        );
+        let lcu_cred = vault.store(
+            "demo-league-client-token-abc123".to_string(),
+            "lcu_demo_token".to_string(),
+        );
+
+        let processes = vec![
+            ProcessInfo {
+                pid: 14200,
+                name: "RiotClientServices.exe".to_string(),
+                exe: Some("C:\\Riot Games\\Riot Client\\RiotClientServices.exe".to_string()),
+                started: now_sec - 120,
+                cpu: 0.3,
+                mem_bytes: 88_500_000,
+                source: Some(SourceId::RiotClient),
+            },
+            ProcessInfo {
+                pid: 18452,
+                name: "LeagueClientUx.exe".to_string(),
+                exe: Some("C:\\Riot Games\\League of Legends\\LeagueClientUx.exe".to_string()),
+                started: now_sec - 60,
+                cpu: 1.2,
+                mem_bytes: 345_000_000,
+                source: Some(SourceId::LeagueClient),
+            },
+            ProcessInfo {
+                pid: 19100,
+                name: "LeagueCrashHandler64.exe".to_string(),
+                exe: Some("C:\\Riot Games\\League of Legends\\LeagueCrashHandler64.exe".to_string()),
+                started: now_sec - 60,
+                cpu: 0.0,
+                mem_bytes: 14_000_000,
+                source: Some(SourceId::LeagueClient),
+            },
+            ProcessInfo {
+                pid: 21004,
+                name: "League of Legends.exe".to_string(),
+                exe: Some("C:\\Riot Games\\League of Legends\\Game\\League of Legends.exe".to_string()),
+                started: now_sec - 30,
+                cpu: 4.8,
+                mem_bytes: 1_850_000_000,
+                source: Some(SourceId::LiveGame),
+            },
+        ];
+
+        let sockets = vec![
+            ListenSocket {
+                pid: 14200,
+                local: "127.0.0.1".to_string(),
+                port: 54012,
+                proto: "TCP".to_string(),
+            },
+            ListenSocket {
+                pid: 18452,
+                local: "127.0.0.1".to_string(),
+                port: 58921,
+                proto: "TCP".to_string(),
+            },
+            ListenSocket {
+                pid: 21004,
+                local: "127.0.0.1".to_string(),
+                port: 2999,
+                proto: "TCP".to_string(),
+            },
+        ];
+
+        let connections = vec![
+            RemoteConn {
+                pid: 14200,
+                local: "127.0.0.1:54012".to_string(),
+                remote: "127.0.0.1:54013".to_string(),
+                state: "ESTABLISHED".to_string(),
+            },
+            RemoteConn {
+                pid: 18452,
+                local: "127.0.0.1:58921".to_string(),
+                remote: "127.0.0.1:58922".to_string(),
+                state: "ESTABLISHED".to_string(),
+            },
+            RemoteConn {
+                pid: 18452,
+                local: "192.168.1.42:50123".to_string(),
+                remote: "162.249.79.1:443".to_string(),
+                state: "ESTABLISHED".to_string(),
+            },
+        ];
+
+        let snapshot = SystemSnapshot {
+            ts: now_sec,
+            processes,
+            sockets,
+            connections,
+        };
+
+        let sources = vec![
+            SourceState {
+                id: SourceId::RiotClient,
+                status: SourceStatus::Live,
+                pid: Some(14200),
+                port: Some(54012),
+                protocol: Some("https".to_string()),
+                since: now_ms - 120_000,
+                events_total: 0,
+                bytes_total: 0,
+                credential: Some(rc_cred),
+            },
+            SourceState {
+                id: SourceId::LeagueClient,
+                status: SourceStatus::Live,
+                pid: Some(18452),
+                port: Some(58921),
+                protocol: Some("https".to_string()),
+                since: now_ms - 60_000,
+                events_total: 0,
+                bytes_total: 0,
+                credential: Some(lcu_cred),
+            },
+            SourceState {
+                id: SourceId::LiveGame,
+                status: SourceStatus::Live,
+                pid: Some(21004),
+                port: Some(2999),
+                protocol: Some("https".to_string()),
+                since: now_ms - 30_000,
+                events_total: 0,
+                bytes_total: 0,
+                credential: None,
+            },
+            SourceState {
+                id: SourceId::System,
+                status: SourceStatus::Live,
+                pid: None,
+                port: None,
+                protocol: None,
+                since: now_ms - 120_000,
+                events_total: 0,
+                bytes_total: 0,
+                credential: None,
+            },
+        ];
+
+        let lcu_args = Some(LeagueClientArgs {
+            app_port: Some(58921),
+            remoting_auth_token: Some("demo-league-client-token-abc123".to_string()),
+            install_directory: Some(std::path::PathBuf::from("C:\\Riot Games\\League of Legends")),
+            riotclient_app_port: Some(54012),
+            riotclient_auth_token: Some("demo-riot-client-token-xyz789".to_string()),
+            app_pid: Some(18452),
+        });
+
+        let (snapshot_tx, snapshot_rx) = watch::channel(snapshot.clone());
+
+        let initial_state = DiscoveryState {
+            snapshot,
+            sources,
+            lcu_args,
+            since_map: HashMap::new(),
         };
 
         let manager = Arc::new(Self {

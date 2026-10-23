@@ -104,6 +104,13 @@ pub fn App() -> impl IntoView {
             {move || {
                 if !is_connected.get() {
                     view! { <WsDisconnectedBanner /> }.into_any()
+                } else if state.is_demo.get() {
+                    view! {
+                        <div class="demo-banner" role="status">
+                            <span class="demo-badge">"DÉMO"</span>
+                            <span>"Mode Démonstration (données synthétiques)"</span>
+                        </div>
+                    }.into_any()
                 } else {
                     ().into_any()
                 }

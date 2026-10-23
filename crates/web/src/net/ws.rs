@@ -47,7 +47,8 @@ pub fn start_websocket(state: AppState) {
 fn handle_server_msg(text: &str, state: &AppState) {
     if let Ok(msg) = serde_json::from_str::<ServerMsg>(text) {
         match msg {
-            ServerMsg::Hello { snapshot, .. } => {
+            ServerMsg::Hello { snapshot, is_demo, .. } => {
+                state.is_demo.set(is_demo);
                 state.source_store.update_sources(snapshot.sources);
                 if let Some(phase) = snapshot.phase {
                     state.phase_store.set_phase(phase);

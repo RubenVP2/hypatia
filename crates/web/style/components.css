@@ -51,7 +51,6 @@
   gap: var(--gap-2);
   background-color: var(--raised);
   border: 1px solid var(--line);
-  border-left-width: 4px;
   padding: 4px 10px;
   font-size: var(--fs-sm);
   color: var(--text);
@@ -69,10 +68,10 @@
   background-color: var(--line);
 }
 
-.source-chip.src-riot { border-left-color: var(--src-riot); }
-.source-chip.src-lcu { border-left-color: var(--src-lcu); }
-.source-chip.src-live { border-left-color: var(--src-live); }
-.source-chip.src-system { border-left-color: var(--src-system); }
+.source-chip.src-riot { border-color: color-mix(in srgb, var(--src-riot) 40%, var(--line)); }
+.source-chip.src-lcu { border-color: color-mix(in srgb, var(--src-lcu) 40%, var(--line)); }
+.source-chip.src-live { border-color: color-mix(in srgb, var(--src-live) 40%, var(--line)); }
+.source-chip.src-system { border-color: color-mix(in srgb, var(--src-system) 40%, var(--line)); }
 
 .source-chip-dot {
   width: 6px;
@@ -366,7 +365,6 @@
 .phase-card {
   background-color: var(--surface);
   border: 1px solid var(--line);
-  border-left: 6px solid var(--src-lcu);
   padding: var(--gap-3) var(--gap-4);
   display: flex;
   align-items: center;
@@ -2016,8 +2014,7 @@
 
 .system-banner {
   background-color: var(--surface);
-  border: 1px solid var(--src-system);
-  border-left: 6px solid var(--src-system);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--gap-3) var(--gap-4);
   display: flex;

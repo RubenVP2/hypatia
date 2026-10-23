@@ -29,6 +29,16 @@ pub struct GamePhase {
     pub since: i64, // ms epoch
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UriState {
+    pub current: serde_json::Value,
+    pub previous: Option<serde_json::Value>,
+    pub kind: EventKind,
+    pub count: u64,
+    pub last_ts: i64,
+    pub bytes: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -53,5 +63,17 @@ mod tests {
         let kind = EventKind::Create;
         let k_json = serde_json::to_string(&kind).unwrap();
         assert_eq!(k_json, r#"{"t":"Create"}"#);
+
+        let uri_state = UriState {
+            current: serde_json::json!({"status": "active"}),
+            previous: Some(serde_json::json!({"status": "idle"})),
+            kind: EventKind::Update,
+            count: 42,
+            last_ts: 1700000000123,
+            bytes: 256,
+        };
+        let u_json = serde_json::to_string(&uri_state).unwrap();
+        let back_uri: UriState = serde_json::from_str(&u_json).unwrap();
+        assert_eq!(back_uri, uri_state);
     }
 }

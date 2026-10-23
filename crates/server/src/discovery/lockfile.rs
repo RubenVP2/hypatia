@@ -131,7 +131,7 @@ pub fn read_lockfile_tolerant(path: &Path) -> Option<RiotClientLockfile> {
         match open_shared_read(path) {
             Ok(mut file) => {
                 let mut content = String::new();
-                if let Ok(_) = file.read_to_string(&mut content) {
+                if file.read_to_string(&mut content).is_ok() {
                     if let Some(parsed) = RiotClientLockfile::parse(&content) {
                         return Some(parsed);
                     }

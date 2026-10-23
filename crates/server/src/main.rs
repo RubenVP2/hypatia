@@ -1,13 +1,18 @@
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use base64::prelude::*;
 use clap::Parser;
+use hypatia_server::batcher::spawn_batcher;
+use hypatia_server::connectors::spawn_wamp_connector;
 use hypatia_server::discovery::DiscoveryManager;
 use hypatia_server::redaction::SecretVault;
+use hypatia_server::store::EventStore;
 use hypatia_server::{create_router, AppState};
 use hypatia_shared::SourceId;
+use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 #[derive(Parser, Debug)]
@@ -101,6 +106,33 @@ async fn main() -> Result<()> {
     // Démarrage de la boucle de découverte en tâche de fond (intervalle 1 seconde)
     discovery.spawn_loop(Duration::from_millis(1000));
 
+    // Initialisation du store et des flux WebSocket
+    let (store_inner, event_rx) = EventStore::new();
+    let store = Arc::new(RwLock::new(store_inner));
+    let (ws_broadcast_tx, _ws_broadcast_rx) = broadcast::channel(1024);
+
+    // Démarrage du batcher (agrégation 100 ms)
+    spawn_batcher(
+        event_rx,
+        store.clone(),
+        discovery.clone(),
+        ws_broadcast_tx.clone(),
+    );
+
+    // Démarrage des connecteurs WAMP pour RiotClient et LeagueClient
+    spawn_wamp_connector(
+        SourceId::RiotClient,
+        discovery.clone(),
+        store.clone(),
+        vault.clone(),
+    );
+    spawn_wamp_connector(
+        SourceId::LeagueClient,
+        discovery.clone(),
+        store.clone(),
+        vault.clone(),
+    );
+
     // Test de connexion Riot Client au démarrage si disponible
     if let Some(rc_source) = discovery.get_source(SourceId::RiotClient) {
         if let (Some(port), Some(cred)) = (rc_source.port, rc_source.credential) {
@@ -115,6 +147,8 @@ async fn main() -> Result<()> {
     let state = AppState {
         discovery,
         vault,
+        store,
+        ws_broadcast_tx,
     };
 
     let app = create_router(state);

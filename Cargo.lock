@@ -760,6 +760,7 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "hypatia-shared",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

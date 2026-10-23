@@ -39,6 +39,15 @@ pub struct UriState {
     pub bytes: u64,
 }
 
+/// Événement stocké avec son payload complet et le précédent pour le diff.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StoredEvent {
+    #[serde(rename = "event")]
+    pub meta: EventMeta,
+    pub payload: serde_json::Value,
+    pub previous_payload: Option<serde_json::Value>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,5 +84,14 @@ mod tests {
         let u_json = serde_json::to_string(&uri_state).unwrap();
         let back_uri: UriState = serde_json::from_str(&u_json).unwrap();
         assert_eq!(back_uri, uri_state);
+
+        let stored = StoredEvent {
+            meta: meta.clone(),
+            payload: serde_json::json!({"phase": "ChampSelect"}),
+            previous_payload: Some(serde_json::json!({"phase": "Matchmaking"})),
+        };
+        let s_json = serde_json::to_string(&stored).unwrap();
+        let back_stored: StoredEvent = serde_json::from_str(&s_json).unwrap();
+        assert_eq!(back_stored, stored);
     }
 }

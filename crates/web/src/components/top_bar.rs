@@ -100,9 +100,14 @@ pub fn TopBar() -> impl IntoView {
                     <span>{move || if secrets_hidden.get() { "🔒 Secrets masqués" } else { "🔓 Secrets visibles" }}</span>
                 </button>
 
-                <div class="kbd-badge" title="Palette de commandes">
+                <button
+                    type="button"
+                    class="kbd-badge palette-trigger-btn"
+                    title="Palette de commandes (Ctrl+K)"
+                    on:click=move |_| state.command_palette_open.set(true)
+                >
                     "Ctrl+K"
-                </div>
+                </button>
             </div>
         </header>
     }

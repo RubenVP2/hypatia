@@ -2,22 +2,14 @@ use std::collections::{HashMap, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hypatia_shared::{EventKind, EventMeta, GamePhase, SourceId, UriState};
-use serde::{Deserialize, Serialize};
+pub use hypatia_shared::StoredEvent;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::redaction::{generate_preview, redact_value, SecretVault};
 
 pub const DEFAULT_MAX_EVENTS: usize = 10_000;
 
-/// Stored event containing the event metadata, masked payload,
-/// and the previous payload for the same URI (if known).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredEvent {
-    #[serde(rename = "event")]
-    pub meta: EventMeta,
-    pub payload: serde_json::Value,
-    pub previous_payload: Option<serde_json::Value>,
-}
+
 
 /// Circular buffer for counting events per second over the last 60 seconds.
 #[derive(Debug, Clone)]

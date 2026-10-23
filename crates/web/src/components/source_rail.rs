@@ -67,9 +67,10 @@ pub fn SourceRail() -> impl IntoView {
                     <span class="kbd-badge">"/"</span>
                 </div>
                 <input
+                    id="rail-search-input"
                     type="text"
                     class="search-input-box"
-                    placeholder="Filtrer namespaces..."
+                    placeholder="Filtrer namespaces... (/)"
                     prop:value=move || rail_filter.get()
                     on:input=move |ev| rail_filter.set(event_target_value(&ev))
                 />

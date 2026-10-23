@@ -53,6 +53,7 @@ fn handle_server_msg(text: &str, state: &AppState) {
                     state.phase_store.set_phase(phase);
                 }
                 state.event_store.init_recent(snapshot.recent_events);
+                state.system_store.set_snapshot(snapshot.system);
                 state.is_connected.set(true);
             }
             ServerMsg::Batch { events, sources, rate } => {
@@ -62,8 +63,8 @@ fn handle_server_msg(text: &str, state: &AppState) {
             ServerMsg::Phase(game_phase) => {
                 state.phase_store.set_phase(game_phase);
             }
-            ServerMsg::System(_) => {
-                // Pour la vue système (Phase 7)
+            ServerMsg::System(sys) => {
+                state.system_store.set_snapshot(sys);
             }
             ServerMsg::CatalogChanged { .. } => {}
         }

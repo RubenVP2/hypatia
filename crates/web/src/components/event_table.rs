@@ -240,13 +240,23 @@ pub fn EventTable() -> impl IntoView {
                     let (_start, top_offset, total_height, slice) = visible_slice();
 
                     if filtered_events.get().is_empty() {
+                        let src_filter = store.filter_source.get();
+                        if let Some(src) = src_filter {
+                            let state_status = state.source_store.get_state(src).map(|s| s.status);
+                            if let Some(hypatia_shared::SourceStatus::Offline) = state_status {
+                                return view! {
+                                    <crate::components::EmptyState
+                                        state_type=crate::components::empty_state::source_offline_state(src)
+                                    />
+                                }.into_any();
+                            }
+                        }
+
                         view! {
-                            <div class="empty-state">
-                                <div class="empty-state-icon">"○"</div>
-                                <div class="empty-state-text">
-                                    "En attente d'événements Riot en direct..."
-                                </div>
-                            </div>
+                            <crate::components::EmptyState
+                                state_type=crate::components::empty_state::EmptyStateType::NoEvents
+                                message="En attente d'événements Riot en direct..."
+                            />
                         }.into_any()
                     } else {
                         view! {

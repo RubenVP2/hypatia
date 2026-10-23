@@ -46,16 +46,24 @@ async fn test_live_wamp_capture_and_routes() {
         vault.clone(),
     );
 
+    // Bind server on ephemeral port
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+
+    let catalog = Arc::new(RwLock::new(hypatia_server::catalog::CatalogStore::new()));
+    let riot_client = hypatia_server::riot_http::ReadOnlyRiotClient::new();
+    let security_config = hypatia_server::security::SecurityConfig::new(vec![server_addr.port()], true);
+
     let state = AppState {
         discovery: discovery.clone(),
         vault: vault.clone(),
         store: store.clone(),
+        catalog,
+        riot_client,
         ws_broadcast_tx,
+        security_config,
     };
 
-    // Bind server on ephemeral port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let server_addr = listener.local_addr().unwrap();
     let app = create_router(state);
 
     tokio::spawn(async move {

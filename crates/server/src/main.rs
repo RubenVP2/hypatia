@@ -6,9 +6,14 @@ use anyhow::{Context, Result};
 use base64::prelude::*;
 use clap::Parser;
 use hypatia_server::batcher::spawn_batcher;
-use hypatia_server::connectors::spawn_wamp_connector;
+use hypatia_server::catalog::CatalogStore;
+use hypatia_server::connectors::{
+    spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector_full,
+};
 use hypatia_server::discovery::DiscoveryManager;
 use hypatia_server::redaction::SecretVault;
+use hypatia_server::riot_http::ReadOnlyRiotClient;
+use hypatia_server::security::SecurityConfig;
 use hypatia_server::store::EventStore;
 use hypatia_server::{create_router, AppState};
 use hypatia_shared::SourceId;
@@ -111,6 +116,10 @@ async fn main() -> Result<()> {
     let store = Arc::new(RwLock::new(store_inner));
     let (ws_broadcast_tx, _ws_broadcast_rx) = broadcast::channel(1024);
 
+    // Initialisation du client HTTP Riot et du catalogue
+    let riot_client = ReadOnlyRiotClient::new();
+    let catalog = Arc::new(RwLock::new(CatalogStore::new()));
+
     // Démarrage du batcher (agrégation 100 ms)
     spawn_batcher(
         event_rx,
@@ -119,18 +128,42 @@ async fn main() -> Result<()> {
         ws_broadcast_tx.clone(),
     );
 
-    // Démarrage des connecteurs WAMP pour RiotClient et LeagueClient
-    spawn_wamp_connector(
+    // Démarrage des connecteurs WAMP pour RiotClient et LeagueClient avec intégration catalogue
+    spawn_wamp_connector_full(
         SourceId::RiotClient,
         discovery.clone(),
         store.clone(),
         vault.clone(),
+        Some(catalog.clone()),
+        Some(riot_client.clone()),
+        Some(ws_broadcast_tx.clone()),
     );
-    spawn_wamp_connector(
+    spawn_wamp_connector_full(
         SourceId::LeagueClient,
         discovery.clone(),
         store.clone(),
         vault.clone(),
+        Some(catalog.clone()),
+        Some(riot_client.clone()),
+        Some(ws_broadcast_tx.clone()),
+    );
+
+    // Démarrage des connecteurs Live Client Data et Replay
+    spawn_live_client_poller(
+        discovery.clone(),
+        store.clone(),
+        catalog.clone(),
+        vault.clone(),
+        riot_client.clone(),
+        ws_broadcast_tx.clone(),
+    );
+    spawn_replay_poller(
+        discovery.clone(),
+        store.clone(),
+        catalog.clone(),
+        vault.clone(),
+        riot_client.clone(),
+        ws_broadcast_tx.clone(),
     );
 
     // Test de connexion Riot Client au démarrage si disponible
@@ -144,17 +177,26 @@ async fn main() -> Result<()> {
         }
     }
 
+    let (listener, active_addr) = bind_listener(cli.port).await?;
+    info!("hypatia-server écoute sur http://{}", active_addr);
+
+    let mut allowed_ports = vec![active_addr.port()];
+    if cli.port != active_addr.port() {
+        allowed_ports.push(cli.port);
+    }
+    let security_config = SecurityConfig::new(allowed_ports, cli.dev);
+
     let state = AppState {
         discovery,
         vault,
         store,
+        catalog,
+        riot_client,
         ws_broadcast_tx,
+        security_config,
     };
 
     let app = create_router(state);
-
-    let (listener, active_addr) = bind_listener(cli.port).await?;
-    info!("hypatia-server écoute sur http://{}", active_addr);
 
     axum::serve(listener, app).await?;
 

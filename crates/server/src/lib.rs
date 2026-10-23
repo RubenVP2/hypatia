@@ -1,7 +1,10 @@
 pub mod batcher;
+pub mod catalog;
 pub mod connectors;
 pub mod discovery;
 pub mod redaction;
+pub mod riot_http;
+pub mod security;
 pub mod store;
 
 use std::sync::{Arc, RwLock};
@@ -14,13 +17,17 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use hypatia_shared::{
-    ClientMsg, HealthResponse, ServerMsg, Snapshot, SourceId, SourceState, SystemSnapshot, UriState,
+    ClientMsg, EndpointInfo, HealthResponse, ServerMsg, Snapshot, SourceId, SourceState,
+    SystemSnapshot, UriState,
 };
 use serde::Deserialize;
 use tokio::sync::broadcast;
 
+use crate::catalog::CatalogStore;
 use crate::discovery::DiscoveryManager;
 use crate::redaction::SecretVault;
+use crate::riot_http::ReadOnlyRiotClient;
+use crate::security::{security_middleware, SecurityConfig};
 use crate::store::{EventStore, StoredEvent};
 
 #[derive(Clone)]
@@ -28,7 +35,10 @@ pub struct AppState {
     pub discovery: Arc<DiscoveryManager>,
     pub vault: SecretVault,
     pub store: Arc<RwLock<EventStore>>,
+    pub catalog: Arc<RwLock<CatalogStore>>,
+    pub riot_client: ReadOnlyRiotClient,
     pub ws_broadcast_tx: broadcast::Sender<ServerMsg>,
+    pub security_config: SecurityConfig,
 }
 
 impl AppState {
@@ -36,13 +46,19 @@ impl AppState {
         discovery: Arc<DiscoveryManager>,
         vault: SecretVault,
         store: Arc<RwLock<EventStore>>,
+        catalog: Arc<RwLock<CatalogStore>>,
+        riot_client: ReadOnlyRiotClient,
         ws_broadcast_tx: broadcast::Sender<ServerMsg>,
+        security_config: SecurityConfig,
     ) -> Self {
         Self {
             discovery,
             vault,
             store,
+            catalog,
+            riot_client,
             ws_broadcast_tx,
+            security_config,
         }
     }
 
@@ -144,6 +160,153 @@ pub async fn uri_state_handler(
             Json(serde_json::json!({ "error": format!("State for URI '{}' not found", uri) })),
         )),
     }
+}
+
+pub async fn catalog_all_handler(State(state): State<AppState>) -> Json<Vec<EndpointInfo>> {
+    let endpoints = state.catalog.read().unwrap().get_all();
+    Json(endpoints)
+}
+
+pub async fn catalog_source_handler(
+    State(state): State<AppState>,
+    Path(source_str): Path<String>,
+) -> Result<Json<Vec<EndpointInfo>>, (StatusCode, Json<serde_json::Value>)> {
+    let source_id = match source_str.parse::<SourceId>() {
+        Ok(id) => id,
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("Invalid source id: {}", source_str) })),
+            ));
+        }
+    };
+
+    let endpoints = state.catalog.read().unwrap().get_by_source(source_id);
+    Ok(Json(endpoints))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CallParams {
+    pub path: String,
+}
+
+pub async fn call_handler(
+    State(state): State<AppState>,
+    Path(source_str): Path<String>,
+    Query(params): Query<CallParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let source_id = match source_str.parse::<SourceId>() {
+        Ok(id) => id,
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("Invalid source id: {}", source_str) })),
+            ));
+        }
+    };
+
+    if source_id == SourceId::System {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Cannot make API call to System source" })),
+        ));
+    }
+
+    if !params.path.starts_with('/') {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Query parameter 'path' must start with '/'" })),
+        ));
+    }
+
+    // Determine target port and auth credentials
+    let (port, auth_password) = match source_id {
+        SourceId::RiotClient => {
+            let src = state.discovery.get_source(SourceId::RiotClient);
+            let port = src.as_ref().and_then(|s| s.port);
+            let cred = src.as_ref().and_then(|s| s.credential.clone());
+            let pwd = cred.and_then(|c| state.vault.reveal(c.id));
+            match (port, pwd) {
+                (Some(p), Some(pwd)) => (p, Some(pwd)),
+                _ => {
+                    return Err((
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(serde_json::json!({ "error": "RiotClient is not available or credentials missing" })),
+                    ));
+                }
+            }
+        }
+        SourceId::LeagueClient => {
+            let src = state.discovery.get_source(SourceId::LeagueClient);
+            let port = src.as_ref().and_then(|s| s.port);
+            let cred = src.as_ref().and_then(|s| s.credential.clone());
+            let pwd = cred.and_then(|c| state.vault.reveal(c.id));
+            match (port, pwd) {
+                (Some(p), Some(pwd)) => (p, Some(pwd)),
+                _ => {
+                    return Err((
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(serde_json::json!({ "error": "LeagueClient is not available or credentials missing" })),
+                    ));
+                }
+            }
+        }
+        SourceId::LiveGame => (2999, None),
+        SourceId::System => unreachable!(),
+    };
+
+    // Execute read-only GET request
+    let (status, _headers, mut body) = match state
+        .riot_client
+        .get(port, auth_password.as_deref(), &params.path)
+        .await
+    {
+        Ok(res) => res,
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({ "error": format!("GET request failed: {:?}", e) })),
+            ));
+        }
+    };
+
+    // Invariant 4: Must pass through redact_value and be recorded as EventKind::Call
+    let meta = {
+        let mut guard = state.store.write().unwrap();
+        guard.insert_event(
+            source_id,
+            hypatia_shared::EventKind::Call,
+            params.path.clone(),
+            body.clone(),
+            &state.vault,
+        )
+    };
+
+    // Update Catalog observed entries
+    let changed = {
+        let mut cat = state.catalog.write().unwrap();
+        cat.record_observed(source_id, "GET", &params.path, meta.size as u64)
+    };
+    if changed {
+        let _ = state
+            .ws_broadcast_tx
+            .send(ServerMsg::CatalogChanged { source: source_id });
+    }
+
+    // Retrieve the redacted body from the event store
+    let guard = state.store.read().unwrap();
+    let redacted_data = guard
+        .get_event(meta.id)
+        .map(|e| e.payload)
+        .unwrap_or_else(|| {
+            crate::redaction::redact_value(&mut body, &state.vault);
+            body
+        });
+
+    Ok(Json(serde_json::json!({
+        "status": status.as_u16(),
+        "data": redacted_data,
+    })))
 }
 
 pub async fn secret_reveal_handler(
@@ -256,6 +419,8 @@ async fn handle_ws_socket(socket: WebSocket, state: AppState) {
 }
 
 pub fn create_router(state: AppState) -> Router {
+    let sec_config = state.security_config.clone();
+
     Router::new()
         .route("/api/health", get(health_handler))
         .route("/api/system", get(system_handler))
@@ -263,8 +428,15 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/snapshot", get(snapshot_handler))
         .route("/api/events/{id}", get(event_detail_handler))
         .route("/api/state/{source}", get(uri_state_handler))
+        .route("/api/catalog", get(catalog_all_handler))
+        .route("/api/catalog/{source}", get(catalog_source_handler))
+        .route("/api/call/{source}", get(call_handler))
         .route("/api/secrets/{id}/reveal", post(secret_reveal_handler))
         .route("/ws", get(ws_handler))
-        .with_state(state)
+        .layer(axum::middleware::from_fn_with_state(
+            sec_config,
+            security_middleware,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .with_state(state)
 }

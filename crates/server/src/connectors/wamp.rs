@@ -3,11 +3,14 @@ use std::time::Duration;
 
 use base64::prelude::*;
 use futures_util::{SinkExt, StreamExt};
-use hypatia_shared::{EventKind, SourceId};
+use hypatia_shared::{EventKind, ServerMsg, SourceId};
+use tokio::sync::broadcast;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
+use crate::catalog::{spawn_catalog_discovery, CatalogStore};
 use crate::discovery::DiscoveryManager;
 use crate::redaction::SecretVault;
+use crate::riot_http::ReadOnlyRiotClient;
 use crate::store::EventStore;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +38,19 @@ pub fn handle_wamp_message(
     text: &str,
     store: &Arc<RwLock<EventStore>>,
     vault: &SecretVault,
+) {
+    handle_wamp_message_with_catalog(source, text, store, vault, None, None);
+}
+
+/// Parses and processes an incoming WAMP message string from Riot/League Client,
+/// updating the event store and optionally the catalog store.
+pub fn handle_wamp_message_with_catalog(
+    source: SourceId,
+    text: &str,
+    store: &Arc<RwLock<EventStore>>,
+    vault: &SecretVault,
+    catalog: Option<&Arc<RwLock<CatalogStore>>>,
+    ws_broadcast_tx: Option<&broadcast::Sender<ServerMsg>>,
 ) {
     if text.trim().is_empty() {
         return;
@@ -98,8 +114,22 @@ pub fn handle_wamp_message(
         .cloned()
         .unwrap_or(serde_json::Value::Null);
 
-    let mut guard = store.write().unwrap();
-    guard.insert_event(source, kind, uri, data, vault);
+    let meta = {
+        let mut guard = store.write().unwrap();
+        guard.insert_event(source, kind, uri.clone(), data, vault)
+    };
+
+    if let Some(cat) = catalog {
+        let changed = cat
+            .write()
+            .unwrap()
+            .record_observed(source, "GET", &uri, meta.size as u64);
+        if changed {
+            if let Some(tx) = ws_broadcast_tx {
+                let _ = tx.send(ServerMsg::CatalogChanged { source });
+            }
+        }
+    }
 }
 
 /// Initial bootstrap on live connection: fetches `/lol-gameflow/v1/gameflow-phase` to seed phase.
@@ -154,6 +184,9 @@ async fn connect_and_listen(
     discovery: &DiscoveryManager,
     store: &Arc<RwLock<EventStore>>,
     vault: &SecretVault,
+    catalog: Option<&Arc<RwLock<CatalogStore>>>,
+    client: Option<&ReadOnlyRiotClient>,
+    ws_broadcast_tx: Option<&broadcast::Sender<ServerMsg>>,
 ) -> anyhow::Result<()> {
     let mut builder = native_tls::TlsConnector::builder();
     builder.danger_accept_invalid_certs(true);
@@ -181,6 +214,18 @@ async fn connect_and_listen(
         bootstrap_lcu_phase(target.port, &target.password, store, vault).await;
     }
 
+    // Spawn catalog discovery for this source if catalog and client are provided
+    if let (Some(cat), Some(cli), Some(tx)) = (catalog, client, ws_broadcast_tx) {
+        spawn_catalog_discovery(
+            source_id,
+            target.port,
+            Some(target.password.clone()),
+            cat.clone(),
+            cli.clone(),
+            tx.clone(),
+        );
+    }
+
     // Subscribe to all json api events: [5, "OnJsonApiEvent"]
     let sub = serde_json::json!([5, "OnJsonApiEvent"]).to_string();
     ws_stream
@@ -199,7 +244,7 @@ async fn connect_and_listen(
             msg = ws_stream.next() => {
                 match msg {
                     Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) => {
-                        handle_wamp_message(source_id, &text, store, vault);
+                        handle_wamp_message_with_catalog(source_id, &text, store, vault, catalog, ws_broadcast_tx);
                     }
                     Some(Ok(tokio_tungstenite::tungstenite::Message::Ping(payload))) => {
                         let _ = ws_stream.send(tokio_tungstenite::tungstenite::Message::Pong(payload)).await;
@@ -233,6 +278,19 @@ pub fn spawn_wamp_connector(
     store: Arc<RwLock<EventStore>>,
     vault: SecretVault,
 ) -> tokio::task::JoinHandle<()> {
+    spawn_wamp_connector_full(source_id, discovery, store, vault, None, None, None)
+}
+
+/// Spawns a background task with full catalog discovery and event recording integration.
+pub fn spawn_wamp_connector_full(
+    source_id: SourceId,
+    discovery: Arc<DiscoveryManager>,
+    store: Arc<RwLock<EventStore>>,
+    vault: SecretVault,
+    catalog: Option<Arc<RwLock<CatalogStore>>>,
+    client: Option<ReadOnlyRiotClient>,
+    ws_broadcast_tx: Option<broadcast::Sender<ServerMsg>>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut backoff = Duration::from_millis(500);
         let mut last_target: Option<WampTarget> = None;
@@ -254,7 +312,18 @@ pub fn spawn_wamp_connector(
                 }
             };
 
-            match connect_and_listen(source_id, &current_target, &discovery, &store, &vault).await {
+            match connect_and_listen(
+                source_id,
+                &current_target,
+                &discovery,
+                &store,
+                &vault,
+                catalog.as_ref(),
+                client.as_ref(),
+                ws_broadcast_tx.as_ref(),
+            )
+            .await
+            {
                 Ok(()) => {
                     backoff = Duration::from_millis(500);
                 }

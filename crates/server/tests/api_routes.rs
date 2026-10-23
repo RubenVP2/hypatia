@@ -7,6 +7,9 @@ use http_body_util::BodyExt;
 use hypatia_server::discovery::DiscoveryManager;
 use hypatia_server::redaction::SecretVault;
 use hypatia_server::store::{EventStore, StoredEvent};
+use hypatia_server::catalog::CatalogStore;
+use hypatia_server::riot_http::ReadOnlyRiotClient;
+use hypatia_server::security::SecurityConfig;
 use hypatia_server::{create_router, AppState};
 use hypatia_shared::{
     ClientMsg, EventKind, HealthResponse, ServerMsg, Snapshot, SourceId, SourceState,
@@ -22,12 +25,18 @@ fn setup_test_state() -> (AppState, SecretVault, Arc<RwLock<EventStore>>) {
     let (store, _rx) = EventStore::new();
     let store = Arc::new(RwLock::new(store));
     let (ws_broadcast_tx, _ws_rx) = broadcast::channel(128);
+    let catalog = Arc::new(RwLock::new(CatalogStore::new()));
+    let riot_client = ReadOnlyRiotClient::new();
+    let security_config = SecurityConfig::new(vec![], true);
 
     let state = AppState {
         discovery,
         vault: vault.clone(),
         store: store.clone(),
+        catalog,
+        riot_client,
         ws_broadcast_tx,
+        security_config,
     };
 
     (state, vault, store)

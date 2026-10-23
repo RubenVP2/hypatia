@@ -15,7 +15,7 @@ Write-Host "  HYPATIA - Build de release autonome" -ForegroundColor Cyan
 Write-Host "====================================================================" -ForegroundColor Cyan
 
 # ------------------------------------------------------------------------------
-# Étape 1 : Compilation du frontend WebAssembly (Trunk via WSL)
+# Étape 1 : Compilation du frontend WebAssembly (Trunk)
 # ------------------------------------------------------------------------------
 Write-Host "`n[1/3] Compilation du frontend WASM (crates/web)..." -ForegroundColor Yellow
 if (Get-Command trunk -ErrorAction SilentlyContinue) {

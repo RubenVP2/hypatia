@@ -1,12 +1,13 @@
-use std::env;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
-use axum::{routing::get, Json, Router};
 use base64::prelude::*;
 use clap::Parser;
-use hypatia_shared::{HealthResponse, RiotClientLockfile};
+use hypatia_server::discovery::DiscoveryManager;
+use hypatia_server::redaction::SecretVault;
+use hypatia_server::{create_router, AppState};
+use hypatia_shared::SourceId;
 use tracing::{error, info, warn};
 
 #[derive(Parser, Debug)]
@@ -22,51 +23,10 @@ struct Cli {
     dev: bool,
 }
 
-async fn health_handler() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok".to_string(),
-    })
-}
-
-fn locate_riot_client_lockfile() -> Option<PathBuf> {
-    if let Ok(local_appdata) = env::var("LOCALAPPDATA") {
-        let p = PathBuf::from(local_appdata)
-            .join("Riot Games")
-            .join("Riot Client")
-            .join("Config")
-            .join("lockfile");
-        if p.exists() {
-            return Some(p);
-        }
-    }
-
-    // Also support fallback or USERPROFILE
-    if let Ok(home) = env::var("USERPROFILE") {
-        let p = PathBuf::from(home)
-            .join("AppData")
-            .join("Local")
-            .join("Riot Games")
-            .join("Riot Client")
-            .join("Config")
-            .join("lockfile");
-        if p.exists() {
-            return Some(p);
-        }
-    }
-
-    // WSL path check if run under Linux
-    let wsl_p = PathBuf::from("/mnt/c/Users/User/AppData/Local/Riot Games/Riot Client/Config/lockfile");
-    if wsl_p.exists() {
-        return Some(wsl_p);
-    }
-
-    None
-}
-
-async fn test_riot_client_connection(lockfile: &RiotClientLockfile) -> Result<()> {
+async fn test_riot_client_connection(port: u16, password: &str) -> Result<()> {
     info!(
-        "Tentative de connexion au Riot Client sur port {} (protocole: {})...",
-        lockfile.port, lockfile.protocol
+        "Tentative de connexion au Riot Client sur port {}...",
+        port
     );
 
     let client = reqwest::Client::builder()
@@ -74,12 +34,9 @@ async fn test_riot_client_connection(lockfile: &RiotClientLockfile) -> Result<()
         .build()
         .context("Échec de création du client reqwest")?;
 
-    let auth_raw = format!("riot:{}", lockfile.password);
+    let auth_raw = format!("riot:{}", password);
     let auth_header = format!("Basic {}", BASE64_STANDARD.encode(auth_raw.as_bytes()));
-    let url = format!(
-        "https://127.0.0.1:{}/riotclient/region-locale",
-        lockfile.port
-    );
+    let url = format!("https://127.0.0.1:{}/riotclient/region-locale", port);
 
     let resp = client
         .get(&url)
@@ -138,34 +95,29 @@ async fn main() -> Result<()> {
 
     info!("Démarrage de hypatia-server...");
 
-    // Vérification du lockfile Riot Client
-    if let Some(lockfile_path) = locate_riot_client_lockfile() {
-        info!("Lockfile Riot Client trouvé : {:?}", lockfile_path);
-        match std::fs::read_to_string(&lockfile_path) {
-            Ok(content) => {
-                if let Some(parsed) = RiotClientLockfile::parse(&content) {
-                    info!(
-                        "Lockfile analysé avec succès : process={}, PID={}, port={}",
-                        parsed.name, parsed.pid, parsed.port
-                    );
-                    if let Err(e) = test_riot_client_connection(&parsed).await {
-                        error!("Erreur lors de la requête de test vers Riot Client : {:?}", e);
-                    }
-                } else {
-                    warn!("Impossible d'analyser le contenu du lockfile : {}", content);
+    let vault = SecretVault::new();
+    let (discovery, _snapshot_rx) = DiscoveryManager::new(vault.clone());
+
+    // Démarrage de la boucle de découverte en tâche de fond (intervalle 1 seconde)
+    discovery.spawn_loop(Duration::from_millis(1000));
+
+    // Test de connexion Riot Client au démarrage si disponible
+    if let Some(rc_source) = discovery.get_source(SourceId::RiotClient) {
+        if let (Some(port), Some(cred)) = (rc_source.port, rc_source.credential) {
+            if let Some(pwd) = vault.reveal(cred.id) {
+                if let Err(e) = test_riot_client_connection(port, &pwd).await {
+                    error!("Erreur lors de la requête de test vers Riot Client : {:?}", e);
                 }
             }
-            Err(e) => {
-                warn!("Impossible de lire le lockfile {:?} : {:?}", lockfile_path, e);
-            }
         }
-    } else {
-        warn!("Aucun lockfile Riot Client trouvé dans LOCALAPPDATA.");
     }
 
-    let app = Router::new()
-        .route("/api/health", get(health_handler))
-        .layer(tower_http::trace::TraceLayer::new_for_http());
+    let state = AppState {
+        discovery,
+        vault,
+    };
+
+    let app = create_router(state);
 
     let (listener, active_addr) = bind_listener(cli.port).await?;
     info!("hypatia-server écoute sur http://{}", active_addr);

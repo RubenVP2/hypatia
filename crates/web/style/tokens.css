@@ -1,0 +1,70 @@
+:root {
+  color-scheme: dark;
+
+  /* Strict neutral ramp (only allowed values) */
+  --n-0: #070B14;
+  --n-1: #0B1220;
+  --n-2: #111A2C;
+  --n-3: #172238;
+  --n-4: #24314B;
+  --n-5: #3A4A6B;
+  --n-6: #5F7091;
+  --n-7: #8C98B0;
+  --n-8: #B9C3D6;
+  --n-9: #E8ECF4;
+
+  --bg: var(--n-1);
+  --surface: var(--n-2);
+  --raised: var(--n-3);
+  --line: var(--n-4);
+  --text: var(--n-9);
+  --text-muted: var(--n-7);
+  --text-faint: var(--n-6);
+
+  /* Team colors: source identity (borders, dots, ribbons) */
+  --src-riot: #FF5A4F;
+  --src-lcu: #3FA7FF;
+  --src-live: #F2B33D;
+  --src-system: #A98BFF;
+
+  /* Unique roles */
+  --on-air: #FF3B47;            /* LIVE indicator dot, nothing else */
+  --focus: #FFD166;             /* keyboard focus ring, nothing else */
+
+  /* Event types */
+  --kind-create: #3DD68C;
+  --kind-update: var(--n-8);
+  --kind-delete: #FF7A6B;
+  --kind-call: var(--src-system);
+  --kind-poll: var(--src-live);
+
+  /* Typography */
+  --font-display: "Barlow Condensed", system-ui, -apple-system, sans-serif;
+  --font-ui: "Barlow", system-ui, -apple-system, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, monospace;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 28px;
+
+  /* Density & Spacing */
+  --row: 28px;
+  --gap-1: 4px;
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 16px;
+  --gap-6: 24px;
+
+  /* Chamfer bevel (reserved for cards and source labels) */
+  --chamfer: 8px;
+  --radius: 4px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --t-fast: 120ms;
+  --t-med: 180ms;
+  --t-flash: 600ms;
+}

@@ -3,7 +3,7 @@
 > **High-fidelity local observatory and real-time event inspector for Riot Games client APIs.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/RubenVP2/hypatia?color=blue)](https://github.com/RubenVP2/hypatia/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![WebAssembly](https://img.shields.io/badge/frontend-Leptos%20WASM-purple.svg)](https://leptos.dev)
 

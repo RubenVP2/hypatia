@@ -46,6 +46,12 @@ pub fn CommandPalette() -> impl IntoView {
             action: CommandAction::Nav(NavTab::Live),
         });
         items.push(PaletteItem {
+            title: "Recap View".to_string(),
+            subtitle: "Synthesized state summary, summoner standing, and Champ Select roster (/api/summary)".to_string(),
+            category: "Navigation".to_string(),
+            action: CommandAction::Nav(NavTab::Recap),
+        });
+        items.push(PaletteItem {
             title: "Endpoints View".to_string(),
             subtitle: "API catalog, details, and GET calls".to_string(),
             category: "Navigation".to_string(),
@@ -223,12 +229,12 @@ pub fn CommandPalette() -> impl IntoView {
                         aria-label="Command palette"
                     >
                         <div class="palette-search-header">
-                            <span class="palette-search-icon">"⌘"</span>
+                            <span class="palette-search-icon">"/"</span>
                             <input
                                 id="palette-search-input"
                                 type="text"
                                 class="palette-input"
-                                placeholder="Search views, commands, or endpoints (↑/↓ to navigate, Enter)..."
+                                placeholder="Search views, commands, or endpoints (Up/Down to navigate, Enter)..."
                                 prop:value=move || query.get()
                                 on:input=move |ev| {
                                     query.set(event_target_value(&ev));

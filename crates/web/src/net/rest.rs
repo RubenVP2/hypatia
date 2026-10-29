@@ -1,5 +1,5 @@
 use gloo_net::http::Request;
-use hypatia_shared::{EndpointInfo, SourceId, StoredEvent, SystemSnapshot};
+use hypatia_shared::{EndpointInfo, SourceId, StoredEvent, SummarySnapshot, SystemSnapshot};
 use serde::Deserialize;
 
 fn get_api_base() -> String {
@@ -64,7 +64,12 @@ pub async fn call_endpoint(source: SourceId, path: &str) -> Result<CallResponse,
     let base = get_api_base();
     // Encode the query path properly
     let encoded_path = js_sys::encode_uri_component(path);
-    let url = format!("{}/api/call/{:?}?path={}", base, source, encoded_path.as_string().unwrap_or_else(|| path.to_string()));
+    let url = format!(
+        "{}/api/call/{:?}?path={}",
+        base,
+        source,
+        encoded_path.as_string().unwrap_or_else(|| path.to_string())
+    );
 
     let resp = Request::get(&url)
         .send()
@@ -120,6 +125,22 @@ pub async fn fetch_system() -> Result<SystemSnapshot, String> {
     }
 
     resp.json::<SystemSnapshot>()
+        .await
+        .map_err(|e| format!("Deserialization error: {e}"))
+}
+
+pub async fn fetch_summary() -> Result<SummarySnapshot, String> {
+    let url = format!("{}/api/summary", get_api_base());
+    let resp = Request::get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !resp.ok() {
+        return Err(format!("HTTP status {}", resp.status()));
+    }
+
+    resp.json::<SummarySnapshot>()
         .await
         .map_err(|e| format!("Deserialization error: {e}"))
 }

@@ -87,6 +87,16 @@ pub fn TopBar() -> impl IntoView {
                 >
                     "About" <kbd>"4"</kbd>
                 </button>
+                <button
+                    class=move || {
+                        format!("nav-tab {}", if active_tab.get() == NavTab::Recap { "active" } else { "" })
+                    }
+                    role="tab"
+                    aria-selected=move || (active_tab.get() == NavTab::Recap).to_string()
+                    on:click=move |_| active_tab.set(NavTab::Recap)
+                >
+                    "Recap" <kbd>"5"</kbd>
+                </button>
             </nav>
 
             <div class="topbar-right">
@@ -97,7 +107,7 @@ pub fn TopBar() -> impl IntoView {
                     on:click=toggle_secrets
                     title="Secrets (tokens, passwords) are masked by default."
                 >
-                    <span>{move || if secrets_hidden.get() { "🔒 Secrets masked" } else { "🔓 Secrets visible" }}</span>
+                    <span>{move || if secrets_hidden.get() { "Secrets masked" } else { "Secrets visible" }}</span>
                 </button>
 
                 <button

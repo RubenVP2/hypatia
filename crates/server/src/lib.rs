@@ -19,7 +19,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use hypatia_shared::{
-    ClientMsg, EndpointInfo, HealthResponse, ServerMsg, Snapshot, SourceId, SourceState,
+    extract_champ_select_summary, extract_eog_summary, extract_live_game_summary,
+    extract_lobby_summary, extract_matchmaking_summary, extract_summoner_summary, ClientMsg,
+    EndpointInfo, HealthResponse, ServerMsg, Snapshot, SourceId, SourceState, SummarySnapshot,
     SystemSnapshot, UriState,
 };
 use serde::Deserialize;
@@ -86,6 +88,80 @@ impl AppState {
             system: self.discovery.get_system_snapshot(),
         }
     }
+
+    /// Assembles a synthesized SummarySnapshot from cached URI states.
+    pub fn get_summary(&self) -> SummarySnapshot {
+        let mut sources = self.discovery.get_sources();
+        let guard = self.store.read().unwrap();
+        for s in &mut sources {
+            let (events_total, bytes_total) = guard.source_stats(s.id);
+            s.events_total = events_total;
+            s.bytes_total = bytes_total;
+        }
+
+        let summoner_val = guard
+            .get_state(SourceId::LeagueClient, "/lol-summoner/v1/current-summoner")
+            .map(|u| u.current);
+        let ranked_val = guard
+            .get_state(
+                SourceId::LeagueClient,
+                "/lol-ranked/v1/current-ranked-stats",
+            )
+            .map(|u| u.current);
+        let presences_val = guard
+            .get_state(SourceId::RiotClient, "/chat/v4/presences")
+            .map(|u| u.current);
+        let lobby_val = guard
+            .get_state(SourceId::LeagueClient, "/lol-lobby/v2/lobby")
+            .map(|u| u.current);
+        let search_val = guard
+            .get_state(SourceId::LeagueClient, "/lol-matchmaking/v1/search")
+            .map(|u| u.current);
+        let ready_val = guard
+            .get_state(SourceId::LeagueClient, "/lol-matchmaking/v1/ready-check")
+            .map(|u| u.current);
+        let cs_val = guard
+            .get_state(SourceId::LeagueClient, "/lol-champ-select/v1/session")
+            .map(|u| u.current);
+        let allgame_val = guard
+            .get_state(SourceId::LiveGame, "/liveclientdata/allgamedata")
+            .map(|u| u.current);
+        let active_val = guard
+            .get_state(SourceId::LiveGame, "/liveclientdata/activeplayer")
+            .map(|u| u.current);
+        let events_val = guard
+            .get_state(SourceId::LiveGame, "/liveclientdata/eventdata")
+            .map(|u| u.current);
+        let eog_val = guard
+            .get_state(SourceId::LeagueClient, "/lol-end-of-game/v1/eog-stats-block")
+            .map(|u| u.current);
+
+        let summoner = extract_summoner_summary(
+            summoner_val.as_ref(),
+            ranked_val.as_ref(),
+            presences_val.as_ref(),
+        );
+        let lobby = extract_lobby_summary(lobby_val.as_ref());
+        let matchmaking = extract_matchmaking_summary(search_val.as_ref(), ready_val.as_ref());
+        let champ_select = extract_champ_select_summary(cs_val.as_ref(), lobby.as_ref());
+        let live_game = extract_live_game_summary(
+            allgame_val.as_ref(),
+            active_val.as_ref(),
+            events_val.as_ref(),
+        );
+        let end_of_game = extract_eog_summary(eog_val.as_ref());
+
+        SummarySnapshot {
+            phase: guard.phase(),
+            sources,
+            summoner,
+            lobby,
+            matchmaking,
+            champ_select,
+            live_game,
+            end_of_game,
+        }
+    }
 }
 
 pub async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
@@ -112,6 +188,10 @@ pub async fn sources_handler(State(state): State<AppState>) -> Json<Vec<SourceSt
 
 pub async fn snapshot_handler(State(state): State<AppState>) -> Json<Snapshot> {
     Json(state.get_snapshot())
+}
+
+pub async fn summary_handler(State(state): State<AppState>) -> Json<SummarySnapshot> {
+    Json(state.get_summary())
 }
 
 pub async fn event_detail_handler(
@@ -434,6 +514,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/system", get(system_handler))
         .route("/api/sources", get(sources_handler))
         .route("/api/snapshot", get(snapshot_handler))
+        .route("/api/summary", get(summary_handler))
         .route("/api/events/{id}", get(event_detail_handler))
         .route("/api/state/{source}", get(uri_state_handler))
         .route("/api/catalog", get(catalog_all_handler))

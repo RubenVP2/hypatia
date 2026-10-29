@@ -8,6 +8,7 @@ use crate::state::system::SystemStore;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NavTab {
     Live,
+    Recap,
     Endpoints,
     System,
     About,

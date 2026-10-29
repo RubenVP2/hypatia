@@ -3,6 +3,7 @@ pub mod event;
 pub mod protocol;
 pub mod secret;
 pub mod source;
+pub mod summary;
 pub mod system;
 
 pub use catalog::*;
@@ -10,6 +11,7 @@ pub use event::*;
 pub use protocol::*;
 pub use secret::*;
 pub use source::*;
+pub use summary::*;
 pub use system::*;
 
 use serde::{Deserialize, Serialize};

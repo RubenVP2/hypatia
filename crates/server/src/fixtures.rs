@@ -21,8 +21,11 @@ pub fn seed_demo_catalog(catalog: &Arc<RwLock<CatalogStore>>) {
         ("/lol-lobby/v2/lobby", "GET"),
         ("/lol-matchmaking/v1/search", "GET"),
         ("/lol-summoner/v1/current-summoner", "GET"),
+        ("/lol-summoner/v2/summoners/puuid/{puuid}", "GET"),
         ("/lol-chat/v1/conversations", "GET"),
         ("/lol-ranked/v1/current-ranked-stats", "GET"),
+        ("/lol-ranked/v1/ranked-stats/{puuid}", "GET"),
+        ("/lol-end-of-game/v1/eog-stats-block", "GET"),
     ];
     for (uri, method) in lcu_endpoints {
         endpoints.push(EndpointInfo {
@@ -111,11 +114,74 @@ pub fn spawn_demo_generator(
         let mut phase_idx = 0;
         let mut phase_start = Instant::now();
         let mut tick_counter: u64 = 0;
-        let mut game_time_sec: u32 = 0;
+        let mut game_time_sec: u32 = 1122;
 
-        // Initialize first phase in store
+        // Initialize baseline states in store so /api/summary is immediately rich
         {
             let mut s = store.write().unwrap();
+            s.insert_event(
+                SourceId::LeagueClient,
+                EventKind::Update,
+                "/lol-summoner/v1/current-summoner".to_string(),
+                json!({
+                    "accountId": 100000001,
+                    "displayName": "HypatiaObserver",
+                    "gameName": "HypatiaObserver",
+                    "tagLine": "EUW",
+                    "percentCompleteForNextLevel": 65,
+                    "profileIconId": 548,
+                    "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+                    "summonerLevel": 120
+                }),
+                &vault,
+            );
+            s.insert_event(
+                SourceId::LeagueClient,
+                EventKind::Update,
+                "/lol-ranked/v1/current-ranked-stats".to_string(),
+                json!({
+                    "queueMap": {
+                        "RANKED_SOLO_5x5": {
+                            "tier": "EMERALD",
+                            "division": "II",
+                            "leaguePoints": 54,
+                            "wins": 49,
+                            "losses": 43
+                        }
+                    }
+                }),
+                &vault,
+            );
+            s.insert_event(
+                SourceId::LeagueClient,
+                EventKind::Update,
+                "/lol-lobby/v2/lobby".to_string(),
+                json!({
+                    "partyId": "party-7878-demo",
+                    "queueId": 420,
+                    "members": [
+                        {
+                            "summonerId": 12345678,
+                            "summonerName": "HypatiaObserver#EUW",
+                            "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+                            "isLeader": true,
+                            "ready": true,
+                            "firstPositionPreference": "MIDDLE",
+                            "secondPositionPreference": "TOP"
+                        },
+                        {
+                            "summonerId": 87654321,
+                            "summonerName": "KronoTrigger#EUW",
+                            "puuid": "3c4411b2-7a88-4f10-9c11-demo00000002",
+                            "isLeader": false,
+                            "ready": true,
+                            "firstPositionPreference": "JUNGLE",
+                            "secondPositionPreference": "UTILITY"
+                        }
+                    ]
+                }),
+                &vault,
+            );
             s.insert_event(
                 SourceId::LeagueClient,
                 EventKind::Update,
@@ -165,6 +231,12 @@ pub fn spawn_demo_generator(
                             EventKind::Update,
                             "/chat/v4/presences".to_string(),
                             json!({
+                                "local": {
+                                    "game_name": "HypatiaObserver",
+                                    "state": "chat",
+                                    "statusMessage": "In Lobby (2/5)",
+                                    "summary": "inLobby"
+                                },
                                 "presences": [
                                     {
                                         "game_name": "Faker",
@@ -195,9 +267,21 @@ pub fn spawn_demo_generator(
                                 "members": [
                                     {
                                         "summonerId": 12345678,
-                                        "summonerName": "HypatiaObserver",
+                                        "summonerName": "HypatiaObserver#EUW",
+                                        "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
                                         "isLeader": true,
-                                        "ready": true
+                                        "ready": true,
+                                        "firstPositionPreference": "MIDDLE",
+                                        "secondPositionPreference": "TOP"
+                                    },
+                                    {
+                                        "summonerId": 87654321,
+                                        "summonerName": "KronoTrigger#EUW",
+                                        "puuid": "3c4411b2-7a88-4f10-9c11-demo00000002",
+                                        "isLeader": false,
+                                        "ready": true,
+                                        "firstPositionPreference": "JUNGLE",
+                                        "secondPositionPreference": "UTILITY"
                                     }
                                 ]
                             }),
@@ -220,6 +304,8 @@ pub fn spawn_demo_generator(
                             json!({
                                 "accountId": 100000001,
                                 "displayName": "HypatiaObserver",
+                                "gameName": "HypatiaObserver",
+                                "tagLine": "EUW",
                                 "percentCompleteForNextLevel": ((tick_counter * 5) % 100),
                                 "profileIconId": 548,
                                 "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
@@ -234,10 +320,10 @@ pub fn spawn_demo_generator(
                     "/lol-matchmaking/v1/search".to_string(),
                     json!({
                         "dodgeData": { "state": "PartyInitialized" },
-                        "estimatedQueueTime": 45.0,
+                        "estimatedQueueTime": 68.0,
                         "isCurrentlyInQueue": true,
                         "queueId": 420,
-                        "timeInQueue": (tick_counter % 30)
+                        "timeInQueue": (tick_counter % 45)
                     }),
                 ),
                 "ReadyCheck" => (
@@ -265,10 +351,62 @@ pub fn spawn_demo_generator(
                             EventKind::Update,
                             "/lol-champ-select/v1/session".to_string(),
                             json!({
+                                "localPlayerCellId": 2,
+                                "queueType": "RANKED_SOLO_5x5",
+                                "myTeam": [
+                                    {
+                                        "cellId": 0,
+                                        "assignedPosition": "TOP",
+                                        "championId": 266,
+                                        "championName": "Aatrox",
+                                        "summonerId": 0,
+                                        "puuid": "",
+                                        "summonerName": ""
+                                    },
+                                    {
+                                        "cellId": 1,
+                                        "assignedPosition": "JUNGLE",
+                                        "championId": 64,
+                                        "championName": "Lee Sin",
+                                        "summonerId": 87654321,
+                                        "puuid": "3c4411b2-7a88-4f10-9c11-demo00000002",
+                                        "summonerName": "KronoTrigger#EUW",
+                                        "rank": "DIAMOND IV (12 LP)",
+                                        "isPremade": true
+                                    },
+                                    {
+                                        "cellId": 2,
+                                        "assignedPosition": "MIDDLE",
+                                        "championId": 103,
+                                        "championName": "Ahri",
+                                        "summonerId": 12345678,
+                                        "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+                                        "summonerName": "HypatiaObserver#EUW",
+                                        "rank": "EMERALD II (54 LP)"
+                                    },
+                                    {
+                                        "cellId": 3,
+                                        "assignedPosition": "BOTTOM",
+                                        "championId": 222,
+                                        "championName": "Jinx",
+                                        "summonerId": 0,
+                                        "puuid": "",
+                                        "summonerName": ""
+                                    },
+                                    {
+                                        "cellId": 4,
+                                        "assignedPosition": "UTILITY",
+                                        "championId": 412,
+                                        "championName": "Thresh",
+                                        "summonerId": 0,
+                                        "puuid": "",
+                                        "summonerName": ""
+                                    }
+                                ],
                                 "actions": [
                                     [
                                         {
-                                            "actorCellId": 0,
+                                            "actorCellId": 2,
                                             "championId": 103,
                                             "completed": true,
                                             "type": "pick"
@@ -276,8 +414,8 @@ pub fn spawn_demo_generator(
                                     ]
                                 ],
                                 "bans": {
-                                    "myTeamBans": [238, 157],
-                                    "theirTeamBans": [777, 234]
+                                    "myTeamBans": [238, 157, 35],
+                                    "theirTeamBans": [777, 234, 233]
                                 },
                                 "lastSelectedChampion": chosen_pick,
                                 "lastBannedChampion": chosen_ban,
@@ -324,9 +462,16 @@ pub fn spawn_demo_generator(
                             "/liveclientdata/allgamedata".to_string(),
                             json!({
                                 "activePlayer": {
-                                    "currentGold": (450 + (game_time_sec * 15)),
+                                    "championName": "Ahri",
+                                    "currentGold": (1450 + ((game_time_sec % 120) * 15)),
                                     "level": (1 + (game_time_sec / 90)).min(18),
-                                    "summonerName": "HypatiaObserver"
+                                    "summonerName": "HypatiaObserver",
+                                    "scores": {
+                                        "kills": 6,
+                                        "deaths": 1,
+                                        "assists": 8,
+                                        "creepScore": 154
+                                    }
                                 },
                                 "gameData": {
                                     "gameMode": "CLASSIC",
@@ -356,13 +501,20 @@ pub fn spawn_demo_generator(
                             EventKind::Poll,
                             "/liveclientdata/activeplayer".to_string(),
                             json!({
-                                "currentGold": (500 + (game_time_sec * 15)),
+                                "championName": "Ahri",
+                                "currentGold": (1500 + ((game_time_sec % 120) * 15)),
                                 "level": (1 + (game_time_sec / 90)).min(18),
+                                "scores": {
+                                    "kills": 6,
+                                    "deaths": 1,
+                                    "assists": 8,
+                                    "creepScore": 154
+                                },
                                 "championStats": {
                                     "attackDamage": 85.0 + (game_time_sec as f32 * 0.2),
-                                    "abilityPower": 110.0 + (game_time_sec as f32 * 0.4),
-                                    "currentHealth": 850.0,
-                                    "maxHealth": 1200.0
+                                    "abilityPower": 285.0,
+                                    "currentHealth": 1480.0,
+                                    "maxHealth": 1820.0
                                 }
                             }),
                         ),
@@ -370,17 +522,23 @@ pub fn spawn_demo_generator(
                 }
                 "EndOfGame" => (
                     SourceId::LeagueClient,
-                    EventKind::Create,
-                    "/lol-match-history/v1/games".to_string(),
+                    EventKind::Update,
+                    "/lol-end-of-game/v1/eog-stats-block".to_string(),
                     json!({
                         "gameId": 894512301,
-                        "gameDuration": 1420,
+                        "gameLength": 1694,
                         "gameMode": "CLASSIC",
-                        "gameType": "MATCHED_GAME",
-                        "win": true,
-                        "kills": 8,
-                        "deaths": 2,
-                        "assists": 11
+                        "gameResult": "Victory",
+                        "localPlayer": {
+                            "championName": "Ahri",
+                            "stats": {
+                                "CHAMPIONS_KILLED": 9,
+                                "NUM_DEATHS": 2,
+                                "ASSISTS": 14,
+                                "GOLD_EARNED": 14950,
+                                "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 34820
+                            }
+                        }
                     }),
                 ),
                 _ => unreachable!(),

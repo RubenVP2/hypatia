@@ -444,3 +444,93 @@ async fn test_ws_connection_and_protocol() {
     let server_msg3: ServerMsg = serde_json::from_str(&text3).unwrap();
     assert_eq!(server_msg3, phase_msg);
 }
+
+
+#[tokio::test]
+async fn test_api_summary_and_champ_select_anonymity() {
+    let (state, vault, store) = setup_test_state();
+
+    {
+        let mut guard = store.write().unwrap();
+        guard.insert_event(
+            SourceId::LeagueClient,
+            EventKind::Update,
+            "/lol-gameflow/v1/gameflow-phase".to_string(),
+            json!("ChampSelect"),
+            &vault,
+        );
+        guard.insert_event(
+            SourceId::LeagueClient,
+            EventKind::Update,
+            "/lol-summoner/v1/current-summoner".to_string(),
+            json!({
+                "displayName": "HypatiaObserver",
+                "gameName": "HypatiaObserver",
+                "tagLine": "EUW",
+                "summonerLevel": 120,
+                "percentCompleteForNextLevel": 65,
+                "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001"
+            }),
+            &vault,
+        );
+        guard.insert_event(
+            SourceId::LeagueClient,
+            EventKind::Update,
+            "/lol-champ-select/v1/session".to_string(),
+            json!({
+                "localPlayerCellId": 1,
+                "queueType": "RANKED_SOLO_5x5",
+                "myTeam": [
+                    {
+                        "cellId": 0,
+                        "assignedPosition": "TOP",
+                        "championId": 266,
+                        "summonerId": 0,
+                        "puuid": ""
+                    },
+                    {
+                        "cellId": 1,
+                        "assignedPosition": "MIDDLE",
+                        "championId": 103,
+                        "summonerId": 12345678,
+                        "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+                        "summonerName": "HypatiaObserver#EUW"
+                    }
+                ],
+                "timer": {
+                    "phase": "BAN_PICK",
+                    "adjustedTimeLeftInPhase": 22
+                }
+            }),
+            &vault,
+        );
+    }
+
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/summary")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let summary: hypatia_shared::SummarySnapshot = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(summary.phase.unwrap().phase, "ChampSelect");
+    let summoner = summary.summoner.unwrap();
+    assert_eq!(summoner.display_name, "HypatiaObserver");
+    assert_eq!(summoner.summoner_level, 342);
+
+    let cs = summary.champ_select.unwrap();
+    assert!(cs.is_ranked_solo_anonymized);
+    assert_eq!(cs.my_team.len(), 2);
+    assert!(cs.my_team[0].is_anonymized);
+    assert_eq!(cs.my_team[0].summoner_name, "Ally 1");
+    assert!(!cs.my_team[1].is_anonymized);
+    assert!(cs.my_team[1].is_self);
+}

@@ -4,7 +4,7 @@ use web_sys::{HtmlElement, HtmlInputElement, KeyboardEvent};
 use crate::components::{CommandPalette, Inspector, SourceRail, Ticker, TopBar, WsDisconnectedBanner};
 use crate::net::start_websocket;
 use crate::state::{AppState, NavTab};
-use crate::views::{AboutView, EndpointsView, LiveView, SystemView};
+use crate::views::{AboutView, EndpointsView, LiveView, RecapView, SystemView};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -47,6 +47,7 @@ pub fn App() -> impl IntoView {
             "2" => active_tab.set(NavTab::Endpoints),
             "3" => active_tab.set(NavTab::System),
             "4" => active_tab.set(NavTab::About),
+            "5" | "r" | "R" => active_tab.set(NavTab::Recap),
             " " => {
                 ev.prevent_default();
                 event_store.toggle_pause();
@@ -136,6 +137,7 @@ pub fn App() -> impl IntoView {
                 <div class="center-viewport">
                     {move || match active_tab.get() {
                         NavTab::Live => view! { <LiveView /> }.into_any(),
+                        NavTab::Recap => view! { <RecapView /> }.into_any(),
                         NavTab::Endpoints => view! { <EndpointsView /> }.into_any(),
                         NavTab::System => view! { <SystemView /> }.into_any(),
                         NavTab::About => view! { <AboutView /> }.into_any(),

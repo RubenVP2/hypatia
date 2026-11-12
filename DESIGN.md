@@ -1,218 +1,230 @@
 ---
-name: Hypatia Design System
-description: Visual esports broadcast control room styling for Riot Games local observatory
+name: Hypatia — Pit-Wall Chronometer
+description: Racing pit-wall telemetry aesthetic for League of Legends desktop companion, Telemetry Lab, and LAN mobile remote.
 colors:
-  bg: "#0B1220"
-  surface: "#111A2C"
-  raised: "#172238"
-  line: "#24314B"
-  text: "#E8ECF4"
-  text-muted: "#8C98B0"
-  text-faint: "#5F7091"
-  src-riot: "#FF5A4F"
-  src-lcu: "#3FA7FF"
-  src-live: "#F2B33D"
-  src-system: "#A98BFF"
-  on-air: "#FF3B47"
-  focus: "#FFD166"
-  kind-create: "#3DD68C"
-  kind-update: "#B9C3D6"
-  kind-delete: "#FF7A6B"
+  shell: "#0b0d11"
+  ground: "#0f1116"
+  backdrop: "#090b0f"
+  panel: "#161922"
+  panel-raised: "#1f2430"
+  rule: "#262b38"
+  rule-strong: "#3c4356"
+  text: "#edeff4"
+  muted: "#9ca3b5"
+  plate: "#edeff4"
+  on-plate: "#0f1116"
+  signal: "#f5b400"
+  signal-text: "#ffd24d"
+  live-green: "#45c47f"
+  blue: "#4c8df6"
+  red: "#f0605a"
+  lane-top: "#e3b341"
+  lane-jungle: "#45c47f"
+  lane-mid: "#b07cf0"
+  lane-bot: "#ef8bb5"
 typography:
+  specimen:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "96px"
+    fontWeight: 800
+    lineHeight: 0.92
+    letterSpacing: "-0.02em"
   display:
-    fontFamily: "'Barlow Condensed', system-ui, sans-serif"
-    fontSize: "28px"
-    fontWeight: 700
-    lineHeight: "1.1"
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "58px"
+    fontWeight: 800
+    lineHeight: 0.95
+    letterSpacing: "-0.02em"
+  score:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "46px"
+    fontWeight: 800
+    lineHeight: 1.0
+  timer:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "32px"
+    fontWeight: 800
+    lineHeight: 1.0
+  headline:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "26px"
+    fontWeight: 800
+    lineHeight: 1.15
+    letterSpacing: "0.01em"
+  title:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "22px"
+    fontWeight: 800
+    lineHeight: 1.2
     letterSpacing: "0.02em"
-  ui:
-    fontFamily: "'Barlow', system-ui, sans-serif"
-    fontSize: "13px"
-    fontWeight: 500
-    lineHeight: "1.4"
-    letterSpacing: "normal"
-  data:
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace"
+  name:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "18px"
+    fontWeight: 800
+    lineHeight: 1.2
+  body:
+    fontFamily: "Overpass, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 600
+    lineHeight: 1.4
+  small:
+    fontFamily: "Overpass, system-ui, sans-serif"
     fontSize: "12px"
-    fontWeight: 400
-    lineHeight: "1.5"
-    letterSpacing: "normal"
+    fontWeight: 600
+    lineHeight: 1.35
+  label:
+    fontFamily: "Overpass Mono, monospace"
+    fontSize: "11px"
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: "0.06em"
 rounded:
-  sm: "2px"
-  md: "4px"
-  chamfer: "8px"
+  sm: "4px"
+  md: "6px"
+  round: "9999px"
 spacing:
-  gap-1: "4px"
-  gap-2: "8px"
-  gap-3: "12px"
-  gap-4: "16px"
-  gap-6: "24px"
+  xs: "4px"
+  sm: "8px"
+  md: "14px"
+  lg: "20px"
 components:
-  top-bar:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    height: "48px"
-  source-chip:
-    backgroundColor: "{colors.raised}"
+  button-primary:
+    backgroundColor: "{colors.signal}"
+    textColor: "{colors.on-plate}"
+    rounded: "{rounded.sm}"
+    height: "30px"
+    padding: "0 14px"
+  button-secondary:
+    backgroundColor: "{colors.panel}"
     textColor: "{colors.text}"
     rounded: "{rounded.sm}"
-    padding: "4px 10px"
-  phase-card:
-    backgroundColor: "{colors.surface}"
+    height: "30px"
+    padding: "0 12px"
+  card-panel:
+    backgroundColor: "{colors.panel}"
     textColor: "{colors.text}"
-    rounded: "{rounded.chamfer}"
-    padding: "12px 16px"
-  ticker:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-muted}"
-    height: "32px"
+    rounded: "{rounded.md}"
+    padding: "16px"
+  nav-rail-item:
+    backgroundColor: "{colors.shell}"
+    textColor: "{colors.muted}"
+    rounded: "{rounded.sm}"
+    height: "36px"
+    padding: "0 10px"
+  status-chip:
+    backgroundColor: "{colors.panel-raised}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.sm}"
+    height: "24px"
+    padding: "0 8px"
 ---
 
-# Hypatia Design System
+# Design System: Hypatia — Pit-Wall Chronometer
 
 ## Overview
 
-Hypatia is a local dashboard and observatory for Riot Games APIs (Riot Client, League Client, Live Client Data :2999, and system connections). The application runs in **Operate** mode: designed for tech-savvy players on a secondary screen in a dark room, it presents machine and game state in the style of an **esports broadcast overlay**.
+**Creative North Star: "Pit-Wall Chronometer"**
 
-The system explicitly rejects:
-- The generic gray developer tool panel with a single blue accent.
-- Hextech / League of Legends fan-art ornamentation (no golden watermarks, no champion art, no proprietary Riot Games logos).
+Hypatia frames every stage of a League of Legends match — idle standby, lobby lane setup, queue countdown, Champion Select, active :2999 game telemetry, and post-match summary — as a compact motorsport timing wall. Unhurried carbon panels establish a calm, low-glare backdrop on second monitors, reserving pure inverted ivory plates and crisp amber timing signals strictly for moments that demand immediate player attention.
 
-The visual signature relies on:
-1. **Chamfered phase cards** (`PhaseCard`) announcing major transitions (Lobby, Matchmaking, Champ Select, In Progress).
-2. The **proportional timeline** (`PhaseTimeline`) reflecting the actual time spent in each phase.
-3. The **scrolling on-air ticker** (`Ticker`) embodying continuous data flow under the `LIVE ●` label.
-4. Strict assignment of **team colors** to each local source (Riot Client, League Client, Live Game, System).
+Both the desktop native shell (`MainWindow` and `MiniWidget` in Slint) and the mobile LAN remote (`remote_ui.html`) speak one visual grammar built around three structural anchors: a persistent workspace rail separating mode navigation and Riot process health from phase telemetry, a single specimen-scale condensed timing clock or score, and a clean 1px grid with zero artificial drop shadows or decorative gradients.
 
----
+**Key Characteristics:**
+- Dark carbon timing wall (`Night`, default) paired with an unbleached drafting-paper variant (`Day`) meeting WCAG AA contrast.
+- Condensed timing display figures (`Barlow Condensed`) contrasted against neutral UI labels (`Overpass`) and strict columnar telemetry streams (`Overpass Mono`).
+- Semantic color discipline dividing Riot API health (`live-green`), immediate action (`signal`), team allegiance (`blue` / `red`), and map lane identity (`Top` / `Jungle` / `Mid` / `Bot`).
+- Minimum `11px` functional typography floor across every label, badge, feed clock, and telemetry row.
 
 ## Colors
 
-### Broadcast Control Room Neutral Ramp (Strict)
-The atmosphere reflects an esports broadcast control room:
+The Night printing pairs deep neutral carbon layers with warm pit-wall amber signals (`#f5b400`) and saturated Summoner's Rift team/lane inks; the Day printing adapts identically onto `#efece3` paper and `#faf8f2` plates (`#b87300` amber signal).
 
-| Token | Hex Code | Primary Role |
-|---|---|---|
-| `--n-0` | `#070B14` | Deep black canvas backdrop |
-| `--n-1` / `--bg` | `#0B1220` | Main application background canvas |
-| `--n-2` / `--surface` | `#111A2C` | Panels, headers, cards, and inspector |
-| `--n-3` / `--raised` | `#172238` | Raised containers, input fields, chips |
-| `--n-4` / `--line` | `#24314B` | Dividers, borders, and structural rules |
-| `--n-5` | `#3A4A6B` | Active borders and secondary hovers |
-| `--n-6` / `--text-faint` | `#5F7091` | Subdued metadata, path separators |
-| `--n-7` / `--text-muted` | `#8C98B0` | Secondary labels, timestamps, units |
-| `--n-8` | `#B9C3D6` | JSON keys, standard UI text |
-| `--n-9` / `--text` | `#E8ECF4` | Headings, active data, high-contrast text |
+### Primary
+- **Pit-Wall Amber** (`#f5b400` Night / `#b87300` Day): Reserved strictly for active navigation highlight borders/dots, active turn spotlights, demo mode indicators, primary CTAs, and live phase marker fill.
+- **Amber Text** (`#ffd24d` Night / `#8a5600` Day): High-contrast amber text used on dark or soft-tinted plates where `#f5b400` alone would lose contrast at small body sizes.
 
-### Team Colors (Source Identity)
-Each local source has a unique brand hue:
+### Secondary
+- **Team Blue** (`#4c8df6` Night / `#2664d4` Day): Strictly scoped to Allied scoreboard headers, objective indicators, standing blue towers, and allied draft plates/bans.
+- **Team Red** (`#f0605a` Night / `#c9342e` Day): Strictly scoped to Enemy scoreboard headers, objective indicators, standing red towers, and red team bans or respawn timers.
+- **Live Telemetry Green** (`#45c47f` Night / `#1e7f48` Day): Riot source connection status (`LCU`, `Riot Client`, `Live :2999`), paired WebSocket dots, and Ready Check `ACCEPT` CTA.
 
-- **Riot Client**: `--src-riot: #FF5A4F` (Crimson)
-- **League Client (LCU)**: `--src-lcu: #3FA7FF` (Esports Blue)
-- **Live Game (:2999)**: `--src-live: #F2B33D` (Competitive Gold)
-- **System (Processes & Ports)**: `--src-system: #A98BFF` (Surveillance Violet)
+### Neutral
+- **Carbon Shell** (`#0b0d11` Night / `#e5e1d6` Day): Left `196px` workspace rail and mobile sticky topbar/bottom dock.
+- **Primary Ground** (`#0f1116` Night / `#efece3` Day): Phase canvas background and roundel core fill.
+- **Viewport Backdrop** (`#090b0f` Night / `#dfdacf` Day): Recessed code/JSON inspector well and text input wells.
+- **Instrument Panel** (`#161922` Night / `#faf8f2` Day): Default card surface, telemetry stream container, and scoreboard rows.
+- **Raised Surface** (`#1f2430` Night / `#ebe7dc` Day): Hover fills, source cards, and secondary chip backing.
+- **Hairline Rule & Strong Rule** (`#262b38` / `#3c4356` Night; `#d4cfc2` / `#a59f8f` Day): Exact `1px` boundaries replacing shadows.
+- **Primary Ink & Muted Ink** (`#edeff4` / `#9ca3b5` Night; `#14171f` / `#555a66` Day): Readable foreground ink and secondary copy.
 
-### Semantic & Unique Roles
-- **On-Air Dot**: `--on-air: #FF3B47` (reserved exclusively for the ticker's LIVE indicator).
-- **Keyboard Focus**: `--focus: #FFD166` (reserved for visible keyboard accessibility outlines).
-- **Event Kinds**:
-  - Create: `--kind-create: #3DD68C` (Mint green)
-  - Update: `--kind-update: #B9C3D6` (Light neutral)
-  - Delete: `--kind-delete: #FF7A6B` (Coral)
-  - Active Poll: `--src-live: #F2B33D`
-  - Direct Call: `--src-system: #A98BFF`
+### Named Rules
+**The Signal Restraint Rule.** Pit-Wall Amber never appears simultaneously as passive decoration on non-interactive cards; it belongs only to active navigation state, the active phase node, or the player's current turn/CTA.
 
----
+**The Lane-Team Separation Rule.** Lane colors (`#e3b341`, `#45c47f`, `#b07cf0`, `#ef8bb5`) draw only metro tracks and role roundels, while Team Blue and Team Red own champions, objectives, towers, and bans.
 
 ## Typography
 
-The typographic system combines three distinct font families without redundancy:
+**Display Font:** Barlow Condensed (Bold `700`, ExtraBold `800`)
+**Body Font:** Overpass (Regular `400`, SemiBold `600`, ExtraBold `800`)
+**Label/Mono Font:** Overpass Mono (Variable `400..700`)
 
-1. **Headings and Impact Figures (`Barlow Condensed`)**:
-   - Used for the `HYPATIA` logo, uppercase phase names in `PhaseCard` (28px bold), sparkline throughput rates, and status badges.
-   - Weights: 600, 700.
-2. **User Interface (`Barlow`)**:
-   - Used for navigation, action buttons, tabs, table labels, and help text.
-   - Weights: 400, 500, 600.
-3. **Data and Code (`JetBrains Mono`)**:
-   - Used for API URIs, JSON Pointers, numeric values, and inspector payloads.
-   - Absolute rule: `font-variant-numeric: tabular-nums` on all numbers, timestamps, and stopwatches to prevent jitter during high-frequency refreshes.
+**Character:** Compressed telemetry numerals and urgent plate headlines cut vertical height cleanly against calm humanist prose and rigid JSON/URI inspection columns.
 
----
+### Hierarchy
+- **Specimen** (`800`, `88px–96px` desktop / `56px` mobile, `-1px` tracking): Single large countdown or final KDA figure on active phase headers.
+- **Display Score** (`800`, `56px` desktop / `46px` mobile / `30px` mini-widget): Live team kill comparisons in `ScoreSpecimen`.
+- **Headline / Title** (`800`, `22px–26px`, uppercase condensed in panel headers): Attention plates, modal headers, and mobile section headings.
+- **Body** (`600`, `14px`): Primary status copy, summoner/champion rows, and descriptions.
+- **Label / Mono** (`700`, `11px`, tabular figures): Clock timestamps, HTTP endpoints, JSON payloads, badges, and source ports.
+
+### Named Rules
+**The 11px Floor Rule.** Every interactive label, timestamp, badge, and secondary cell stays at `11px` or larger (`11px` minimum) across desktop Slint and mobile HTML.
+
+**The No-Eyebrow Rule.** Section cards and attention plates lead directly with their primary headline; supporting detail and metadata sit beside or below the heading, never stacked above as a miniature kicker.
 
 ## Layout
 
-The reference viewport is **1440×900**, optimized for secondary 1080p and 1440p displays:
+Desktop uses a split horizontal shell: a fixed `196px` left workspace rail housing Hypatia branding, mode switches (`Companion`, `Telemetry Lab`, `Mobile Remote`, `Mini Widget`), optional 6-phase demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and `Night`/`Day` controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter).
 
-- **TopBar (48px)**: Brand, status indicators for all 4 sources, 60s sparkline, secret masking toggle, quick search `Ctrl+K`, and view tabs.
-- **SourceRail (280px)**: Left-hand hierarchical tree for filtering by namespace or endpoint, featuring instantaneous activity indicators.
-- **Fluid Center**:
-  - *Live View*: Signature phase card, phase timeline, and virtualized event table (28px per row).
-  - Alternative Views: *Endpoints* (exploratory catalog), *System* (socket and process monitoring), *About* (security guarantees).
-- **Side Inspector (440px)**: Right-hand detail inspection drawer with `JsonTree` expandable tree, `JsonDiff` key-by-key comparator, and raw payload display.
-- **Bottom Ticker (32px)**: Persistent marquee at the bottom of the screen displaying the last 30 received events.
-
----
+When Telemetry Lab opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with sticky topbar (`52px`) and sticky thumb-zone bottom action dock.
 
 ## Elevation & Depth
 
-Operate mode prioritizes clarity and analysis speed over decorative drop shadows:
-- Planar separation via **crisp 1px rules** (`--line: #24314B`) rather than heavy drop shadows.
-- Soft offset shadows with progressive blur reserved exclusively for the `CommandPalette` modal dialog (`box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6)`).
-- Background blur (`backdrop-filter: blur(8px)`) reserved for the `Ctrl+K` modal overlay.
+Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only the non-pushing Mobile Remote QR pairing overlay dims the background canvas with `#090b0faa` scrim so attention stays centered on the QR frame without reflowing underlying screens.
 
----
+### Named Rules
+**The Full-Perimeter 1px Rule.** Highlighted rows and alerts distinguish themselves through background tint (`signal-soft`, `danger-soft`, `green-soft`), leading icons/roundels, and `1px` full-perimeter borders — never thick (>1px) left or right accent stripes.
 
 ## Shapes
 
-- **Signature Chamfer (8px chamfer)**: Implemented via `clip-path: polygon(...)`. Strictly reserved for phase cards (`.phase-card`) and source badges (`.chamfer-badge`).
-- **Standard Rounded Corners**: `--radius: 4px` for general containers and controls; `--radius-sm: 2px` for keyboard keys (`<kbd>`).
-- **Rejection of the 'side-tab' anti-pattern**: No thick lateral borders (no `border-left: 4px/6px`) on cards or alerts. Accentuation is achieved via chamfered edge borders, colored status dots, and soft tints using `color-mix`.
-
----
+All interactive controls, inputs, status chips, and tabs share a crisp `4px` (`radius-sm`) architectural radius; cards, team strips, and champion plates share a `6px` (`radius`) corner radius; lane roundels, objective weight chips, and turret markers remain pure circles (`50%`) to mirror transit-style telemetry hubs cleanly. Icons use uniform `2px` round-capped SVG / Slint `Path` strokes rather than Unicode glyphs.
 
 ## Components
 
-### 1. PhaseCard
-- Chamfer cut on top-right corner.
-- Displays the phase name in uppercase `Barlow Condensed` 28px.
-- Integrates a live stopwatch of time spent in the current phase and subtly indicates the previous phase.
+### Buttons
+- **Primary Signal Action:** `1px` `signal` border and fill (`#f5b400` / `#b87300`) with dark contrast ink (`#0f1116`), `4px` radius (`30px` desktop, `48px` mobile, `58px` full-width `ACCEPT MATCH`).
+- **Secondary Action:** `panel` fill, `1px` `rule-strong` border, transitions background cleanly (`110ms ease-out`) to `panel-raised` on hover, and renders an explicit `2px` `#f5b400` outer focus ring on keyboard focus.
 
-### 2. PhaseTimeline
-- Segmented horizontal bar where each block has a width **strictly proportional to the actual duration** spent in that phase.
-- Informative tooltip displaying start time and total elapsed duration in seconds/minutes.
+### Navigation & Phase Ticker
+- **Left Rail Item (`RailNavItem`):** `36px` height, `4px` radius, left `16×16` vector `Path` icon (`2px` stroke), active pill tinted with `signal-soft` and `1px` `signal` perimeter.
+- **Phase Ticker (`PhaseLine`):** Five horizontal milestones (`LOBBY`, `QUEUE`, `CHAMP SELECT`, `IN GAME`, `RESULTS`), `2px` connecting rail transitioning to `signal` up to current phase.
+- **Mobile 4-Tab Bar:** Equal-width grid inside `shell` border frame (`Pick`, `Skins`, `Loadout`, `Team`) with no ordinal `1 ·` / `2 ·` numbering.
 
-### 3. EventTable (Virtualized Table)
-- Constant row height of 28px for smooth virtualization.
-- Fewer than 60 DOM elements rendered concurrently on screen, effortlessly handling up to 300 events per second.
-- `Space` shortcut to pause/freeze the feed and accumulate new incoming events into a `+N new` badge counter.
-
-### 4. JsonTree & JsonDiff
-- `JsonTree`: Lazy expandable tree view with semantic syntax highlighting and one-click JSON Pointer copying on keys.
-- `JsonDiff`: Key-by-key alignment comparing current payload to the previous version to highlight additions, deletions, and modifications.
-
-### 5. SecretValue
-- Masks any password, token, or signature string as `🔒 •••• (N bytes)`.
-- Individual on-demand timed reveal with dynamic **30-second** countdown before automatic re-masking.
-
-### 6. CommandPalette
-- Global shortcut trigger via `Ctrl+K` or `Cmd+K`.
-- Predictive fuzzy search across all views, commands, and discovered endpoints.
-
----
+### Cards & Telemetry Rows
+- **Roster & Player Rows:** Single-row `1px` `panel` containers (`50px–70px` tall) pairing a circular lane `Roundel` (`Top`/`Jgl`/`Mid`/`Bot`/`Sup`), team-colored `ChampPlate`, name + status subtitle, and right-aligned tabular telemetry figures (`Overpass Mono`).
+- **Line Map (`LineMap`):** Three lane paths plus optional dashed jungle corridor on a `400×400` grid; standing vs fallen tower nodes and non-overlapping staggered ally labels (`Bot` positioned above track, `Support` below track).
+- **Telemetry JSON Inspector:** Scrollable recessed `backdrop` pane hosting copy-selectable `read-only` monospace text (`Overpass Mono`, `11px`) with JSON / Structural Diff / Previous views and secret reveal toggle.
 
 ## Do's and Don'ts
 
-### Do
-- Maintain tabular figures (`tabular-nums`) for all data displays, timestamps, and timers.
-- Use team colors (`--src-riot`, `--src-lcu`, etc.) exclusively to identify packet origin.
-- Reserve the bright red `--on-air` (`#FF3B47`) strictly for the ticker's live transmission signal.
-- Ensure complete keyboard navigation without requiring mouse interaction (`1-4`, `Space`, `Ctrl+K`, `/`, Arrow keys).
-- Scrupulously respect the user's `prefers-reduced-motion` preference (replacing slide transitions with subtle cross-fades).
+### Do:
+- **Do** highlight active picks, incoming ready checks, and selected tabs cleanly using `signal-soft` fills plus `1px` full-perimeter borders.
+- **Do** use `Overpass Mono` with tabular numerals for every countdown, HTTP path, byte size, port, and KDA readout.
+- **Do** keep all functional labels, port indicators, and chip texts at `>= 11px` across both desktop and mobile targets.
+- **Do** bundle and serve font files offline inside desktop assets and local Axum `/fonts/*` routes.
 
-### Don'ts
-- Never add thick lateral borders like 'side-tabs' (`border-left: 4px+`) on containers or list items.
-- Never include champion images, icons, or proprietary Riot Games logos.
-- Never use text gradients: visual hierarchy must be established through type scale and font weight.
-- Never reveal secrets in plaintext without deliberate, timed user interaction.
-- Never execute mutating requests (`POST`, `PUT`, `DELETE`) against local Riot Games APIs: the observatory remains strictly read-only.
+### Don't:
+- **Don't** place small uppercase eyebrows above section headings or card titles.
+- **Don't** use thick `> 1px` colored `border-left` / `border-right` stripes on alerts, cards, or list rows.
+- **Don't** prefix navigation tabs or section headings with ordinal numbers (`1 ·`, `2 ·`, `01`) or use Unicode symbols (`↔`, `🔔`, `✓`) in place of `2px` vector icons.
+- **Don't** introduce drop shadows, glow gradients, external CDNs, or third-party telemetry calls.

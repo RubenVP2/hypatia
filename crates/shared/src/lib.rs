@@ -1,14 +1,18 @@
+pub mod board;
 pub mod catalog;
 pub mod event;
 pub mod protocol;
+pub mod remote;
 pub mod secret;
 pub mod source;
 pub mod summary;
 pub mod system;
 
+pub use board::*;
 pub use catalog::*;
 pub use event::*;
 pub use protocol::*;
+pub use remote::*;
 pub use secret::*;
 pub use source::*;
 pub use summary::*;

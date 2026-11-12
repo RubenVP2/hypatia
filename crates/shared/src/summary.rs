@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::board::LiveBoard;
 use crate::event::GamePhase;
 use crate::source::SourceState;
 
@@ -52,6 +53,8 @@ pub struct MatchmakingSummary {
 pub struct ChampSelectAlly {
     pub cell_id: i64,
     pub assigned_position: String,
+    #[serde(default)]
+    pub champion_id: i64,
     pub champion_name: String,
     pub summoner_name: String,
     pub puuid: String,
@@ -70,6 +73,23 @@ pub struct ChampSelectSummary {
     pub my_team: Vec<ChampSelectAlly>,
     pub my_team_bans: Vec<String>,
     pub their_team_bans: Vec<String>,
+    /// Enemy picks in cell order; identities are never available here.
+    #[serde(default)]
+    pub their_team: Vec<ChampSelectEnemy>,
+    /// Cell currently acting (picking or banning), when the session exposes it.
+    #[serde(default)]
+    pub acting_cell_id: Option<i64>,
+    /// `pick` or `ban` for the acting cell.
+    #[serde(default)]
+    pub acting_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChampSelectEnemy {
+    pub cell_id: i64,
+    pub champion_id: i64,
+    /// Empty while the enemy has not picked yet.
+    pub champion_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -78,6 +98,24 @@ pub struct LiveGameEventSummary {
     pub event_name: String,
     pub event_time_sec: f64,
     pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LiveGamePlayerSummary {
+    pub riot_id: String,
+    pub champion_name: String,
+    pub team: String,
+    pub position: String,
+    pub level: u32,
+    pub kills: u32,
+    pub deaths: u32,
+    pub assists: u32,
+    pub creep_score: u32,
+    pub is_self: bool,
+    #[serde(default)]
+    pub is_dead: bool,
+    #[serde(default)]
+    pub respawn_timer_sec: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -93,6 +131,8 @@ pub struct LiveGameSummary {
     pub assists: u32,
     pub creep_score: u32,
     pub recent_events: Vec<LiveGameEventSummary>,
+    #[serde(default)]
+    pub players: Vec<LiveGamePlayerSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -116,6 +156,8 @@ pub struct SummarySnapshot {
     pub matchmaking: Option<MatchmakingSummary>,
     pub champ_select: Option<ChampSelectSummary>,
     pub live_game: Option<LiveGameSummary>,
+    #[serde(default)]
+    pub board: Option<LiveBoard>,
     pub end_of_game: Option<EndOfGameSummary>,
 }
 
@@ -132,8 +174,16 @@ pub fn queue_name_from_id(queue_id: i64) -> String {
 }
 
 pub fn champion_name_from_id(champ_id: i64) -> String {
+    if champ_id <= 0 {
+        return "Selecting...".to_string();
+    }
+    if let Some(found) = crate::remote::builtin_champion_catalog()
+        .into_iter()
+        .find(|c| c.id == champ_id)
+    {
+        return found.name;
+    }
     match champ_id {
-        0 => "Selecting...".to_string(),
         64 => "Lee Sin".to_string(),
         103 => "Ahri".to_string(),
         157 => "Yasuo".to_string(),
@@ -157,8 +207,13 @@ pub fn extract_summoner_summary(
     let sum = summoner_val?;
     let display_name = sum
         .get("gameName")
-        .or_else(|| sum.get("displayName"))
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            sum.get("displayName")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+        })
         .unwrap_or("Unknown")
         .to_string();
     let tag_line = sum
@@ -461,6 +516,7 @@ pub fn extract_champ_select_summary(
             my_team.push(ChampSelectAlly {
                 cell_id,
                 assigned_position,
+                champion_id: champ_id,
                 champion_name,
                 summoner_name,
                 puuid: raw_puuid.to_string(),
@@ -479,6 +535,7 @@ pub fn extract_champ_select_summary(
         my_team.push(ChampSelectAlly {
             cell_id: 0,
             assigned_position: "MIDDLE".to_string(),
+            champion_id: 0,
             champion_name: default_pick.to_string(),
             summoner_name: "HypatiaObserver#EUW".to_string(),
             puuid: "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001".to_string(),
@@ -512,7 +569,38 @@ pub fn extract_champ_select_summary(
         }
     }
 
+    let mut their_team = Vec::new();
+    if let Some(arr) = cs.get("theirTeam").and_then(|v| v.as_array()) {
+        for (idx, member) in arr.iter().enumerate() {
+            let cell_id = member.get("cellId").and_then(|v| v.as_i64()).unwrap_or(5 + idx as i64);
+            let champion_id = member.get("championId").and_then(|v| v.as_i64()).unwrap_or(0);
+            let champion_name = member
+                .get("championName")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| if champion_id == 0 { String::new() } else { champion_name_from_id(champion_id) });
+            their_team.push(ChampSelectEnemy { cell_id, champion_id, champion_name });
+        }
+    }
+
+    let acting = cs
+        .get("actions")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|turn| turn.as_array())
+        .flatten()
+        .find(|a| a.get("isInProgress").and_then(|v| v.as_bool()).unwrap_or(false));
+    let acting_cell_id = acting.and_then(|a| a.get("actorCellId")).and_then(|v| v.as_i64());
+    let acting_type = acting
+        .and_then(|a| a.get("type"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     Some(ChampSelectSummary {
+        their_team,
+        acting_cell_id,
+        acting_type,
         sub_phase,
         time_left_sec,
         queue_type,
@@ -550,37 +638,154 @@ pub fn extract_live_game_summary(
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
 
+    let active_riot_id = active
+        .and_then(|a| a.get("riotId").or_else(|| a.get("summonerName")))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let active_game_name = active
+        .and_then(|a| a.get("riotIdGameName"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let mut players = Vec::new();
+    let mut matched_self: Option<LiveGamePlayerSummary> = None;
+
+    if let Some(all_players) = allgame_val
+        .and_then(|ag| ag.get("allPlayers"))
+        .and_then(|v| v.as_array())
+    {
+        for p in all_players {
+            let p_riot_id = p
+                .get("riotId")
+                .or_else(|| p.get("summonerName"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Player");
+            let p_game_name = p
+                .get("riotIdGameName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let is_self = (!active_riot_id.is_empty() && p_riot_id == active_riot_id)
+                || (!active_game_name.is_empty() && p_game_name == active_game_name);
+
+            let champ = p
+                .get("championName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+            let team = p
+                .get("team")
+                .and_then(|v| v.as_str())
+                .unwrap_or("ORDER")
+                .to_string();
+            let position = p
+                .get("position")
+                .and_then(|v| v.as_str())
+                .unwrap_or("NONE")
+                .to_string();
+            let p_level = p.get("level").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+            let p_scores = p.get("scores");
+            let p_kills = p_scores
+                .and_then(|s| s.get("kills"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let p_deaths = p_scores
+                .and_then(|s| s.get("deaths"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let p_assists = p_scores
+                .and_then(|s| s.get("assists"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let p_cs = p_scores
+                .and_then(|s| s.get("creepScore"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+
+            let is_dead = p.get("isDead").and_then(|v| v.as_bool()).unwrap_or(false);
+            let respawn_timer_sec = p.get("respawnTimer").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let summary = LiveGamePlayerSummary {
+                is_dead,
+                respawn_timer_sec,
+                riot_id: p_riot_id.to_string(),
+                champion_name: champ,
+                team,
+                position,
+                level: p_level,
+                kills: p_kills,
+                deaths: p_deaths,
+                assists: p_assists,
+                creep_score: p_cs,
+                is_self,
+            };
+            if is_self {
+                matched_self = Some(summary.clone());
+            }
+            players.push(summary);
+        }
+    }
+
     let level = active
         .and_then(|a| a.get("level"))
         .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
+        .map(|v| v as u32)
+        .or_else(|| matched_self.as_ref().map(|m| m.level))
+        .unwrap_or(1);
     let current_gold = active
         .and_then(|a| a.get("currentGold"))
         .and_then(|v| v.as_f64().map(|f| f as i64).or_else(|| v.as_i64()))
         .unwrap_or(500);
-    let active_champion = active
-        .and_then(|a| a.get("championName"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("Ahri")
-        .to_string();
+    let active_champion = matched_self
+        .as_ref()
+        .map(|m| m.champion_name.clone())
+        .or_else(|| {
+            active
+                .and_then(|a| a.get("championName"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "Ahri".to_string());
 
     let scores = active.and_then(|a| a.get("scores"));
-    let kills = scores
-        .and_then(|s| s.get("kills"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let deaths = scores
-        .and_then(|s| s.get("deaths"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let assists = scores
-        .and_then(|s| s.get("assists"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let creep_score = scores
-        .and_then(|s| s.get("creepScore"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+    let kills = matched_self
+        .as_ref()
+        .map(|m| m.kills)
+        .or_else(|| {
+            scores
+                .and_then(|s| s.get("kills"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        })
+        .unwrap_or(0);
+    let deaths = matched_self
+        .as_ref()
+        .map(|m| m.deaths)
+        .or_else(|| {
+            scores
+                .and_then(|s| s.get("deaths"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        })
+        .unwrap_or(0);
+    let assists = matched_self
+        .as_ref()
+        .map(|m| m.assists)
+        .or_else(|| {
+            scores
+                .and_then(|s| s.get("assists"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        })
+        .unwrap_or(0);
+    let creep_score = matched_self
+        .as_ref()
+        .map(|m| m.creep_score)
+        .or_else(|| {
+            scores
+                .and_then(|s| s.get("creepScore"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        })
+        .unwrap_or(0);
 
     let mut recent_events = Vec::new();
     let ev_array = events_val
@@ -628,6 +833,7 @@ pub fn extract_live_game_summary(
         assists,
         creep_score,
         recent_events,
+        players,
     })
 }
 

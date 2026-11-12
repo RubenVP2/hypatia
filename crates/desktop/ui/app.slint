@@ -1,0 +1,2410 @@
+import { Theme, Type } from "theme.slint";
+import {
+    AllyRow, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
+    TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
+    TelemetrySocketItem, TelemetryView,
+    Roundel, ChampPlate, SectionLabel, Plate, Specimen, Action, RailNavItem, RailSourceRow,
+    PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow,
+} from "parts.slint";
+import "fonts/Overpass-Regular.ttf";
+import "fonts/Overpass-SemiBold.ttf";
+import "fonts/Overpass-ExtraBold.ttf";
+import "fonts/BarlowCondensed-Bold.ttf";
+import "fonts/BarlowCondensed-ExtraBold.ttf";
+import "fonts/OverpassMono.ttf";
+
+export { Theme }
+
+export struct WaitView {
+    title: string,
+    detail: string,
+    specimen: string,
+    notes: [StatLine],
+}
+
+export struct ChampSelectView {
+    title: string,
+    detail: string,
+    timer: string,
+    allies: [AllyRow],
+    map-allies: [MapAlly],
+    enemies: [EnemyPick],
+    enemies-to-come: int,
+    my-bans: string,
+    their-bans: string,
+    my-ban-list: [string],
+    their-ban-list: [string],
+    anonymized: bool,
+}
+
+export struct LiveView {
+    title: string,
+    detail: string,
+    dead: bool,
+    my-score: int,
+    enemy-score: int,
+    clock: string,
+    self-kda: string,
+    my-players: [PlayerLine],
+    enemy-players: [PlayerLine],
+    towers: [TowerDot],
+    my-objectives: [ObjectiveChip],
+    enemy-objectives: [ObjectiveChip],
+    feed: [FeedLine],
+}
+
+export struct EndView {
+    title: string,
+    detail: string,
+    kda: string,
+    victory: bool,
+    stats: [StatLine],
+}
+
+component NoteRow inherits Rectangle {
+    in property <StatLine> note;
+    height: 44px;
+    HorizontalLayout {
+        spacing: 12px;
+        Text {
+            text: root.note.label;
+            color: Theme.muted;
+            font-size: Type.small;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.note.value;
+            color: Theme.text;
+            font-family: Type.mono-family;
+            font-size: Type.small;
+            font-weight: 700;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.rule;
+    }
+}
+
+component Header inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> specimen;
+    in property <bool> active-turn: false;
+    in property <bool> compact: false;
+    min-height: 92px;
+
+    if !root.compact: HorizontalLayout {
+        spacing: 20px;
+        alignment: stretch;
+        Plate {
+            horizontal-stretch: 1;
+            title: root.title;
+            detail: root.detail;
+            active-turn: root.active-turn;
+        }
+        if root.specimen != "": Rectangle {
+            min-width: spec-txt.preferred-width + 12px;
+            spec-txt := Specimen {
+                width: 100%;
+                height: 100%;
+                text: root.specimen;
+            }
+        }
+    }
+
+    if root.compact: VerticalLayout {
+        spacing: 10px;
+        Plate {
+            title: root.title;
+            detail: root.detail;
+            active-turn: root.active-turn;
+        }
+        if root.specimen != "": Specimen {
+            horizontal-alignment: left;
+            font-size: 68px;
+            text: root.specimen;
+        }
+    }
+}
+
+component RosterRow inherits Rectangle {
+    in property <AllyRow> ally;
+    height: 70px;
+    border-radius: Theme.radius;
+    background: root.ally.picking
+        ? Theme.signal-soft
+        : (root.ally.is-self ? Theme.panel-raised : Theme.panel);
+    border-width: 1px;
+    border-color: root.ally.picking
+        ? Theme.signal
+        : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        alignment: stretch;
+
+        Rectangle {
+            width: 36px;
+            Roundel {
+                size: 36px;
+                lane: root.ally.lane;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+
+        Rectangle {
+            width: 48px;
+            ChampPlate {
+                y: (parent.height - self.height) / 2;
+                size: 48px;
+                label: root.ally.initials;
+                icon: root.ally.icon;
+                mine: true;
+                empty: root.ally.champion == "";
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 3px;
+            horizontal-stretch: 1;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: root.ally.champion != "" ? root.ally.champion : "Waiting for pick";
+                    color: root.ally.champion != "" ? Theme.text : Theme.muted;
+                    font-size: Type.name;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if root.ally.picking: Rectangle {
+                    y: (parent.height - self.height) / 2;
+                    height: 20px;
+                    width: turn-lbl.preferred-width + 14px;
+                    border-radius: 3px;
+                    background: Theme.signal;
+                    turn-lbl := Text {
+                        text: "ACTING NOW";
+                        color: #0f1116;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        font-weight: 800;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            Text {
+                text: (root.ally.is-self ? "You · " : "")
+                    + root.ally.player
+                    + (root.ally.is-premade ? " (Premade)" : "")
+                    + (!root.ally.hidden && root.ally.rank != "" ? " · " + root.ally.rank : "");
+                color: Theme.muted;
+                font-size: Type.small;
+                font-weight: 600;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+component ChampSelectScreen inherits Flickable {
+    in property <ChampSelectView> cs;
+    in property <bool> compact: false;
+    content-height: body.preferred-height;
+
+    body := VerticalLayout {
+        padding: Theme.gutter;
+        spacing: 18px;
+
+        Header {
+            title: root.cs.title;
+            detail: root.cs.detail;
+            specimen: root.cs.timer;
+            compact: root.compact;
+        }
+
+        if !root.compact: HorizontalLayout {
+            spacing: 22px;
+            alignment: stretch;
+
+            // Left: 5 allied draft rows
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 8px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: stretch;
+                    SectionLabel { text: "ALLIES DRAFT"; vertical-alignment: center; }
+                    if root.cs.anonymized: Rectangle {
+                        height: 20px;
+                        width: anon-lbl.preferred-width + 14px;
+                        border-radius: 3px;
+                        background: Theme.panel-raised;
+                        border-width: 1px;
+                        border-color: Theme.rule-strong;
+                        anon-lbl := Text {
+                            text: "Solo/Duo Anonymized";
+                            color: Theme.muted;
+                            font-size: 11px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                for ally in root.cs.allies: RosterRow { ally: ally; }
+            }
+
+            // Right: Rift map, enemy picks, and visual bans
+            VerticalLayout {
+                width: 340px;
+                spacing: 14px;
+
+                Rectangle {
+                    height: 268px;
+                    background: Theme.panel;
+                    border-radius: Theme.radius;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    VerticalLayout {
+                        padding: 10px;
+                        alignment: center;
+                        LineMap {
+                            width: 248px;
+                            height: 248px;
+                            x: (parent.width - self.width) / 2;
+                            allies: root.cs.map-allies;
+                            show-jungle: true;
+                            line-width: 8px;
+                            station: 18px;
+                            halo: Theme.panel;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: Theme.panel;
+                    border-radius: Theme.radius;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+                        HorizontalLayout {
+                            alignment: stretch;
+                            SectionLabel { text: "ENEMY TEAM"; vertical-alignment: center; }
+                            if root.cs.enemies-to-come > 0: Text {
+                                text: root.cs.enemies-to-come + " to pick";
+                                color: Theme.muted;
+                                font-size: 11px;
+                                horizontal-alignment: right;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            for e in root.cs.enemies: VerticalLayout {
+                                width: 54px;
+                                spacing: 4px;
+                                ChampPlate {
+                                    x: (parent.width - self.width) / 2;
+                                    size: 46px;
+                                    label: e.initials;
+                                    icon: e.icon;
+                                    mine: false;
+                                }
+                                Text {
+                                    text: e.champion;
+                                    color: Theme.text;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: Theme.panel;
+                    border-radius: Theme.radius;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 8px;
+                        SectionLabel { text: "BANS"; }
+                        if root.cs.my-ban-list.length > 0: HorizontalLayout {
+                            spacing: 6px;
+                            alignment: start;
+                            Text {
+                                text: "Blue";
+                                width: 38px;
+                                color: Theme.blue-soft;
+                                font-size: 11px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            for b in root.cs.my-ban-list: BanChip { name: b; mine: true; }
+                        }
+                        if root.cs.their-ban-list.length > 0: HorizontalLayout {
+                            spacing: 6px;
+                            alignment: start;
+                            Text {
+                                text: "Red";
+                                width: 38px;
+                                color: Theme.red-soft;
+                                font-size: 11px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            for b in root.cs.their-ban-list: BanChip { name: b; mine: false; }
+                        }
+                        if root.cs.my-ban-list.length == 0 && root.cs.their-ban-list.length == 0: Text {
+                            text: "No champions banned yet";
+                            color: Theme.muted;
+                            font-size: 12px;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Stacked single-column mode for narrow split pane
+        if root.compact: VerticalLayout {
+            spacing: 14px;
+            SectionLabel { text: "ALLIES DRAFT"; }
+            for ally in root.cs.allies: RosterRow { ally: ally; }
+
+            Rectangle {
+                height: 240px;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                LineMap {
+                    width: 220px;
+                    height: 220px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    allies: root.cs.map-allies;
+                    show-jungle: true;
+                    line-width: 7px;
+                    station: 16px;
+                    halo: Theme.panel;
+                }
+            }
+
+            Rectangle {
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+                    SectionLabel { text: "ENEMY PICKS & BANS"; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        for e in root.cs.enemies: ChampPlate {
+                            size: 40px;
+                            label: e.initials;
+                            icon: e.icon;
+                            mine: false;
+                        }
+                        if root.cs.enemies-to-come > 0: Text {
+                            text: "+" + root.cs.enemies-to-come + " pending";
+                            color: Theme.muted;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if root.cs.my-bans != "": Text {
+                        text: "Ally bans: " + root.cs.my-bans;
+                        color: Theme.blue-soft;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    if root.cs.their-bans != "": Text {
+                        text: "Enemy bans: " + root.cs.their-bans;
+                        color: Theme.red-soft;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}
+
+component ScoreSpecimen inherits HorizontalLayout {
+    in property <int> mine;
+    in property <int> theirs;
+    spacing: 8px;
+    alignment: end;
+    Text {
+        text: root.mine;
+        color: Theme.blue;
+        font-family: Type.display-family;
+        font-size: 56px;
+        font-weight: 800;
+        vertical-alignment: center;
+    }
+    Text {
+        text: ":";
+        color: Theme.muted;
+        font-family: Type.display-family;
+        font-size: 42px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.theirs;
+        color: Theme.red;
+        font-family: Type.display-family;
+        font-size: 56px;
+        font-weight: 800;
+        vertical-alignment: center;
+    }
+}
+
+component LiveScreen inherits Flickable {
+    in property <LiveView> live;
+    in property <bool> compact: false;
+    content-height: live-body.preferred-height;
+
+    live-body := VerticalLayout {
+        padding: Theme.gutter;
+        spacing: 18px;
+
+        // Top score & game clock telemetry bar
+        Rectangle {
+            background: root.live.dead ? Theme.danger-soft : Theme.panel;
+            border-radius: Theme.radius;
+            border-width: 1px;
+            border-color: root.live.dead ? Theme.danger : Theme.rule;
+
+            HorizontalLayout {
+                padding: 14px;
+                spacing: 16px;
+                alignment: stretch;
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: root.live.title;
+                        color: root.live.dead ? Theme.danger : Theme.text;
+                        font-family: Type.display-family;
+                        font-size: 26px;
+                        font-weight: 800;
+                    }
+                    Text {
+                        text: root.live.detail;
+                        color: Theme.muted;
+                        font-size: Type.body;
+                        font-weight: 600;
+                    }
+                }
+
+                if !root.compact: VerticalLayout {
+                    alignment: center;
+                    ScoreSpecimen { mine: root.live.my-score; theirs: root.live.enemy-score; }
+                }
+
+                Rectangle {
+                    width: 112px;
+                    background: Theme.ground;
+                    border-radius: Theme.radius-sm;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    VerticalLayout {
+                        padding: 8px;
+                        alignment: center;
+                        spacing: 1px;
+                        Text {
+                            text: root.live.clock;
+                            color: Theme.signal-text;
+                            font-family: Type.mono-family;
+                            font-size: 20px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                        }
+                        Text {
+                            text: root.live.self-kda;
+                            color: Theme.muted;
+                            font-family: Type.mono-family;
+                            font-size: 11px;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.compact: ScoreSpecimen {
+            alignment: center;
+            mine: root.live.my-score;
+            theirs: root.live.enemy-score;
+        }
+
+        if !root.compact: HorizontalLayout {
+            spacing: 16px;
+            alignment: stretch;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                SectionLabel { text: "ALLIES"; }
+                for p in root.live.my-players: PlayerRow { p: p; mine: true; }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                SectionLabel { text: "ENEMIES"; }
+                for p in root.live.enemy-players: PlayerRow { p: p; mine: false; }
+            }
+        }
+
+        if root.compact: VerticalLayout {
+            spacing: 10px;
+            SectionLabel { text: "ALLIES"; }
+            for p in root.live.my-players: PlayerRow { p: p; mine: true; }
+            SectionLabel { text: "ENEMIES"; }
+            for p in root.live.enemy-players: PlayerRow { p: p; mine: false; }
+        }
+
+        // Map, Objectives & Live Event Feed
+        if !root.compact: HorizontalLayout {
+            spacing: 18px;
+            alignment: stretch;
+
+            Rectangle {
+                width: 248px;
+                height: 248px;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                LineMap {
+                    x: 10px;
+                    y: 10px;
+                    width: 228px;
+                    height: 228px;
+                    towers: root.live.towers;
+                    show-jungle: false;
+                    line-width: 7px;
+                    station: 15px;
+                    halo: Theme.panel;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 10px;
+                    SectionLabel { text: "OBJECTIVES & FEED"; }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Text {
+                            text: "Blue";
+                            width: 44px;
+                            color: Theme.blue-soft;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        ObjectiveRow { horizontal-stretch: 1; chips: root.live.my-objectives; }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Text {
+                            text: "Red";
+                            width: 44px;
+                            color: Theme.red-soft;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        ObjectiveRow { horizontal-stretch: 1; chips: root.live.enemy-objectives; }
+                    }
+                    Rectangle { height: 1px; background: Theme.rule; }
+                    VerticalLayout {
+                        spacing: 2px;
+                        for line in root.live.feed: FeedRow { line: line; }
+                    }
+                }
+            }
+        }
+
+        if root.compact: Rectangle {
+            background: Theme.panel;
+            border-radius: Theme.radius;
+            border-width: 1px;
+            border-color: Theme.rule;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                SectionLabel { text: "OBJECTIVES & FEED"; }
+                ObjectiveRow { chips: root.live.my-objectives; empty-text: "No blue objectives"; }
+                ObjectiveRow { chips: root.live.enemy-objectives; empty-text: "No red objectives"; }
+                Rectangle { height: 1px; background: Theme.rule; }
+                for line in root.live.feed: FeedRow { line: line; }
+            }
+        }
+    }
+}
+
+component WaitScreen inherits Flickable {
+    in property <WaitView> wait;
+    in property <[PartyRow]> party;
+    in property <bool> show-party: false;
+    in property <bool> is-ready-check: false;
+    in property <bool> compact: false;
+    in property <bool> telemetry-enabled: false;
+    in property <bool> remote-panel-open: false;
+    in property <bool> demo: false;
+    callback toggle-telemetry();
+    callback toggle-remote-panel();
+    callback toggle-demo();
+    content-height: wait-body.preferred-height;
+
+    wait-body := VerticalLayout {
+        padding: Theme.gutter;
+        spacing: 20px;
+
+        Header {
+            title: root.wait.title;
+            detail: root.wait.detail;
+            specimen: root.wait.specimen;
+            active-turn: root.is-ready-check;
+            compact: root.compact;
+        }
+
+        if !root.compact: HorizontalLayout {
+            spacing: 20px;
+            alignment: stretch;
+
+            // Left: Party roster or summoner telemetry ledger
+            Rectangle {
+                horizontal-stretch: 3;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+                    SectionLabel { text: root.show-party ? "PARTY ROSTER" : "SUMMONER TELEMETRY"; }
+                    if root.show-party: VerticalLayout {
+                        spacing: 6px;
+                        for m in root.party: Rectangle {
+                            height: 46px;
+                            border-radius: Theme.radius-sm;
+                            background: m.is-self ? Theme.signal-soft : Theme.ground;
+                            border-width: 1px;
+                            border-color: m.is-self ? Theme.signal : Theme.rule;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 8px;
+                                Text {
+                                    text: m.name + (m.is-leader ? " · Leader" : "");
+                                    color: Theme.text;
+                                    font-size: Type.body;
+                                    font-weight: m.is-self ? 800 : 600;
+                                    vertical-alignment: center;
+                                }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Rectangle {
+                                        width: 24px;
+                                        Roundel {
+                                            y: (parent.height - self.height) / 2;
+                                            size: 24px;
+                                            lane: m.first-lane;
+                                            visible: m.first-lane >= 0;
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 24px;
+                                        Roundel {
+                                            y: (parent.height - self.height) / 2;
+                                            size: 24px;
+                                            lane: m.second-lane;
+                                            visible: m.second-lane >= 0;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !root.show-party: VerticalLayout {
+                        for n in root.wait.notes: NoteRow { note: n; }
+                    }
+                }
+            }
+
+            // Right: Quick actions & companion readiness
+            Rectangle {
+                horizontal-stretch: 2;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+                    SectionLabel { text: "PIT-WALL CONTROLS"; }
+                    if root.show-party: VerticalLayout {
+                        for n in root.wait.notes: NoteRow { note: n; }
+                    }
+                    Text {
+                        text: root.demo
+                            ? "Synthetic fixture stream active. Jump across any match phase from the left rail."
+                            : "Riot local APIs are polled strictly in read-only mode unless Mobile Remote actions are sent.";
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        if !root.demo: Action {
+                            text: "Try Demo Mode";
+                            primary-signal: true;
+                            selected: true;
+                            clicked => { root.toggle-demo(); }
+                        }
+                        if !root.remote-panel-open: Action {
+                            text: "Pair Phone QR";
+                            clicked => { root.toggle-remote-panel(); }
+                        }
+                        if !root.telemetry-enabled: Action {
+                            text: "Telemetry Lab";
+                            clicked => { root.toggle-telemetry(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.compact: VerticalLayout {
+            spacing: 14px;
+            Rectangle {
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+                    SectionLabel { text: root.show-party ? "PARTY ROSTER" : "SUMMONER TELEMETRY"; }
+                    if root.show-party: VerticalLayout {
+                        spacing: 6px;
+                        for m in root.party: NoteRow {
+                            note: {
+                                label: m.name + (m.is-leader ? " · Leader" : ""),
+                                value: Theme.lane-name(m.first-lane) + " / " + Theme.lane-name(m.second-lane)
+                            };
+                        }
+                    }
+                    for n in root.wait.notes: NoteRow { note: n; }
+                }
+            }
+        }
+    }
+}
+
+component TelemetrySourceCard inherits Rectangle {
+    in property <TelemetrySourceItem> src;
+    horizontal-stretch: 1;
+    height: 60px;
+    background: Theme.panel-raised;
+    border-radius: Theme.radius-sm;
+    border-width: 1px;
+    border-color: src.live ? Theme.live-green : Theme.rule;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 2px;
+        HorizontalLayout {
+            spacing: 5px;
+            alignment: stretch;
+            Text {
+                text: src.name;
+                color: Theme.text;
+                font-size: 11px;
+                font-weight: 800;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Text {
+                text: src.port;
+                color: src.live ? Theme.live-green : Theme.muted;
+                font-family: Type.mono-family;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            text: src.stats;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: 11px;
+            overflow: elide;
+        }
+    }
+}
+
+component TelemetryEventRow inherits Rectangle {
+    in property <TelemetryEventItem> ev;
+    in property <bool> selected: false;
+    callback clicked();
+    height: 44px;
+    border-radius: Theme.radius-sm;
+    background: selected
+        ? Theme.signal-soft
+        : (touch.has-hover ? Theme.panel-raised : Theme.ground);
+    border-width: 1px;
+    border-color: selected ? Theme.signal : Theme.rule;
+    accessible-role: button;
+    accessible-label: ev.source + " " + ev.kind + " " + ev.uri;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+
+        Text {
+            width: 56px;
+            text: ev.time;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 38px;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 3px;
+            background: Theme.panel-raised;
+            border-width: 1px;
+            border-color: ev.source-idx == 1 ? Theme.blue : (ev.source-idx == 2 ? Theme.live-green : Theme.rule-strong);
+            Text {
+                text: ev.source;
+                color: Theme.text;
+                font-family: Type.mono-family;
+                font-size: 11px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 1px;
+            Text {
+                text: ev.uri;
+                color: selected ? Theme.signal-text : Theme.text;
+                font-family: Type.mono-family;
+                font-size: 11px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: ev.kind + " · " + ev.preview;
+                color: Theme.muted;
+                font-size: 11px;
+                overflow: elide;
+            }
+        }
+
+        Text {
+            text: ev.size;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component TelemetryInspector inherits Rectangle {
+    in property <TelemetryView> telemetry;
+    in-out property <int> inspector-mode: 0;
+    callback toggle-reveal-secrets();
+    background: Theme.panel-raised;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.rule;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: stretch;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                Text {
+                    text: root.telemetry.inspector-title != "" ? root.telemetry.inspector-title : "Payload Inspector";
+                    color: Theme.text;
+                    font-family: Type.mono-family;
+                    font-size: 12px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.telemetry.inspector-meta != "" ? root.telemetry.inspector-meta : "Select any stream row to inspect redacted JSON or state diffs";
+                    color: Theme.muted;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                Action {
+                    text: "JSON";
+                    selected: root.inspector-mode == 0;
+                    clicked => { root.inspector-mode = 0; }
+                }
+                Action {
+                    text: "Diff";
+                    selected: root.inspector-mode == 1;
+                    clicked => { root.inspector-mode = 1; }
+                }
+                Action {
+                    text: "Prev";
+                    selected: root.inspector-mode == 2;
+                    clicked => { root.inspector-mode = 2; }
+                }
+                if root.telemetry.inspector-has-secrets: Action {
+                    text: root.telemetry.secrets-revealed ? "Mask" : "Reveal";
+                    selected: root.telemetry.secrets-revealed;
+                    primary-signal: true;
+                    clicked => { root.toggle-reveal-secrets(); }
+                }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.backdrop;
+            border-radius: Theme.radius-sm;
+            border-width: 1px;
+            border-color: Theme.rule;
+            clip: true;
+
+            Flickable {
+                width: 100%;
+                height: 100%;
+                content-height: payload-input.preferred-height + 24px;
+                payload-input := TextInput {
+                    x: 10px;
+                    y: 10px;
+                    width: parent.width - 20px;
+                    read-only: true;
+                    single-line: false;
+                    wrap: word-wrap;
+                    font-family: Type.mono-family;
+                    font-size: 11px;
+                    color: Theme.text;
+                    text: root.telemetry.inspector-payload != ""
+                        ? root.telemetry.inspector-payload
+                        : "// No event selected yet.\n// Click any item above to view its live payload or structural JSON diff.";
+                }
+            }
+        }
+    }
+}
+
+component TelemetryEventsList inherits Rectangle {
+    in property <TelemetryView> telemetry;
+    callback select-event(int);
+    background: Theme.backdrop;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.rule;
+    clip: true;
+
+    Flickable {
+        width: 100%;
+        height: 100%;
+        content-height: ev-col.preferred-height + 16px;
+        ev-col := VerticalLayout {
+            width: parent.width;
+            padding: 8px;
+            spacing: 4px;
+            if root.telemetry.events.length == 0: Text {
+                text: "No telemetry events captured for current filter.";
+                color: Theme.muted;
+                font-size: Type.small;
+                horizontal-alignment: center;
+            }
+            for ev in root.telemetry.events: TelemetryEventRow {
+                ev: ev;
+                selected: ev.id == root.telemetry.selected-event-id;
+                clicked => { root.select-event(ev.id); }
+            }
+        }
+    }
+}
+
+component TelemetryEndpointRow inherits Rectangle {
+    in property <TelemetryEndpointItem> ep;
+    callback clicked();
+    height: 46px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Theme.panel-raised : Theme.ground;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.signal : Theme.rule;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        Rectangle {
+            width: 38px;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 3px;
+            background: Theme.panel-raised;
+            border-width: 1px;
+            border-color: ep.source-idx == 0 ? Theme.blue : (ep.source-idx == 2 ? Theme.live-green : Theme.rule-strong);
+            Text {
+                text: ep.source;
+                color: Theme.text;
+                font-family: Type.mono-family;
+                font-size: 11px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 1px;
+            Text {
+                text: ep.method + " " + ep.path;
+                color: Theme.text;
+                font-family: Type.mono-family;
+                font-size: 11px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: ep.namespace + " · " + ep.origin + " · " + ep.stats;
+                color: Theme.muted;
+                font-size: 11px;
+                overflow: elide;
+            }
+        }
+        Text {
+            text: "Use GET";
+            color: touch.has-hover ? Theme.signal-text : Theme.muted;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component TelemetryEndpointsList inherits Rectangle {
+    in property <TelemetryView> telemetry;
+    callback select-endpoint(int, string);
+    background: Theme.backdrop;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.rule;
+    clip: true;
+
+    Flickable {
+        width: 100%;
+        height: 100%;
+        content-height: ep-col.preferred-height + 16px;
+        ep-col := VerticalLayout {
+            width: parent.width;
+            padding: 8px;
+            spacing: 4px;
+            if root.telemetry.endpoints.length == 0: Text {
+                text: "No API endpoints matched filter.";
+                color: Theme.muted;
+                font-size: Type.small;
+                horizontal-alignment: center;
+            }
+            for ep in root.telemetry.endpoints: TelemetryEndpointRow {
+                ep: ep;
+                clicked => { root.select-endpoint(ep.source-idx, ep.path); }
+            }
+        }
+    }
+}
+
+component TelemetrySystemView inherits Rectangle {
+    in property <TelemetryView> telemetry;
+    background: Theme.backdrop;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.rule;
+    clip: true;
+
+    Flickable {
+        width: 100%;
+        height: 100%;
+        content-height: sys-col.preferred-height + 20px;
+        sys-col := VerticalLayout {
+            width: parent.width;
+            padding: 12px;
+            spacing: 14px;
+
+            SectionLabel { text: "RIOT PROCESSES (" + root.telemetry.processes.length + ")"; }
+            if root.telemetry.processes.length == 0: Text {
+                text: "No active Riot or League processes detected.";
+                color: Theme.muted;
+                font-size: Type.small;
+            }
+            for p in root.telemetry.processes: Rectangle {
+                height: 36px;
+                background: Theme.panel;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: Theme.rule;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    Text {
+                        text: p.name + " (PID " + p.pid + ")";
+                        color: Theme.text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: p.cpu + " · " + p.mem;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            SectionLabel { text: "LISTENING SOCKETS (" + root.telemetry.sockets.length + ")"; }
+            for s in root.telemetry.sockets: Rectangle {
+                height: 32px;
+                background: Theme.panel;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: Theme.rule;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    Text {
+                        text: s.proto + " " + s.address;
+                        color: Theme.text;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "PID " + s.pid + " · " + s.state;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            SectionLabel { text: "ACTIVE CONNECTIONS (" + root.telemetry.connections.length + ")"; }
+            for c in root.telemetry.connections: Rectangle {
+                height: 32px;
+                background: Theme.panel;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: Theme.rule;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    Text {
+                        text: c.address;
+                        color: Theme.text;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: c.state;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+component TelemetryPanel inherits Rectangle {
+    in property <TelemetryView> telemetry;
+    in-out property <bool> split: true;
+    in-out property <int> tab: 0;
+    in-out property <int> source-filter: 0;
+    in-out property <int> kind-filter: 0;
+    in-out property <bool> paused: false;
+    in-out property <int> inspector-mode: 0;
+    in-out property <int> call-source-idx: 0;
+    in-out property <string> call-path: "/lol-summoner/v1/current-summoner";
+    in-out property <string> endpoint-filter: "";
+
+    callback close-telemetry();
+    callback select-event(int);
+    callback toggle-reveal-secrets();
+    callback clear-events();
+    callback execute-get(int, string);
+    callback set-endpoint-filter(string);
+
+    background: Theme.panel;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 1px;
+        height: 100%;
+        background: Theme.rule;
+    }
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+
+        // Telemetry Header Bar
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: stretch;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 1px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: "TELEMETRY LAB";
+                        color: Theme.text;
+                        font-family: Type.display-family;
+                        font-size: 20px;
+                        font-weight: 800;
+                        letter-spacing: 0.6px;
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        height: 20px;
+                        width: phase-badge.preferred-width + 12px;
+                        border-radius: 3px;
+                        background: Theme.signal-soft;
+                        border-width: 1px;
+                        border-color: Theme.signal;
+                        phase-badge := Text {
+                            text: root.telemetry.phase;
+                            color: Theme.signal-text;
+                            font-family: Type.mono-family;
+                            font-size: 11px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                Text {
+                    text: root.telemetry.rate + " · " + root.telemetry.total-events;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: 11px;
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                Action {
+                    text: root.split ? "Full View" : "Split View";
+                    selected: !root.split;
+                    clicked => { root.split = !root.split; }
+                }
+                Action {
+                    text: "Hide";
+                    clicked => { root.close-telemetry(); }
+                }
+            }
+        }
+
+        // Sources Summary Strip
+        HorizontalLayout {
+            spacing: 6px;
+            for src in root.telemetry.sources: TelemetrySourceCard { src: src; }
+        }
+
+        // Sub-tabs (without numeric prefixes)
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: stretch;
+            Action {
+                text: "Live Stream";
+                selected: root.tab == 0;
+                primary-signal: true;
+                clicked => { root.tab = 0; }
+            }
+            Action {
+                text: "API Catalog (" + root.telemetry.endpoints-total + ")";
+                selected: root.tab == 1;
+                primary-signal: true;
+                clicked => { root.tab = 1; }
+            }
+            Action {
+                text: "System";
+                selected: root.tab == 2;
+                primary-signal: true;
+                clicked => { root.tab = 2; }
+            }
+        }
+
+        // Tab 0: Event Stream + Inspector
+        if root.tab == 0: VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 4px;
+                Action { text: "All"; selected: root.source-filter == 0; clicked => { root.source-filter = 0; } }
+                Action { text: "LCU"; selected: root.source-filter == 1; clicked => { root.source-filter = 1; } }
+                Action { text: "RC"; selected: root.source-filter == 2; clicked => { root.source-filter = 2; } }
+                Action { text: "Game"; selected: root.source-filter == 3; clicked => { root.source-filter = 3; } }
+                Rectangle { horizontal-stretch: 1; }
+                Action {
+                    text: root.paused ? "Resume" : "Pause";
+                    selected: root.paused;
+                    primary-signal: true;
+                    clicked => { root.paused = !root.paused; }
+                }
+                Action { text: "Clear"; clicked => { root.clear-events(); } }
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                Action { text: "All types"; selected: root.kind-filter == 0; clicked => { root.kind-filter = 0; } }
+                Action { text: "Update"; selected: root.kind-filter == 1; clicked => { root.kind-filter = 1; } }
+                Action { text: "Create"; selected: root.kind-filter == 2; clicked => { root.kind-filter = 2; } }
+                Action { text: "Delete"; selected: root.kind-filter == 3; clicked => { root.kind-filter = 3; } }
+                Action { text: "Call"; selected: root.kind-filter == 4; clicked => { root.kind-filter = 4; } }
+            }
+
+            TelemetryEventsList {
+                vertical-stretch: 1;
+                min-height: 150px;
+                telemetry: root.telemetry;
+                select-event(id) => { root.select-event(id); }
+            }
+
+            TelemetryInspector {
+                vertical-stretch: 1;
+                min-height: 170px;
+                telemetry: root.telemetry;
+                inspector-mode <=> root.inspector-mode;
+                toggle-reveal-secrets => { root.toggle-reveal-secrets(); }
+            }
+        }
+
+        // Tab 1: API Catalog & Read-Only GET Runner
+        if root.tab == 1: VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 8px;
+
+            Rectangle {
+                height: 46px;
+                background: Theme.panel-raised;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: Theme.rule;
+                HorizontalLayout {
+                    padding: 6px;
+                    spacing: 6px;
+                    Action { text: "LCU"; selected: root.call-source-idx == 0; clicked => { root.call-source-idx = 0; } }
+                    Action { text: "RC"; selected: root.call-source-idx == 1; clicked => { root.call-source-idx = 1; } }
+                    Action { text: ":2999"; selected: root.call-source-idx == 2; clicked => { root.call-source-idx = 2; } }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: Theme.backdrop;
+                        border-radius: Theme.radius-sm;
+                        border-width: 1px;
+                        border-color: Theme.rule-strong;
+                        TextInput {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text <=> root.call-path;
+                            color: Theme.text;
+                            font-family: Type.mono-family;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            single-line: true;
+                            accepted => { root.execute-get(root.call-source-idx, root.call-path); }
+                        }
+                    }
+                    Action {
+                        text: "GET";
+                        selected: true;
+                        primary-signal: true;
+                        clicked => { root.execute-get(root.call-source-idx, root.call-path); }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 32px;
+                    background: Theme.backdrop;
+                    border-radius: Theme.radius-sm;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    Text {
+                        x: 10px;
+                        height: 100%;
+                        text: root.endpoint-filter == "" ? "Filter APIs (summoner, lobby, champ-select...)" : "";
+                        color: Theme.muted;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+                    TextInput {
+                        x: 10px;
+                        width: parent.width - 20px;
+                        height: 100%;
+                        text <=> root.endpoint-filter;
+                        color: Theme.text;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        single-line: true;
+                        edited => { root.set-endpoint-filter(self.text); }
+                    }
+                }
+                Text {
+                    text: root.telemetry.endpoints-summary;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+
+            TelemetryEndpointsList {
+                vertical-stretch: 1;
+                telemetry: root.telemetry;
+                select-endpoint(src, path) => {
+                    root.call-source-idx = src;
+                    root.call-path = path;
+                }
+            }
+
+            if root.telemetry.call-status != "": Rectangle {
+                height: 132px;
+                background: Theme.backdrop;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: Theme.rule-strong;
+                clip: true;
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+                    Text {
+                        text: root.telemetry.call-status;
+                        color: Theme.signal-text;
+                        font-family: Type.mono-family;
+                        font-size: 11px;
+                        font-weight: 700;
+                    }
+                    Flickable {
+                        vertical-stretch: 1;
+                        content-height: call-resp.preferred-height + 8px;
+                        call-resp := TextInput {
+                            width: parent.width;
+                            read-only: true;
+                            single-line: false;
+                            wrap: word-wrap;
+                            text: root.telemetry.call-response;
+                            color: Theme.text;
+                            font-family: Type.mono-family;
+                            font-size: 11px;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Tab 2: Processes & Sockets
+        if root.tab == 2: TelemetrySystemView {
+            vertical-stretch: 1;
+            telemetry: root.telemetry;
+        }
+    }
+}
+
+component EndScreen inherits Flickable {
+    in property <EndView> end;
+    in property <bool> compact: false;
+    content-height: end-body.preferred-height;
+
+    end-body := VerticalLayout {
+        padding: Theme.gutter;
+        spacing: 20px;
+
+        Header {
+            title: root.end.title;
+            detail: root.end.detail;
+            specimen: root.end.kda;
+            active-turn: root.end.victory;
+            compact: root.compact;
+        }
+
+        Rectangle {
+            background: Theme.panel;
+            border-radius: Theme.radius;
+            border-width: 1px;
+            border-color: Theme.rule;
+            VerticalLayout {
+                padding: 18px;
+                spacing: 4px;
+                SectionLabel { text: "MATCH TELEMETRY SUMMARY"; }
+                Rectangle { height: 6px; }
+                for st in root.end.stats: NoteRow { note: st; }
+            }
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "Hypatia";
+    icon: @image-url("../assets/hypatia.png");
+    default-font-family: Type.family;
+    preferred-width: 1320px;
+    preferred-height: 820px;
+    min-width: 980px;
+    min-height: 680px;
+    background: Theme.ground;
+
+    // 0 League closed, 1 client idle, 2 lobby, 3 queue, 4 match found, 5 champ select, 6 in game, 7 results
+    in property <int> view: 0;
+    in property <bool> demo: false;
+    in property <string> demo-phase: "";
+    in property <string> queue-label;
+    in property <bool> widget-open: false;
+    in property <bool> remote-enabled: false;
+    in-out property <bool> remote-panel-open: false;
+    in property <int> remote-clients: 0;
+    in property <string> remote-url;
+    in property <image> remote-qr;
+    in property <bool> lcu-live: false;
+    in property <bool> rc-live: false;
+    in property <bool> game-live: false;
+    in property <string> lcu-port: "";
+    in property <string> rc-port: "";
+    in property <string> game-port: "";
+    in property <WaitView> wait;
+    in property <[PartyRow]> party;
+    in property <ChampSelectView> champ;
+    in property <LiveView> live;
+    in property <EndView> end;
+
+    in-out property <bool> telemetry-enabled: false;
+    in-out property <bool> telemetry-split: true;
+    in-out property <int> telemetry-tab: 0;
+    in-out property <int> telemetry-source-filter: 0;
+    in-out property <int> telemetry-kind-filter: 0;
+    in-out property <bool> telemetry-paused: false;
+    in-out property <int> inspector-mode: 0;
+    in-out property <int> call-source-idx: 0;
+    in-out property <string> call-path: "/lol-summoner/v1/current-summoner";
+    in-out property <string> endpoint-filter: "";
+    in property <TelemetryView> telemetry;
+
+    callback toggle-widget();
+    callback toggle-remote-panel();
+    callback rotate-remote-token();
+    callback disable-remote();
+    callback set-dark(bool);
+    callback toggle-telemetry();
+    callback toggle-demo();
+    callback select-demo-phase(string);
+    callback select-telemetry-event(int);
+    callback toggle-reveal-secrets();
+    callback clear-telemetry-events();
+    callback execute-get-call(int, string);
+    callback set-endpoint-filter(string);
+
+    function current-stop() -> int {
+        if (root.view == 2) { return 0; }
+        if (root.view == 3 || root.view == 4) { return 1; }
+        if (root.view == 5) { return 2; }
+        if (root.view == 6) { return 3; }
+        if (root.view == 7) { return 4; }
+        return -1;
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        // Persistent Left Pit-Wall Workspace Rail
+        Rectangle {
+            width: 196px;
+            background: Theme.shell;
+
+            Rectangle {
+                x: parent.width - 1px;
+                y: 0px;
+                width: 1px;
+                height: 100%;
+                background: Theme.rule;
+            }
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 10px;
+
+                // Brand emblem + title
+                HorizontalLayout {
+                    height: 40px;
+                    spacing: 10px;
+                    alignment: start;
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 5px;
+                        clip: true;
+                        border-width: 1px;
+                        border-color: Theme.rule-strong;
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            source: @image-url("../assets/hypatia.png");
+                            image-fit: cover;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 0px;
+                        Text {
+                            text: "HYPATIA";
+                            color: Theme.text;
+                            font-family: Type.display-family;
+                            font-size: 19px;
+                            font-weight: 800;
+                            letter-spacing: 0.9px;
+                        }
+                        Text {
+                            text: "PIT WALL";
+                            color: Theme.signal-text;
+                            font-family: Type.mono-family;
+                            font-size: 11px;
+                            font-weight: 700;
+                            letter-spacing: 1px;
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.rule; }
+
+                SectionLabel { text: "WORKSPACE"; }
+
+                RailNavItem {
+                    label: "Companion";
+                    icon-path: "M 3 12 L 12 3 L 21 12 M 5 10 V 20 H 19 V 10";
+                    active: (!root.telemetry-enabled || root.telemetry-split) && !root.remote-panel-open;
+                    clicked => {
+                        root.remote-panel-open = false;
+                        if (root.telemetry-enabled && !root.telemetry-split) {
+                            root.telemetry-split = true;
+                        }
+                    }
+                }
+
+                RailNavItem {
+                    label: "Telemetry Lab";
+                    icon-path: "M 3 12 H 7 L 10 5 L 14 19 L 17 12 H 21";
+                    active: root.telemetry-enabled;
+                    badge: root.telemetry-enabled ? (root.telemetry-split ? "SPLIT" : "FULL") : "";
+                    clicked => {
+                        root.remote-panel-open = false;
+                        root.toggle-telemetry();
+                    }
+                }
+
+                RailNavItem {
+                    label: "Mobile Remote";
+                    icon-path: "M 7 3 H 17 V 21 H 7 Z M 11 18 H 13";
+                    active: root.remote-panel-open;
+                    indicator-live: root.remote-enabled;
+                    badge: root.remote-clients > 0
+                        ? root.remote-clients + " ON"
+                        : (root.remote-enabled ? "QR" : "OFF");
+                    clicked => { root.toggle-remote-panel(); }
+                }
+
+                RailNavItem {
+                    label: "Mini Widget";
+                    icon-path: "M 4 4 H 20 V 20 H 4 Z M 12 4 V 20 M 12 12 H 20";
+                    active: root.widget-open;
+                    badge: root.widget-open ? "OPEN" : "";
+                    clicked => { root.toggle-widget(); }
+                }
+
+                Rectangle { height: 1px; background: Theme.rule; }
+
+                SectionLabel { text: "SIMULATION"; }
+
+                RailNavItem {
+                    label: "Demo Mode";
+                    icon-path: "M 6 4 L 19 12 L 6 20 Z";
+                    active: root.demo;
+                    badge: root.demo ? "ON" : "OFF";
+                    clicked => { root.toggle-demo(); }
+                }
+
+                if root.demo: VerticalLayout {
+                    spacing: 4px;
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Action {
+                            horizontal-stretch: 1;
+                            text: "Lobby";
+                            selected: root.view == 2;
+                            primary-signal: true;
+                            clicked => { root.select-demo-phase("Lobby"); }
+                        }
+                        Action {
+                            horizontal-stretch: 1;
+                            text: "Queue";
+                            selected: root.view == 3;
+                            primary-signal: true;
+                            clicked => { root.select-demo-phase("Matchmaking"); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Action {
+                            horizontal-stretch: 1;
+                            text: "Ready";
+                            selected: root.view == 4;
+                            primary-signal: true;
+                            clicked => { root.select-demo-phase("ReadyCheck"); }
+                        }
+                        Action {
+                            horizontal-stretch: 1;
+                            text: "Champ";
+                            selected: root.view == 5;
+                            primary-signal: true;
+                            clicked => { root.select-demo-phase("ChampSelect"); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Action {
+                            horizontal-stretch: 1;
+                            text: "Live";
+                            selected: root.view == 6;
+                            primary-signal: true;
+                            clicked => { root.select-demo-phase("InProgress"); }
+                        }
+                        Action {
+                            horizontal-stretch: 1;
+                            text: "Results";
+                            selected: root.view == 7;
+                            primary-signal: true;
+                            clicked => { root.select-demo-phase("EndOfGame"); }
+                        }
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                Rectangle { height: 1px; background: Theme.rule; }
+
+                SectionLabel { text: "RIOT SOURCES"; }
+                VerticalLayout {
+                    spacing: 2px;
+                    RailSourceRow {
+                        label: "LCU API";
+                        port: root.lcu-live && root.lcu-port != "" ? root.lcu-port : (root.lcu-live ? "ready" : "offline");
+                        live: root.lcu-live;
+                    }
+                    RailSourceRow {
+                        label: "Riot Client";
+                        port: root.rc-live && root.rc-port != "" ? root.rc-port : (root.rc-live ? "ready" : "offline");
+                        live: root.rc-live;
+                    }
+                    RailSourceRow {
+                        label: "Live Game";
+                        port: root.game-live ? ":2999" : "standby";
+                        live: root.game-live;
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.rule; }
+
+                // Day / Night theme printing switch
+                HorizontalLayout {
+                    spacing: 4px;
+                    Action {
+                        horizontal-stretch: 1;
+                        text: "Night";
+                        selected: Theme.dark;
+                        primary-signal: true;
+                        clicked => { root.set-dark(true); }
+                    }
+                    Action {
+                        horizontal-stretch: 1;
+                        text: "Day";
+                        selected: !Theme.dark;
+                        primary-signal: true;
+                        clicked => { root.set-dark(false); }
+                    }
+                }
+            }
+        }
+
+        // Right Workspace: Phase Ticker + Responsive Content Stage
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 0px;
+
+            // Top 52px Pit-Wall Phase Ticker
+            Rectangle {
+                height: 52px;
+                background: Theme.ground;
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    width: 100%;
+                    background: Theme.rule;
+                }
+
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    spacing: 12px;
+                    alignment: stretch;
+
+                    PhaseLine {
+                        y: (parent.height - self.height) / 2;
+                        current: root.current-stop();
+                    }
+
+                    Rectangle { horizontal-stretch: 1; }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+
+                        if root.queue-label != "": Rectangle {
+                            y: (parent.height - self.height) / 2;
+                            height: 24px;
+                            width: q-lbl.preferred-width + 16px;
+                            border-radius: Theme.radius-sm;
+                            background: Theme.panel;
+                            border-width: 1px;
+                            border-color: Theme.rule;
+                            q-lbl := Text {
+                                text: root.queue-label;
+                                color: Theme.text;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if root.demo: Rectangle {
+                            y: (parent.height - self.height) / 2;
+                            height: 24px;
+                            width: demo-tag.preferred-width + 14px;
+                            border-radius: Theme.radius-sm;
+                            background: Theme.signal-soft;
+                            border-width: 1px;
+                            border-color: Theme.signal;
+                            demo-tag := Text {
+                                text: "DEMO STREAM";
+                                color: Theme.signal-text;
+                                font-family: Type.mono-family;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if root.remote-enabled: Action {
+                            y: (parent.height - self.height) / 2;
+                            text: root.remote-clients > 0 ? "Phone Live (" + root.remote-clients + ")" : "Remote Ready";
+                            selected: root.remote-panel-open;
+                            primary-signal: true;
+                            clicked => { root.toggle-remote-panel(); }
+                        }
+                    }
+                }
+            }
+
+            // Main Workspace Split Area + Floating Mobile Remote Pairing Sheet
+            workspace-box := Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+
+                HorizontalLayout {
+                    width: 100%;
+                    height: 100%;
+                    spacing: 0px;
+
+                    // Companion Stage
+                    if !root.telemetry-enabled || root.telemetry-split: stage := Rectangle {
+                        horizontal-stretch: 3;
+                        min-width: 340px;
+                        property <bool> is-compact: self.width < 680px;
+
+                        if root.view <= 4: WaitScreen {
+                            width: 100%;
+                            height: 100%;
+                            wait: root.wait;
+                            party: root.party;
+                            show-party: root.view == 2 && root.party.length > 0;
+                            is-ready-check: root.view == 4;
+                            compact: stage.is-compact;
+                            telemetry-enabled: root.telemetry-enabled;
+                            remote-panel-open: root.remote-panel-open;
+                            demo: root.demo;
+                            toggle-telemetry => { root.toggle-telemetry(); }
+                            toggle-remote-panel => { root.toggle-remote-panel(); }
+                            toggle-demo => { root.toggle-demo(); }
+                        }
+                        if root.view == 5: ChampSelectScreen {
+                            width: 100%;
+                            height: 100%;
+                            cs: root.champ;
+                            compact: stage.is-compact;
+                        }
+                        if root.view == 6: LiveScreen {
+                            width: 100%;
+                            height: 100%;
+                            live: root.live;
+                            compact: stage.is-compact;
+                        }
+                        if root.view == 7: EndScreen {
+                            width: 100%;
+                            height: 100%;
+                            end: root.end;
+                            compact: stage.is-compact;
+                        }
+                    }
+
+                    // Telemetry Lab Split or Full Pane
+                    if root.telemetry-enabled: TelemetryPanel {
+                        horizontal-stretch: 2;
+                        min-width: root.telemetry-split ? 380px : 0px;
+                        height: 100%;
+                        telemetry: root.telemetry;
+                        split <=> root.telemetry-split;
+                        tab <=> root.telemetry-tab;
+                        source-filter <=> root.telemetry-source-filter;
+                        kind-filter <=> root.telemetry-kind-filter;
+                        paused <=> root.telemetry-paused;
+                        inspector-mode <=> root.inspector-mode;
+                        call-source-idx <=> root.call-source-idx;
+                        call-path <=> root.call-path;
+                        endpoint-filter <=> root.endpoint-filter;
+                        close-telemetry => { root.toggle-telemetry(); }
+                        select-event(id) => { root.select-telemetry-event(id); }
+                        toggle-reveal-secrets => { root.toggle-reveal-secrets(); }
+                        clear-events => { root.clear-telemetry-events(); }
+                        execute-get(src, path) => { root.execute-get-call(src, path); }
+                        set-endpoint-filter(f) => { root.set-endpoint-filter(f); }
+                    }
+                }
+
+                // Non-pushing Floating Mobile Remote Pairing Sheet
+                if root.remote-panel-open: Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: #090b0faa;
+
+                    TouchArea {
+                        clicked => { root.remote-panel-open = false; }
+                    }
+
+                    Rectangle {
+                        x: 24px;
+                        y: (parent.height - self.height) / 2;
+                        width: min(560px, parent.width - 48px);
+                        height: sheet-col.preferred-height;
+                        background: Theme.panel;
+                        border-radius: Theme.radius;
+                        border-width: 1px;
+                        border-color: Theme.rule-strong;
+
+                        // Absorb clicks inside sheet so backdrop doesn't dismiss inadvertently
+                        TouchArea {}
+
+                        sheet-col := VerticalLayout {
+                            padding: 20px;
+                            spacing: 14px;
+
+                            HorizontalLayout {
+                                spacing: 10px;
+                                alignment: stretch;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    Text {
+                                        text: "MOBILE REMOTE PAIRING";
+                                        color: Theme.text;
+                                        font-family: Type.display-family;
+                                        font-size: 22px;
+                                        font-weight: 800;
+                                    }
+                                    Text {
+                                        text: root.remote-clients > 0
+                                            ? root.remote-clients + " device connected over LAN WebSocket"
+                                            : "Waiting for QR scan on same Wi-Fi network";
+                                        color: root.remote-clients > 0 ? Theme.live-green : Theme.muted;
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                    }
+                                }
+                                Action {
+                                    text: "Close";
+                                    clicked => { root.remote-panel-open = false; }
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: Theme.rule; }
+
+                            HorizontalLayout {
+                                spacing: 18px;
+                                alignment: stretch;
+
+                                Rectangle {
+                                    width: 168px;
+                                    height: 168px;
+                                    border-radius: Theme.radius;
+                                    background: #efece3;
+                                    border-width: 1px;
+                                    border-color: Theme.rule-strong;
+                                    Image {
+                                        width: 152px;
+                                        height: 152px;
+                                        x: 8px;
+                                        y: 8px;
+                                        source: root.remote-qr;
+                                        image-fit: contain;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: space-between;
+                                    spacing: 10px;
+
+                                    Text {
+                                        text: "Scan the QR code to accept queues, lock picks & bans, swap lanes, edit runes, and watch live scores on your phone.";
+                                        color: Theme.text;
+                                        font-size: 13px;
+                                        wrap: word-wrap;
+                                    }
+
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        SectionLabel { text: "DIRECT PAIRING URL (SELECT TO COPY)"; }
+                                        Rectangle {
+                                            height: 32px;
+                                            background: Theme.backdrop;
+                                            border-radius: Theme.radius-sm;
+                                            border-width: 1px;
+                                            border-color: Theme.rule-strong;
+                                            TextInput {
+                                                x: 8px;
+                                                width: parent.width - 16px;
+                                                height: 100%;
+                                                read-only: true;
+                                                single-line: true;
+                                                text: root.remote-url;
+                                                color: Theme.signal-text;
+                                                font-family: Type.mono-family;
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
+                                        Action {
+                                            text: "New QR Token";
+                                            selected: true;
+                                            primary-signal: true;
+                                            clicked => { root.rotate-remote-token(); }
+                                        }
+                                        Action {
+                                            text: "Stop Server";
+                                            clicked => { root.disable-remote(); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component MiniWidget inherits Window {
+    title: "Hypatia — Live";
+    icon: @image-url("../assets/hypatia.png");
+    default-font-family: Type.family;
+    preferred-width: 360px;
+    preferred-height: 640px;
+    min-width: 340px;
+    min-height: 540px;
+    always-on-top: true;
+    background: Theme.ground;
+
+    in property <bool> in-game: false;
+    in property <string> wait-title: "Waiting for a game";
+    in property <string> wait-detail: "Live telemetry fills in when a match starts.";
+    in property <LiveView> live;
+
+    if !root.in-game: VerticalLayout {
+        padding: 20px;
+        alignment: center;
+        spacing: 12px;
+        Plate {
+            title: root.wait-title;
+            detail: root.wait-detail;
+        }
+    }
+
+    if root.in-game: VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+
+        // Compact Top Scoreboard & Clock Bar
+        Rectangle {
+            height: 48px;
+            background: Theme.panel;
+            border-radius: Theme.radius-sm;
+            border-width: 1px;
+            border-color: Theme.rule;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+                alignment: stretch;
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: start;
+                    Text {
+                        text: root.live.my-score;
+                        color: Theme.blue;
+                        font-family: Type.display-family;
+                        font-size: 30px;
+                        font-weight: 800;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: ":";
+                        color: Theme.muted;
+                        font-family: Type.display-family;
+                        font-size: 24px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.live.enemy-score;
+                        color: Theme.red;
+                        font-family: Type.display-family;
+                        font-size: 30px;
+                        font-weight: 800;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: root.live.clock;
+                    color: Theme.signal-text;
+                    font-family: Type.mono-family;
+                    font-size: 16px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.live.self-kda;
+                    color: Theme.text;
+                    font-family: Type.mono-family;
+                    font-size: 12px;
+                    font-weight: 700;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Player Status Strip
+        Rectangle {
+            height: 36px;
+            background: root.live.dead ? Theme.danger-soft : Theme.panel;
+            border-radius: Theme.radius-sm;
+            border-width: 1px;
+            border-color: root.live.dead ? Theme.danger : Theme.rule;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+                Text {
+                    text: root.live.title;
+                    color: root.live.dead ? Theme.danger : Theme.text;
+                    font-size: 13px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.live.detail;
+                    color: Theme.muted;
+                    font-size: 11px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Tight Rift Map Frame (sized so feed never clips)
+        Rectangle {
+            height: 204px;
+            background: Theme.panel;
+            border-radius: Theme.radius;
+            border-width: 1px;
+            border-color: Theme.rule;
+            LineMap {
+                width: 184px;
+                height: 184px;
+                x: (parent.width - self.width) / 2;
+                y: 10px;
+                towers: root.live.towers;
+                show-jungle: false;
+                line-width: 7px;
+                station: 14px;
+                halo: Theme.panel;
+            }
+        }
+
+        // Compact Objectives Strip
+        Rectangle {
+            height: 62px;
+            background: Theme.panel;
+            border-radius: Theme.radius-sm;
+            border-width: 1px;
+            border-color: Theme.rule;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 2px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    height: 22px;
+                    Text { text: "BLUE"; width: 34px; color: Theme.blue-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.my-objectives; empty-text: "None"; }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    height: 22px;
+                    Text { text: "RED"; width: 34px; color: Theme.red-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.enemy-objectives; empty-text: "None"; }
+                }
+            }
+        }
+
+        // Scrollable Recent Match Feed (all entries remain readable & unclipped)
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.panel;
+            border-radius: Theme.radius;
+            border-width: 1px;
+            border-color: Theme.rule;
+            clip: true;
+
+            VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+                SectionLabel { text: "LIVE EVENT FEED"; }
+                Flickable {
+                    vertical-stretch: 1;
+                    content-height: mini-feed.preferred-height;
+                    mini-feed := VerticalLayout {
+                        width: parent.width;
+                        spacing: 2px;
+                        for line in root.live.feed: FeedRow { line: line; }
+                    }
+                }
+            }
+        }
+    }
+}

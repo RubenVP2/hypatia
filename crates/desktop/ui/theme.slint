@@ -1,0 +1,86 @@
+// Pit-Wall telemetry instrument palette in Night (default) and Day printings.
+
+export global Theme {
+    in-out property <bool> dark: true;
+
+    out property <color> shell: dark ? #0b0d11 : #e5e1d6;
+    out property <color> ground: dark ? #0f1116 : #efece3;
+    out property <color> backdrop: dark ? #090b0f : #dfdacf;
+    out property <color> panel: dark ? #161922 : #faf8f2;
+    out property <color> panel-raised: dark ? #1f2430 : #ebe7dc;
+    out property <color> rule: dark ? #262b38 : #d4cfc2;
+    out property <color> rule-strong: dark ? #3c4356 : #a59f8f;
+    out property <color> text: dark ? #edeff4 : #14171f;
+    out property <color> muted: dark ? #9ca3b5 : #555a66;
+    out property <color> plate: dark ? #edeff4 : #14171f;
+    out property <color> on-plate: dark ? #0f1116 : #faf8f2;
+    out property <color> on-plate-muted: dark ? #4c5364 : #9ca3b5;
+    out property <color> focus: dark ? #f5b400 : #b87300;
+
+    out property <color> signal: dark ? #f5b400 : #b87300;
+    out property <color> signal-soft: dark ? #f5b40024 : #b873001c;
+    out property <color> signal-text: dark ? #ffd24d : #8a5600;
+    out property <color> live-green: dark ? #45c47f : #1e7f48;
+    out property <color> live-green-soft: dark ? #45c47f22 : #1e7f4818;
+    out property <color> danger: dark ? #f0605a : #c9342e;
+    out property <color> danger-soft: dark ? #f0605a22 : #c9342e18;
+
+    out property <color> lane-top: dark ? #e3b341 : #9e6b06;
+    out property <color> lane-jungle: dark ? #45c47f : #217a47;
+    out property <color> lane-mid: dark ? #b07cf0 : #7842c2;
+    out property <color> lane-bot: dark ? #ef8bb5 : #bf3b75;
+
+    out property <color> blue: dark ? #4c8df6 : #2664d4;
+    out property <color> red: dark ? #f0605a : #c9342e;
+    out property <color> blue-soft: dark ? #9cc0fb : #2052b0;
+    out property <color> red-soft: dark ? #f6a29d : #a62b26;
+    out property <color> on-team: #ffffff;
+
+    out property <length> radius: 6px;
+    out property <length> radius-sm: 4px;
+    out property <length> gutter: 20px;
+
+    // 0 top, 1 jungle, 2 mid, 3 bot, 4 support (rides the bot line), -1 none.
+    public pure function lane-color(lane: int) -> color {
+        if (lane == 0) { return self.lane-top; }
+        if (lane == 1) { return self.lane-jungle; }
+        if (lane == 2) { return self.lane-mid; }
+        if (lane == 3 || lane == 4) { return self.lane-bot; }
+        return self.rule-strong;
+    }
+
+    public pure function lane-letter(lane: int) -> string {
+        if (lane == 0) { return "T"; }
+        if (lane == 1) { return "J"; }
+        if (lane == 2) { return "M"; }
+        if (lane == 3) { return "B"; }
+        if (lane == 4) { return "S"; }
+        return "";
+    }
+
+    public pure function lane-name(lane: int) -> string {
+        if (lane == 0) { return "Top"; }
+        if (lane == 1) { return "Jungle"; }
+        if (lane == 2) { return "Mid"; }
+        if (lane == 3) { return "Bot"; }
+        if (lane == 4) { return "Support"; }
+        return "Any role";
+    }
+
+    public pure function team-color(mine: bool) -> color {
+        return mine ? self.blue : self.red;
+    }
+}
+
+export global Type {
+    out property <string> family: "Overpass";
+    out property <string> display-family: "Barlow Condensed";
+    out property <string> mono-family: "Overpass Mono";
+    out property <length> specimen: 96px;
+    out property <length> display: 58px;
+    out property <length> title: 22px;
+    out property <length> name: 18px;
+    out property <length> body: 14px;
+    out property <length> small: 12px;
+    out property <length> label: 11px;
+}

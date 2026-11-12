@@ -41,7 +41,7 @@ jobs:
           elif [[ -n "${{ github.event.inputs.tag_name }}" ]]; then
             TAG="${{ github.event.inputs.tag_name }}"
           else
-            VERSION=$(grep '^version =' crates/server/Cargo.toml | head -1 | awk -F'"' '{print $2}')
+            VERSION=$(grep '^version =' crates/desktop/Cargo.toml | head -1 | awk -F'"' '{print $2}')
             TAG="v${VERSION}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -79,19 +79,19 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            bin_name: hypatia-server.exe
+            bin_name: hypatia.exe
             asset_name: hypatia-windows-x86_64.zip
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            bin_name: hypatia-server
+            bin_name: hypatia
             asset_name: hypatia-linux-x86_64.tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
-            bin_name: hypatia-server
+            bin_name: hypatia
             asset_name: hypatia-macos-arm64.tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
-            bin_name: hypatia-server
+            bin_name: hypatia
             asset_name: hypatia-macos-x86_64.tar.gz
 
     steps:
@@ -102,25 +102,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev
+          sudo apt-get install -y pkg-config libssl-dev libfontconfig1-dev libxkbcommon-dev libgl1-mesa-dev libwayland-dev
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown,${{ matrix.target }}
+          targets: ${{ matrix.target }}
 
-      - name: Install Trunk
-        uses: jetli/trunk-action@v0.5.1
-        with:
-          version: 'latest'
-
-      - name: Build WebAssembly frontend
-        run: |
-          cd crates/web
-          trunk build --release
-
-      - name: Build native server binary
-        run: cargo build --release --target ${{ matrix.target }} -p hypatia-server
+      - name: Build native desktop binary
+        run: cargo build --release --target ${{ matrix.target }} -p hypatia
 
       - name: Package Windows binary (zip)
         if: runner.os == 'Windows'
@@ -129,7 +119,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path staging
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" staging/
           Copy-Item README.md staging/
-          Copy-Item DESIGN.md staging/
           Compress-Archive -Path staging/* -DestinationPath "${{ matrix.asset_name }}"
           Get-FileHash -Path "${{ matrix.asset_name }}" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | Out-File -Encoding utf8 "${{ matrix.asset_name }}.sha256"
 
@@ -139,7 +128,7 @@ jobs:
         run: |
           mkdir -p staging
           cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" staging/
-          cp README.md DESIGN.md staging/
+          cp README.md staging/
           cd staging
           tar -czvf "../${{ matrix.asset_name }}" *
           cd ..

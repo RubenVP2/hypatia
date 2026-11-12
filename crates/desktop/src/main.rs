@@ -1,0 +1,1476 @@
+#![cfg_attr(all(not(test), not(debug_assertions)), windows_subsystem = "windows")]
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use clap::Parser;
+use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
+use hypatia_core::{compute_json_diff, AppState};
+use hypatia_shared::{
+    ChampSelectSummary, EndOfGameSummary, EventKind, Lane, LiveBoard, LiveGameSummary, SourceId,
+    SourceStatus, SummarySnapshot,
+};
+use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
+use tracing::info;
+
+slint::include_modules!();
+
+#[derive(Parser, Debug, Clone)]
+#[command(name = "hypatia", version, about = "Local League of Legends companion & telemetry observatory")]
+struct Cli {
+    /// Start in demo mode with synthetic event streams
+    #[arg(long)]
+    demo: bool,
+
+    /// Demo events generated per second
+    #[arg(long, default_value_t = 2.0)]
+    demo_rate: f32,
+
+    /// Start with the League of Legends Telemetry Observatory open
+    #[arg(long)]
+    telemetry: bool,
+
+    /// Start with Mobile Remote server enabled and QR code visible
+    #[arg(long)]
+    remote: bool,
+
+    /// Disable automatic startup of the Mobile Remote server
+    #[arg(long)]
+    no_remote: bool,
+
+    /// Preferred LAN port for Mobile Remote server
+    #[arg(long, default_value_t = 7879)]
+    remote_port: u16,
+
+    /// Start in Light (Day) theme instead of Dark (Night)
+    #[arg(long)]
+    light: bool,
+
+    /// Open the always-on-top Mini Widget on startup
+    #[arg(long)]
+    widget: bool,
+
+    /// Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
+    #[arg(long)]
+    phase: Option<String>,
+}
+
+fn lane_index(position: &str) -> i32 {
+    match position.trim().to_ascii_uppercase().as_str() {
+        "TOP" => 0,
+        "JUNGLE" => 1,
+        "MIDDLE" | "MID" => 2,
+        "BOTTOM" | "BOT" => 3,
+        "UTILITY" | "SUPPORT" => 4,
+        _ => -1,
+    }
+}
+
+fn champ_initials(name: &str) -> SharedString {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.starts_with("Selecting") || trimmed.starts_with("Choosing") {
+        return SharedString::default();
+    }
+    let words: Vec<&str> = trimmed
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let s: String = if words.len() >= 2 {
+        words
+            .iter()
+            .take(2)
+            .filter_map(|w| w.chars().next())
+            .collect()
+    } else {
+        trimmed.chars().take(2).collect()
+    };
+    SharedString::from(s.to_uppercase())
+}
+
+fn format_mm_ss(seconds: f64) -> SharedString {
+    let total = seconds.max(0.0) as u64;
+    SharedString::from(format!("{}:{:02}", total / 60, total % 60))
+}
+
+fn qr_to_slint_image(qr: &QrCodeVisual) -> Image {
+    let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&qr.rgba, qr.width, qr.height);
+    Image::from_rgba8(buf)
+}
+
+fn map_coord_for_lane(lane: i32) -> (f32, f32, i32) {
+    match lane {
+        0 => (40.0, 145.0, 0),  // Top line, label right
+        1 => (132.0, 206.0, 2), // Jungle line, label above
+        2 => (200.0, 194.0, 0), // Mid line, label right
+        3 => (155.0, 348.0, 2), // Bot carry, label above track
+        4 => (295.0, 348.0, 3), // Support on bot line, label below track
+        _ => (120.0, 305.0, 0),
+    }
+}
+
+fn tower_coordinates(order_side: bool, lane: Lane, tier: u8) -> (f32, f32) {
+    match (order_side, lane, tier) {
+        // Blue (Order) towers: outer (1), inner (2), inhib (3)
+        (true, Lane::Top, 1) => (40.0, 130.0),
+        (true, Lane::Top, 2) => (40.0, 205.0),
+        (true, Lane::Top, 3) => (40.0, 280.0),
+        (true, Lane::Mid, 1) => (170.0, 224.0),
+        (true, Lane::Mid, 2) => (130.0, 262.0),
+        (true, Lane::Mid, 3) => (90.0, 300.0),
+        (true, Lane::Bot, 1) => (260.0, 348.0),
+        (true, Lane::Bot, 2) => (180.0, 348.0),
+        (true, Lane::Bot, 3) => (100.0, 348.0),
+        // Red (Chaos) towers: outer (1), inner (2), inhib (3)
+        (false, Lane::Top, 1) => (140.0, 42.0),
+        (false, Lane::Top, 2) => (220.0, 42.0),
+        (false, Lane::Top, 3) => (300.0, 42.0),
+        (false, Lane::Mid, 1) => (230.0, 166.0),
+        (false, Lane::Mid, 2) => (270.0, 128.0),
+        (false, Lane::Mid, 3) => (310.0, 90.0),
+        (false, Lane::Bot, 1) => (358.0, 255.0),
+        (false, Lane::Bot, 2) => (358.0, 180.0),
+        (false, Lane::Bot, 3) => (358.0, 105.0),
+        _ => (200.0, 195.0),
+    }
+}
+
+fn build_champ_select_view(cs: &ChampSelectSummary) -> ChampSelectView {
+    let mut allies = Vec::new();
+    let mut map_allies = Vec::new();
+    let mut acting_label = None;
+
+    for ally in &cs.my_team {
+        let lane = lane_index(&ally.assigned_position);
+        let has_champ = ally.champion_id > 0
+            && !ally.champion_name.is_empty()
+            && !ally.champion_name.starts_with("Selecting");
+        let champ_str = if has_champ {
+            ally.champion_name.as_str()
+        } else {
+            ""
+        };
+        let picking = cs.acting_cell_id == Some(ally.cell_id);
+        if picking {
+            let role_word = match lane {
+                0 => "top laner",
+                1 => "jungler",
+                2 => "mid laner",
+                3 => "bot laner",
+                4 => "support",
+                _ => "teammate",
+            };
+            let verb = if cs.acting_type.as_deref() == Some("ban") {
+                "banning"
+            } else {
+                "picking"
+            };
+            acting_label = Some(if ally.is_self {
+                format!("Your turn — you are {verb}")
+            } else {
+                format!("Your {role_word} is {verb}")
+            });
+        }
+
+        allies.push(AllyRow {
+            lane,
+            champion: SharedString::from(champ_str),
+            initials: champ_initials(champ_str),
+            icon: Image::default(),
+            player: SharedString::from(ally.summoner_name.as_str()),
+            rank: SharedString::from(ally.rank_label.as_deref().unwrap_or("Unranked")),
+            is_self: ally.is_self,
+            is_premade: ally.is_premade,
+            picking,
+            hidden: ally.is_anonymized,
+        });
+
+        let (x, y, label_pos) = map_coord_for_lane(lane);
+        let map_label = if !champ_str.is_empty() {
+            if ally.is_self {
+                format!("{champ_str} · you")
+            } else {
+                champ_str.to_string()
+            }
+        } else if ally.is_self {
+            "You".to_string()
+        } else {
+            ally.summoner_name.clone()
+        };
+        map_allies.push(MapAlly {
+            x,
+            y,
+            label: SharedString::from(map_label),
+            is_self: ally.is_self,
+            label_pos,
+        });
+    }
+
+    let mut enemies = Vec::new();
+    let mut enemies_to_come = 0;
+    for e in &cs.their_team {
+        if e.champion_id > 0 && !e.champion_name.is_empty() {
+            enemies.push(EnemyPick {
+                champion: SharedString::from(e.champion_name.as_str()),
+                initials: champ_initials(&e.champion_name),
+                icon: Image::default(),
+            });
+        } else {
+            enemies_to_come += 1;
+        }
+    }
+    if cs.their_team.is_empty() {
+        enemies_to_come = 5;
+    }
+
+    let title = acting_label.unwrap_or_else(|| {
+        if cs.sub_phase == "FINALIZATION" {
+            "Prepare your runes and spells".to_string()
+        } else {
+            "Champion select in progress".to_string()
+        }
+    });
+    let detail = format!(
+        "{} · {}",
+        cs.queue_type.replace('_', " "),
+        cs.sub_phase.replace('_', " ")
+    );
+
+    let my_ban_list: Vec<SharedString> = cs
+        .my_team_bans
+        .iter()
+        .filter(|b| !b.trim().is_empty())
+        .map(|b| SharedString::from(b.as_str()))
+        .collect();
+    let their_ban_list: Vec<SharedString> = cs
+        .their_team_bans
+        .iter()
+        .filter(|b| !b.trim().is_empty())
+        .map(|b| SharedString::from(b.as_str()))
+        .collect();
+
+    ChampSelectView {
+        title: SharedString::from(title),
+        detail: SharedString::from(detail),
+        timer: format_mm_ss(cs.time_left_sec as f64),
+        allies: ModelRc::new(VecModel::from(allies)),
+        map_allies: ModelRc::new(VecModel::from(map_allies)),
+        enemies: ModelRc::new(VecModel::from(enemies)),
+        enemies_to_come,
+        my_bans: SharedString::from(cs.my_team_bans.join(", ")),
+        their_bans: SharedString::from(cs.their_team_bans.join(", ")),
+        my_ban_list: ModelRc::new(VecModel::from(my_ban_list)),
+        their_ban_list: ModelRc::new(VecModel::from(their_ban_list)),
+        anonymized: cs.is_ranked_solo_anonymized,
+    }
+}
+
+fn build_live_view(lg: &LiveGameSummary, board: Option<&LiveBoard>) -> LiveView {
+    let default_board = LiveBoard::default();
+    let b = board.unwrap_or(&default_board);
+
+    let mut my_players = Vec::new();
+    let mut enemy_players = Vec::new();
+    let mut self_dead = false;
+    let mut self_respawn = 0.0;
+    let mut self_kda = format!("{} / {} / {}", lg.kills, lg.deaths, lg.assists);
+
+    for p in &lg.players {
+        let mine = (p.team == "ORDER") == b.my_team_is_order;
+        let lane = lane_index(&p.position);
+        let kda_str = format!("{} / {} / {}", p.kills, p.deaths, p.assists);
+        if p.is_self {
+            self_dead = p.is_dead;
+            self_respawn = p.respawn_timer_sec;
+            self_kda = kda_str.clone();
+        }
+        let row = PlayerLine {
+            lane,
+            champion: SharedString::from(p.champion_name.as_str()),
+            initials: champ_initials(&p.champion_name),
+            icon: Image::default(),
+            level: p.level as i32,
+            kda: SharedString::from(kda_str),
+            cs: p.creep_score as i32,
+            is_self: p.is_self,
+            dead: p.is_dead,
+            respawn: SharedString::from(format!("{}s", p.respawn_timer_sec.ceil() as i32)),
+        };
+        if mine {
+            my_players.push(row);
+        } else {
+            enemy_players.push(row);
+        }
+    }
+
+    let towers: Vec<TowerDot> = b
+        .towers
+        .iter()
+        .map(|t| {
+            let (x, y) = tower_coordinates(t.order_side, t.lane, t.tier);
+            TowerDot {
+                x,
+                y,
+                mine: t.order_side == b.my_team_is_order,
+                standing: t.standing,
+            }
+        })
+        .collect();
+
+    let mut my_objectives = Vec::new();
+    let mut enemy_objectives = Vec::new();
+    for obj in &b.objectives {
+        let mine = obj.by_order == b.my_team_is_order;
+        let chip = ObjectiveChip {
+            weight: obj.kind.weight() as i32,
+            label: SharedString::from(obj.label.as_str()),
+            mine,
+        };
+        if mine {
+            my_objectives.push(chip);
+        } else {
+            enemy_objectives.push(chip);
+        }
+    }
+
+    let feed: Vec<FeedLine> = b
+        .feed
+        .iter()
+        .take(6)
+        .map(|f| FeedLine {
+            time: format_mm_ss(f.time_sec),
+            text: SharedString::from(f.text.as_str()),
+            lane: match f.lane {
+                Some(Lane::Top) => 0,
+                Some(Lane::Jungle) => 1,
+                Some(Lane::Mid) => 2,
+                Some(Lane::Bot) => 3,
+                None => -1,
+            },
+            side: match f.by_my_team {
+                Some(true) => 1,
+                Some(false) => 0,
+                None => -1,
+            },
+        })
+        .collect();
+
+    let (title, detail) = if self_dead {
+        (
+            format!("Back in {}s", self_respawn.ceil() as i32),
+            format!("{} · You {}", lg.active_champion, self_kda),
+        )
+    } else {
+        (
+            format!("Playing {} · Level {}", lg.active_champion, lg.level),
+            format!(
+                "You {} · {} CS · {} gold",
+                self_kda, lg.creep_score, lg.current_gold
+            ),
+        )
+    };
+
+    LiveView {
+        title: SharedString::from(title),
+        detail: SharedString::from(detail),
+        dead: self_dead,
+        my_score: b.my_kills() as i32,
+        enemy_score: b.enemy_kills() as i32,
+        clock: format_mm_ss(lg.game_time_sec),
+        self_kda: SharedString::from(self_kda),
+        my_players: ModelRc::new(VecModel::from(my_players)),
+        enemy_players: ModelRc::new(VecModel::from(enemy_players)),
+        towers: ModelRc::new(VecModel::from(towers)),
+        my_objectives: ModelRc::new(VecModel::from(my_objectives)),
+        enemy_objectives: ModelRc::new(VecModel::from(enemy_objectives)),
+        feed: ModelRc::new(VecModel::from(feed)),
+    }
+}
+
+fn build_end_view(eog: &EndOfGameSummary) -> EndView {
+    let victory = eog.result.eq_ignore_ascii_case("victory");
+    let stats = vec![
+        StatLine {
+            label: SharedString::from("Champion"),
+            value: SharedString::from(eog.champion_name.as_str()),
+        },
+        StatLine {
+            label: SharedString::from("Match duration"),
+            value: format_mm_ss(eog.game_length_sec as f64),
+        },
+        StatLine {
+            label: SharedString::from("Gold earned"),
+            value: SharedString::from(format!("{}", eog.total_gold)),
+        },
+        StatLine {
+            label: SharedString::from("Damage to champions"),
+            value: SharedString::from(format!("{}", eog.damage_to_champions)),
+        },
+    ];
+    EndView {
+        title: SharedString::from(if victory { "Victory" } else { "Defeat" }),
+        detail: SharedString::from(format!(
+            "{} · {}",
+            eog.champion_name,
+            format_mm_ss(eog.game_length_sec as f64)
+        )),
+        kda: SharedString::from(format!("{} / {} / {}", eog.kills, eog.deaths, eog.assists)),
+        victory,
+        stats: ModelRc::new(VecModel::from(stats)),
+    }
+}
+
+fn apply_summary_to_windows(main_win: &MainWindow, mini_win: &MiniWidget, snap: &SummarySnapshot) {
+    let phase_str = snap
+        .phase
+        .as_ref()
+        .map(|p| p.phase.as_str())
+        .unwrap_or("None");
+
+    let source_info = |id: SourceId| -> (bool, SharedString) {
+        snap.sources
+            .iter()
+            .find(|s| s.id == id)
+            .map(|s| {
+                let live = matches!(s.status, SourceStatus::Live | SourceStatus::Discovered);
+                let port = s
+                    .port
+                    .map(|p| SharedString::from(format!(":{p}")))
+                    .unwrap_or_default();
+                (live, port)
+            })
+            .unwrap_or((false, SharedString::default()))
+    };
+
+    let (lcu_live, lcu_port) = source_info(SourceId::LeagueClient);
+    let (rc_live, rc_port) = source_info(SourceId::RiotClient);
+    let (game_live, game_port) = source_info(SourceId::LiveGame);
+    main_win.set_lcu_live(lcu_live);
+    main_win.set_lcu_port(lcu_port);
+    main_win.set_rc_live(rc_live);
+    main_win.set_rc_port(rc_port);
+    main_win.set_game_live(game_live);
+    main_win.set_game_port(game_port);
+
+    // Determine active view index:
+    // 0 League closed, 1 client idle, 2 lobby, 3 queue, 4 match found, 5 champ select, 6 in game, 7 results
+    let view = match phase_str {
+        "Lobby" => 2,
+        "Matchmaking" => 3,
+        "ReadyCheck" => 4,
+        "ChampSelect" => 5,
+        "InProgress" => 6,
+        "EndOfGame" | "PreEndOfGame" => 7,
+        _ => {
+            if lcu_live || snap.summoner.is_some() {
+                1
+            } else {
+                0
+            }
+        }
+    };
+    main_win.set_view(view);
+
+    // Queue label in top bar
+    let queue_label = snap
+        .lobby
+        .as_ref()
+        .map(|l| l.queue_name.clone())
+        .or_else(|| {
+            snap.champ_select
+                .as_ref()
+                .map(|c| c.queue_type.replace('_', " "))
+        })
+        .unwrap_or_default();
+    main_win.set_queue_label(SharedString::from(queue_label));
+
+    // Populate Lobby / Queue / Idle wait view
+    if view <= 4 {
+        let summoner_label = snap
+            .summoner
+            .as_ref()
+            .map(|s| format!("{}#{}", s.display_name, s.tag_line))
+            .unwrap_or_else(|| "Not signed in".to_string());
+        let rank_label = snap
+            .summoner
+            .as_ref()
+            .and_then(|s| {
+                s.rank_tier.as_ref().map(|t| {
+                    format!(
+                        "{} {} · {} LP",
+                        t,
+                        s.rank_division.as_deref().unwrap_or(""),
+                        s.rank_lp.unwrap_or(0)
+                    )
+                })
+            })
+            .unwrap_or_else(|| "Unranked".to_string());
+
+        let (title, detail, specimen) = match view {
+            0 => (
+                "Waiting for League of Legends".to_string(),
+                "Launch the Riot Client or League of Legends — Hypatia connects automatically.".to_string(),
+                SharedString::default(),
+            ),
+            1 => (
+                format!("Connected as {summoner_label}"),
+                "Open a lobby or start a queue to see your team and line map.".to_string(),
+                SharedString::default(),
+            ),
+            2 => {
+                let qn = snap
+                    .lobby
+                    .as_ref()
+                    .map(|l| l.queue_name.as_str())
+                    .unwrap_or("Lobby");
+                (
+                    format!("In lobby · {qn}"),
+                    "Choose your primary and secondary lanes or scan Mobile Remote to start queue from your phone.".to_string(),
+                    SharedString::default(),
+                )
+            }
+            3 => {
+                let (elapsed, est) = snap
+                    .matchmaking
+                    .as_ref()
+                    .map(|m| (m.time_in_queue_sec, m.estimated_queue_time_sec))
+                    .unwrap_or((0.0, 60.0));
+                (
+                    "Searching for a match".to_string(),
+                    format!("Estimated wait {}", format_mm_ss(est)),
+                    format_mm_ss(elapsed),
+                )
+            }
+            _ => {
+                let resp = snap
+                    .matchmaking
+                    .as_ref()
+                    .and_then(|m| m.player_response.as_deref())
+                    .unwrap_or("None");
+                (
+                    if resp == "Accepted" {
+                        "Match accepted — waiting for other players".to_string()
+                    } else {
+                        "Match found — accept now!".to_string()
+                    },
+                    "You can accept directly from your phone with Mobile Remote.".to_string(),
+                    SharedString::from("READY"),
+                )
+            }
+        };
+
+        let mut notes = vec![
+            StatLine {
+                label: SharedString::from("Summoner"),
+                value: SharedString::from(summoner_label),
+            },
+            StatLine {
+                label: SharedString::from("Ranked standing"),
+                value: SharedString::from(rank_label),
+            },
+        ];
+        if let Some(ref s) = snap.summoner {
+            if s.summoner_level > 0 {
+                notes.push(StatLine {
+                    label: SharedString::from("Summoner level"),
+                    value: SharedString::from(format!("Level {}", s.summoner_level)),
+                });
+            }
+        }
+
+        main_win.set_wait(WaitView {
+            title: SharedString::from(title),
+            detail: SharedString::from(detail),
+            specimen,
+            notes: ModelRc::new(VecModel::from(notes)),
+        });
+
+        let self_puuid = snap
+            .summoner
+            .as_ref()
+            .map(|s| s.puuid.as_str())
+            .unwrap_or("");
+        let party: Vec<PartyRow> = snap
+            .lobby
+            .as_ref()
+            .map(|l| {
+                l.members
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, m)| PartyRow {
+                        name: SharedString::from(m.summoner_name.as_str()),
+                        first_lane: lane_index(m.first_position.as_deref().unwrap_or("")),
+                        second_lane: lane_index(m.second_position.as_deref().unwrap_or("")),
+                        is_leader: m.is_leader,
+                        is_self: m
+                            .puuid
+                            .as_deref()
+                            .map(|p| !self_puuid.is_empty() && p == self_puuid)
+                            .unwrap_or(idx == 0),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        main_win.set_party(ModelRc::new(VecModel::from(party)));
+    }
+
+    if let Some(ref cs) = snap.champ_select {
+        main_win.set_champ(build_champ_select_view(cs));
+    }
+
+    if let Some(ref lg) = snap.live_game {
+        let lv = build_live_view(lg, snap.board.as_ref());
+        main_win.set_live(lv.clone());
+        mini_win.set_in_game(true);
+        mini_win.set_live(lv);
+    } else {
+        mini_win.set_in_game(false);
+    }
+
+    if let Some(ref eog) = snap.end_of_game {
+        main_win.set_end(build_end_view(eog));
+    }
+}
+
+const MAX_DISPLAYED_ENDPOINTS: usize = 150;
+
+#[derive(Default, Clone)]
+struct TelemetryUiState {
+    selected_event_id: Option<u64>,
+    secrets_revealed: bool,
+    call_status: String,
+    call_response: String,
+    call_version: u64,
+    endpoint_filter: String,
+    cached_events: Vec<TelemetryEventItem>,
+    last_events_sig: Option<(u64, usize, i32, i32)>,
+    last_inspector_sig: Option<(u64, i32, bool)>,
+    cached_inspector: (String, String, bool, String),
+    cached_endpoints: Vec<TelemetryEndpointItem>,
+    cached_endpoints_total: i32,
+    cached_endpoints_summary: String,
+    last_catalog_sig: Option<(usize, String, u64)>,
+    last_render_sig: Option<u64>,
+}
+
+impl TelemetryUiState {
+    fn invalidate_telemetry_cache(&mut self) {
+        self.last_events_sig = None;
+        self.last_inspector_sig = None;
+        self.last_render_sig = None;
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
+fn format_ts_hms(ts_ms: i64) -> String {
+    let total_secs = (ts_ms.max(0) / 1000) % 86_400;
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    format!("{:02}:{:02}:{:02}", h, m, s)
+}
+
+fn source_short_label(src: SourceId) -> (&'static str, i32) {
+    match src {
+        SourceId::RiotClient => ("RC", 0),
+        SourceId::LeagueClient => ("LCU", 1),
+        SourceId::LiveGame => ("GAME", 2),
+        SourceId::System => ("SYS", 3),
+    }
+}
+
+fn apply_telemetry_to_window(
+    main_win: &MainWindow,
+    app_state: &AppState,
+    ui_state: &mut TelemetryUiState,
+) {
+    if !main_win.get_telemetry_enabled() {
+        return;
+    }
+
+    let snap = app_state.get_snapshot();
+    let (rate, total_len) = {
+        let guard = app_state.store.read().unwrap();
+        (guard.current_rate(), guard.len())
+    };
+    let latest_id = snap.recent_events.last().map(|e| e.id).unwrap_or(0);
+    let src_filter = main_win.get_telemetry_source_filter();
+    let kind_filter = main_win.get_telemetry_kind_filter();
+    let paused = main_win.get_telemetry_paused();
+    let inspector_mode = main_win.get_inspector_mode();
+
+    let catalog_len = app_state.catalog.read().unwrap().get_all().len();
+    let phase_label = snap
+        .phase
+        .as_ref()
+        .map(|p| p.phase.as_str())
+        .unwrap_or("None");
+
+    // Fast signature check so idle 250ms ticks do zero allocations or Slint model rebuilds
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    ((rate * 10.0).round() as u64).hash(&mut hasher);
+    total_len.hash(&mut hasher);
+    latest_id.hash(&mut hasher);
+    phase_label.hash(&mut hasher);
+    src_filter.hash(&mut hasher);
+    kind_filter.hash(&mut hasher);
+    paused.hash(&mut hasher);
+    ui_state.selected_event_id.hash(&mut hasher);
+    inspector_mode.hash(&mut hasher);
+    ui_state.secrets_revealed.hash(&mut hasher);
+    catalog_len.hash(&mut hasher);
+    ui_state.endpoint_filter.hash(&mut hasher);
+    ui_state.call_version.hash(&mut hasher);
+    for s in &snap.sources {
+        format!("{:?}", s.status).hash(&mut hasher);
+        s.port.hash(&mut hasher);
+        s.pid.hash(&mut hasher);
+        s.events_total.hash(&mut hasher);
+    }
+    snap.system.processes.len().hash(&mut hasher);
+    snap.system.sockets.len().hash(&mut hasher);
+    snap.system.connections.len().hash(&mut hasher);
+    if let Some(p0) = snap.system.processes.first() {
+        (p0.cpu.round() as u64).hash(&mut hasher);
+    }
+    let render_sig = hasher.finish();
+    if ui_state.last_render_sig == Some(render_sig) {
+        return;
+    }
+    ui_state.last_render_sig = Some(render_sig);
+
+    let sources: Vec<TelemetrySourceItem> = snap
+        .sources
+        .iter()
+        .map(|s| {
+            let name = match s.id {
+                SourceId::RiotClient => "Riot Client",
+                SourceId::LeagueClient => "League Client (LCU)",
+                SourceId::LiveGame => "Live Game :2999",
+                SourceId::System => "System Monitor",
+            };
+            let live = matches!(s.status, SourceStatus::Live | SourceStatus::Discovered);
+            let status_str = match s.status {
+                SourceStatus::Live => "LIVE",
+                SourceStatus::Discovered => "READY",
+                SourceStatus::Connecting => "CONNECTING",
+                SourceStatus::Offline => "OFFLINE",
+                SourceStatus::Degraded { .. } => "DEGRADED",
+            };
+            let port_str = match s.port {
+                Some(p) => format!(":{}", p),
+                None => "local".to_string(),
+            };
+            let pid_str = match s.pid {
+                Some(pid) => format!("PID {}", pid),
+                None => String::new(),
+            };
+            let stats_str = if s.id == SourceId::System {
+                format!(
+                    "{} procs · {} ports",
+                    snap.system.processes.len(),
+                    snap.system.sockets.len()
+                )
+            } else {
+                format!("{} evts · {}", s.events_total, format_bytes(s.bytes_total))
+            };
+            TelemetrySourceItem {
+                id: SharedString::from(s.id.to_string()),
+                name: SharedString::from(name),
+                status: SharedString::from(status_str),
+                live,
+                port: SharedString::from(port_str),
+                pid: SharedString::from(pid_str),
+                stats: SharedString::from(stats_str),
+            }
+        })
+        .collect();
+
+    let events_sig = (latest_id, total_len, src_filter, kind_filter);
+    if (!paused && ui_state.last_events_sig != Some(events_sig)) || ui_state.cached_events.is_empty()
+    {
+        let filtered: Vec<TelemetryEventItem> = snap
+            .recent_events
+            .iter()
+            .rev()
+            .filter(|ev| match src_filter {
+                1 => ev.source == SourceId::LeagueClient,
+                2 => ev.source == SourceId::RiotClient,
+                3 => ev.source == SourceId::LiveGame,
+                _ => true,
+            })
+            .filter(|ev| match kind_filter {
+                1 => ev.kind == EventKind::Update,
+                2 => ev.kind == EventKind::Create,
+                3 => ev.kind == EventKind::Delete,
+                4 => matches!(ev.kind, EventKind::Poll | EventKind::Call),
+                _ => true,
+            })
+            .take(120)
+            .map(|ev| {
+                let (short_src, src_idx) = source_short_label(ev.source);
+                let kind_str = match ev.kind {
+                    EventKind::Create => "CREATE",
+                    EventKind::Update => "UPDATE",
+                    EventKind::Delete => "DELETE",
+                    EventKind::Poll => "POLL",
+                    EventKind::Call => "CALL",
+                };
+                TelemetryEventItem {
+                    id: ev.id as i32,
+                    time: SharedString::from(format_ts_hms(ev.ts)),
+                    source: SharedString::from(short_src),
+                    source_idx: src_idx,
+                    kind: SharedString::from(kind_str),
+                    uri: SharedString::from(ev.uri.as_str()),
+                    size: SharedString::from(format_bytes(ev.size as u64)),
+                    preview: SharedString::from(ev.preview.as_str()),
+                    has_secrets: ev.has_secrets,
+                }
+            })
+            .collect();
+
+        if ui_state.selected_event_id.is_none() {
+            if let Some(first) = filtered.first() {
+                ui_state.selected_event_id = Some(first.id as u64);
+            }
+        }
+        ui_state.cached_events = filtered;
+        ui_state.last_events_sig = Some(events_sig);
+    }
+
+    let desired_ins_sig = ui_state
+        .selected_event_id
+        .map(|id| (id, inspector_mode, ui_state.secrets_revealed));
+    if ui_state.last_inspector_sig != desired_ins_sig
+        || (ui_state.selected_event_id.is_some() && ui_state.cached_inspector.0.is_empty())
+    {
+        ui_state.cached_inspector = if let Some(sel_id) = ui_state.selected_event_id {
+            let stored_opt = app_state.store.read().unwrap().get_event(sel_id);
+            if let Some(stored) = stored_opt {
+                let (short_src, _) = source_short_label(stored.meta.source);
+                let title = format!("#{} · {} · {}", stored.meta.id, short_src, stored.meta.uri);
+                let meta = format!(
+                    "Kind: {:?} · {} · Time: {}",
+                    stored.meta.kind,
+                    format_bytes(stored.meta.size as u64),
+                    format_ts_hms(stored.meta.ts)
+                );
+                let curr_val = if ui_state.secrets_revealed {
+                    app_state.reveal_secrets_in_value(&stored.payload)
+                } else {
+                    stored.payload.clone()
+                };
+                let prev_val = stored.previous_payload.as_ref().map(|p| {
+                    if ui_state.secrets_revealed {
+                        app_state.reveal_secrets_in_value(p)
+                    } else {
+                        p.clone()
+                    }
+                });
+                let body = match inspector_mode {
+                    1 => compute_json_diff(prev_val.as_ref(), &curr_val),
+                    2 => match prev_val {
+                        Some(ref pv) => {
+                            serde_json::to_string_pretty(pv).unwrap_or_else(|_| "{}".to_string())
+                        }
+                        None => "(No previous state recorded for this URI)".to_string(),
+                    },
+                    _ => serde_json::to_string_pretty(&curr_val)
+                        .unwrap_or_else(|_| "{}".to_string()),
+                };
+                (title, meta, stored.meta.has_secrets, body)
+            } else {
+                (
+                    format!("Event #{} evicted from ring buffer", sel_id),
+                    String::new(),
+                    false,
+                    String::new(),
+                )
+            }
+        } else {
+            (String::new(), String::new(), false, String::new())
+        };
+        ui_state.last_inspector_sig = desired_ins_sig;
+    }
+    let (ref inspector_title, ref inspector_meta, inspector_has_secrets, ref inspector_payload) =
+        ui_state.cached_inspector;
+
+    let catalog_sig = (
+        catalog_len,
+        ui_state.endpoint_filter.clone(),
+        ui_state.call_version,
+    );
+    if ui_state.last_catalog_sig.as_ref() != Some(&catalog_sig) {
+        let filter_lc = ui_state.endpoint_filter.trim().to_ascii_lowercase();
+        let guard = app_state.catalog.read().unwrap();
+        let all = guard.get_all();
+        let mut matched: Vec<_> = all
+            .iter()
+            .filter(|ep| {
+                if filter_lc.is_empty() {
+                    return true;
+                }
+                let (short_src, _) = source_short_label(ep.source);
+                ep.path_template.to_ascii_lowercase().contains(&filter_lc)
+                    || ep.namespace.to_ascii_lowercase().contains(&filter_lc)
+                    || short_src.to_ascii_lowercase().contains(&filter_lc)
+                    || ep
+                        .description
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_ascii_lowercase()
+                        .contains(&filter_lc)
+            })
+            .collect();
+        // Prioritize endpoints with observed traffic, then alphabetical path
+        matched.sort_by(|a, b| {
+            (b.event_count > 0)
+                .cmp(&(a.event_count > 0))
+                .then_with(|| b.event_count.cmp(&a.event_count))
+                .then_with(|| a.path_template.cmp(&b.path_template))
+        });
+
+        let matching_total = matched.len();
+        let items: Vec<TelemetryEndpointItem> = matched
+            .into_iter()
+            .take(MAX_DISPLAYED_ENDPOINTS)
+            .map(|ep| {
+                let (short_src, _) = source_short_label(ep.source);
+                let call_src_idx = match ep.source {
+                    SourceId::LeagueClient => 0,
+                    SourceId::RiotClient => 1,
+                    SourceId::LiveGame => 2,
+                    SourceId::System => 0,
+                };
+                let origin_str = format!("{:?}", ep.origin);
+                let stats_str = format!(
+                    "{} hits · {}",
+                    ep.event_count,
+                    format_bytes(ep.bytes_total)
+                );
+                TelemetryEndpointItem {
+                    source: SharedString::from(short_src),
+                    source_idx: call_src_idx,
+                    method: SharedString::from(ep.method.as_str()),
+                    path: SharedString::from(ep.path_template.as_str()),
+                    namespace: SharedString::from(ep.namespace.as_str()),
+                    origin: SharedString::from(origin_str),
+                    stats: SharedString::from(stats_str),
+                    description: SharedString::from(ep.description.as_deref().unwrap_or("")),
+                }
+            })
+            .collect();
+
+        ui_state.cached_endpoints_summary = if matching_total > items.len() {
+            format!("Showing {} of {} ({} total)", items.len(), matching_total, all.len())
+        } else {
+            format!("{} of {} endpoints", matching_total, all.len())
+        };
+        ui_state.cached_endpoints_total = all.len() as i32;
+        ui_state.cached_endpoints = items;
+        ui_state.last_catalog_sig = Some(catalog_sig);
+    }
+
+    let processes: Vec<TelemetryProcessItem> = snap
+        .system
+        .processes
+        .iter()
+        .map(|p| TelemetryProcessItem {
+            pid: SharedString::from(p.pid.to_string()),
+            name: SharedString::from(p.name.as_str()),
+            source: SharedString::from(
+                p.source
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "riot".to_string()),
+            ),
+            cpu: SharedString::from(format!("{:.1}% CPU", p.cpu)),
+            mem: SharedString::from(format_bytes(p.mem_bytes)),
+            exe: SharedString::from(p.exe.as_deref().unwrap_or("")),
+        })
+        .collect();
+
+    let sockets: Vec<TelemetrySocketItem> = snap
+        .system
+        .sockets
+        .iter()
+        .map(|s| TelemetrySocketItem {
+            proto: SharedString::from(s.proto.as_str()),
+            address: SharedString::from(format!("{}:{}", s.local, s.port)),
+            pid: SharedString::from(s.pid.to_string()),
+            state: SharedString::from("LISTEN"),
+        })
+        .collect();
+
+    let connections: Vec<TelemetrySocketItem> = snap
+        .system
+        .connections
+        .iter()
+        .map(|c| TelemetrySocketItem {
+            proto: SharedString::from("TCP"),
+            address: SharedString::from(format!("{} -> {}", c.local, c.remote)),
+            pid: SharedString::from(c.pid.to_string()),
+            state: SharedString::from(c.state.as_str()),
+        })
+        .collect();
+
+    main_win.set_telemetry(TelemetryView {
+        rate: SharedString::from(format!("{:.1} evt/s", rate)),
+        total_events: SharedString::from(format!("{} buffered", total_len)),
+        phase: SharedString::from(phase_label),
+        sources: ModelRc::new(VecModel::from(sources)),
+        events: ModelRc::new(VecModel::from(ui_state.cached_events.clone())),
+        selected_event_id: ui_state.selected_event_id.unwrap_or(0) as i32,
+        inspector_title: SharedString::from(inspector_title.as_str()),
+        inspector_meta: SharedString::from(inspector_meta.as_str()),
+        inspector_has_secrets,
+        secrets_revealed: ui_state.secrets_revealed,
+        inspector_payload: SharedString::from(inspector_payload.as_str()),
+        endpoints: ModelRc::new(VecModel::from(ui_state.cached_endpoints.clone())),
+        endpoints_total: ui_state.cached_endpoints_total,
+        endpoints_summary: SharedString::from(ui_state.cached_endpoints_summary.as_str()),
+        call_status: SharedString::from(ui_state.call_status.as_str()),
+        call_response: SharedString::from(ui_state.call_response.as_str()),
+        processes: ModelRc::new(VecModel::from(processes)),
+        sockets: ModelRc::new(VecModel::from(sockets)),
+        connections: ModelRc::new(VecModel::from(connections)),
+    });
+}
+
+fn main() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .try_init();
+
+    let cli = Cli::parse();
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to start Tokio runtime");
+    let _guard = rt.enter();
+
+    let app_state = AppState::start(cli.demo, cli.demo_rate);
+
+    if let Some(ref pinned) = cli.phase {
+        let normalized = match pinned.to_ascii_lowercase().as_str() {
+            "lobby" => "Lobby",
+            "queue" | "matchmaking" => "Matchmaking",
+            "ready" | "readycheck" => "ReadyCheck",
+            "champ" | "champ-select" | "champselect" => "ChampSelect",
+            "live" | "inprogress" | "game" => "InProgress",
+            "end" | "eog" | "endofgame" => "EndOfGame",
+            _ => "ChampSelect",
+        };
+        let mut demo = app_state.demo_remote.write().unwrap();
+        let _ = demo.apply_command(
+            &app_state,
+            &hypatia_shared::RemoteCommand::DemoSetPhase {
+                phase: normalized.to_string(),
+            },
+        );
+    }
+
+    let main_win = MainWindow::new().expect("Failed to create MainWindow");
+    let mini_win = MiniWidget::new().expect("Failed to create MiniWidget");
+
+    main_win.set_demo(cli.demo);
+    main_win.set_telemetry_enabled(cli.telemetry);
+    if cli.light {
+        Theme::get(&main_win).set_dark(false);
+        Theme::get(&mini_win).set_dark(false);
+    }
+
+    let widget_open = Rc::new(RefCell::new(false));
+    if cli.widget {
+        *widget_open.borrow_mut() = true;
+        main_win.set_widget_open(true);
+        let _ = mini_win.show();
+    }
+
+    let telemetry_ui_state = Rc::new(RefCell::new(TelemetryUiState::default()));
+
+    // Theme callback
+    {
+        let main_weak = main_win.as_weak();
+        let mini_weak = mini_win.as_weak();
+        main_win.on_set_dark(move |dark| {
+            if let Some(m) = main_weak.upgrade() {
+                Theme::get(&m).set_dark(dark);
+            }
+            if let Some(w) = mini_weak.upgrade() {
+                Theme::get(&w).set_dark(dark);
+            }
+        });
+    }
+
+    // Telemetry toggle callback
+    {
+        let main_weak = main_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        main_win.on_toggle_telemetry(move || {
+            if let Some(m) = main_weak.upgrade() {
+                let next = !m.get_telemetry_enabled();
+                m.set_telemetry_enabled(next);
+                if next {
+                    let mut st = ui_state.borrow_mut();
+                    st.last_render_sig = None;
+                    apply_telemetry_to_window(&m, &app_state, &mut st);
+                }
+            }
+        });
+    }
+
+    // Demo mode toggle callback
+    {
+        let main_weak = main_win.as_weak();
+        let mini_weak = mini_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        let demo_rate = cli.demo_rate;
+        main_win.on_toggle_demo(move || {
+            if let Some(m) = main_weak.upgrade() {
+                let next = !m.get_demo();
+                app_state.set_demo_active(next, demo_rate);
+                m.set_demo(next);
+                if let Some(w) = mini_weak.upgrade() {
+                    let snap = app_state.get_summary();
+                    apply_summary_to_windows(&m, &w, &snap);
+                }
+                let mut st = ui_state.borrow_mut();
+                st.invalidate_telemetry_cache();
+                apply_telemetry_to_window(&m, &app_state, &mut st);
+            }
+        });
+    }
+
+    // Demo phase selector callback
+    {
+        let main_weak = main_win.as_weak();
+        let mini_weak = mini_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        main_win.on_select_demo_phase(move |phase| {
+            {
+                let mut demo = app_state.demo_remote.write().unwrap();
+                let _ = demo.apply_command(
+                    &app_state,
+                    &hypatia_shared::RemoteCommand::DemoSetPhase {
+                        phase: phase.to_string(),
+                    },
+                );
+            }
+            if let (Some(m), Some(w)) = (main_weak.upgrade(), mini_weak.upgrade()) {
+                let snap = app_state.get_summary();
+                apply_summary_to_windows(&m, &w, &snap);
+                let mut st = ui_state.borrow_mut();
+                st.invalidate_telemetry_cache();
+                apply_telemetry_to_window(&m, &app_state, &mut st);
+            }
+        });
+    }
+
+    // Select telemetry event callback
+    {
+        let main_weak = main_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        main_win.on_select_telemetry_event(move |id| {
+            if id > 0 {
+                ui_state.borrow_mut().selected_event_id = Some(id as u64);
+            }
+            if let Some(m) = main_weak.upgrade() {
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
+            }
+        });
+    }
+
+    // Toggle secret reveal callback
+    {
+        let main_weak = main_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        main_win.on_toggle_reveal_secrets(move || {
+            {
+                let mut st = ui_state.borrow_mut();
+                st.secrets_revealed = !st.secrets_revealed;
+            }
+            if let Some(m) = main_weak.upgrade() {
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
+            }
+        });
+    }
+
+    // Clear telemetry events callback
+    {
+        let main_weak = main_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        main_win.on_clear_telemetry_events(move || {
+            app_state.clear_events();
+            {
+                let mut st = ui_state.borrow_mut();
+                st.selected_event_id = None;
+                st.cached_events.clear();
+                st.cached_inspector = (String::new(), String::new(), false, String::new());
+                st.invalidate_telemetry_cache();
+            }
+            if let Some(m) = main_weak.upgrade() {
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
+            }
+        });
+    }
+
+    // Endpoint catalog search filter callback
+    {
+        let main_weak = main_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        main_win.on_set_endpoint_filter(move |filter| {
+            {
+                let mut st = ui_state.borrow_mut();
+                st.endpoint_filter = filter.to_string();
+                st.last_render_sig = None;
+            }
+            if let Some(m) = main_weak.upgrade() {
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
+            }
+        });
+    }
+
+    // Execute GET call callback
+    {
+        let main_weak = main_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        let rt_handle = rt.handle().clone();
+        main_win.on_execute_get_call(move |src_idx, path| {
+            let source_id = match src_idx {
+                1 => SourceId::RiotClient,
+                2 => SourceId::LiveGame,
+                _ => SourceId::LeagueClient,
+            };
+            let path_str = path.to_string();
+            let res = rt_handle.block_on(app_state.call_endpoint(source_id, &path_str));
+            {
+                let mut st = ui_state.borrow_mut();
+                st.call_version += 1;
+                st.invalidate_telemetry_cache();
+                match res {
+                    Ok((status, body, ev_id)) => {
+                        let pretty = serde_json::to_string_pretty(&body)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        st.call_status = format!(
+                            "HTTP {} · {} · Event #{}",
+                            status,
+                            format_bytes(pretty.len() as u64),
+                            ev_id
+                        );
+                        st.call_response = pretty;
+                        st.selected_event_id = Some(ev_id);
+                    }
+                    Err(err) => {
+                        st.call_status = "Request Failed".to_string();
+                        st.call_response = err;
+                    }
+                }
+            }
+            if let Some(m) = main_weak.upgrade() {
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
+            }
+        });
+    }
+
+    // Mini widget toggle callback
+    {
+        let main_weak = main_win.as_weak();
+        let mini_weak = mini_win.as_weak();
+        let open_flag = widget_open.clone();
+        main_win.on_toggle_widget(move || {
+            let mut open = open_flag.borrow_mut();
+            *open = !*open;
+            if let Some(w) = mini_weak.upgrade() {
+                if *open {
+                    let _ = w.show();
+                } else {
+                    let _ = w.hide();
+                }
+            }
+            if let Some(m) = main_weak.upgrade() {
+                m.set_widget_open(*open);
+            }
+        });
+    }
+
+    // Mobile Remote server state
+    let remote_handle: Arc<Mutex<Option<RemoteServerHandle>>> = Arc::new(Mutex::new(None));
+    let remote_starting = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let rt_handle = rt.handle().clone();
+
+    let start_or_toggle_remote = {
+        let remote_handle = remote_handle.clone();
+        let remote_starting = remote_starting.clone();
+        let app_state = app_state.clone();
+        let main_weak = main_win.as_weak();
+        let preferred_port = cli.remote_port;
+        let rt_handle = rt_handle.clone();
+        move |open_drawer: bool| {
+            let has_handle = remote_handle.lock().unwrap().is_some();
+            if has_handle {
+                if let Some(m) = main_weak.upgrade() {
+                    m.set_remote_panel_open(!m.get_remote_panel_open());
+                }
+                return;
+            }
+            if remote_starting.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
+            let remote_handle_bg = remote_handle.clone();
+            let remote_starting_bg = remote_starting.clone();
+            let app_state_bg = app_state.clone();
+            let main_weak_bg = main_weak.clone();
+            rt_handle.spawn(async move {
+                let res = start_remote_server(app_state_bg, preferred_port).await;
+                remote_starting_bg.store(false, std::sync::atomic::Ordering::SeqCst);
+                match res {
+                    Ok(handle) => {
+                        let qr_opt = handle.qr_visual().ok();
+                        if let Some(ref qr) = qr_opt {
+                            info!("Mobile Remote ready at {}", qr.url);
+                        }
+                        *remote_handle_bg.lock().unwrap() = Some(handle);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let (Some(m), Some(qr)) = (main_weak_bg.upgrade(), qr_opt) {
+                                m.set_remote_qr(qr_to_slint_image(&qr));
+                                m.set_remote_url(SharedString::from(qr.url));
+                                m.set_remote_enabled(true);
+                                m.set_remote_panel_open(open_drawer);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to start Mobile Remote: {}", e);
+                    }
+                }
+            });
+        }
+    };
+
+    if !cli.no_remote {
+        // Start remote server asynchronously so the desktop window appears immediately
+        start_or_toggle_remote(cli.remote);
+    }
+
+    {
+        let toggle_fn = start_or_toggle_remote.clone();
+        main_win.on_toggle_remote_panel(move || {
+            toggle_fn(true);
+        });
+    }
+
+    {
+        let remote_handle = remote_handle.clone();
+        let main_weak = main_win.as_weak();
+        main_win.on_rotate_remote_token(move || {
+            let guard = remote_handle.lock().unwrap();
+            if let Some(ref handle) = *guard {
+                if let Ok(qr) = handle.rotate_token() {
+                    if let Some(m) = main_weak.upgrade() {
+                        m.set_remote_qr(qr_to_slint_image(&qr));
+                        m.set_remote_url(SharedString::from(qr.url));
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let remote_handle = remote_handle.clone();
+        let main_weak = main_win.as_weak();
+        main_win.on_disable_remote(move || {
+            let mut guard = remote_handle.lock().unwrap();
+            if let Some(mut handle) = guard.take() {
+                handle.stop();
+            }
+            if let Some(m) = main_weak.upgrade() {
+                m.set_remote_enabled(false);
+                m.set_remote_panel_open(false);
+                m.set_remote_url(SharedString::default());
+            }
+        });
+    }
+
+    // Initial state render + show window immediately + periodic 250ms UI refresh timer
+    let initial_summary = app_state.get_summary();
+    apply_summary_to_windows(&main_win, &mini_win, &initial_summary);
+    apply_telemetry_to_window(&main_win, &app_state, &mut telemetry_ui_state.borrow_mut());
+    main_win.show().expect("Failed to show MainWindow");
+
+    let ui_timer = Timer::default();
+    {
+        let main_weak = main_win.as_weak();
+        let mini_weak = mini_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        let remote_handle_poll = remote_handle.clone();
+        ui_timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
+            if let (Some(m), Some(w)) = (main_weak.upgrade(), mini_weak.upgrade()) {
+                let snap = app_state.get_summary();
+                apply_summary_to_windows(&m, &w, &snap);
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
+                let clients = remote_handle_poll
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|h| h.connected_clients() as i32)
+                    .unwrap_or(0);
+                m.set_remote_clients(clients);
+            }
+        });
+    }
+
+    main_win.run().expect("Slint event loop exited with error");
+    rt.shutdown_background();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bot_and_support_map_labels_stay_separated() {
+        let (bx, by, b_pos) = map_coord_for_lane(3);
+        let (sx, sy, s_pos) = map_coord_for_lane(4);
+        assert_ne!(b_pos, s_pos, "Bot and Support labels must use opposite sides of track");
+        assert!((sx - bx).abs() >= 120.0, "Bot and Support nodes must have horizontal spacing");
+        assert!((by - sy).abs() < 1.0);
+    }
+
+    #[test]
+    fn tower_coordinates_fit_within_track_canvas() {
+        for order in [true, false] {
+            for lane in [Lane::Top, Lane::Mid, Lane::Bot] {
+                for tier in 1..=3 {
+                    let (x, y) = tower_coordinates(order, lane, tier);
+                    assert!((40.0..=360.0).contains(&x), "tower x out of canvas: {x}");
+                    assert!((40.0..=360.0).contains(&y), "tower y out of canvas: {y}");
+                }
+            }
+        }
+    }
+}

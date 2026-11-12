@@ -1,0 +1,129 @@
+use std::time::Duration;
+
+use anyhow::{bail, Context, Result};
+use reqwest::header::HeaderMap;
+use reqwest::StatusCode;
+use base64::prelude::*;
+
+/// Strict read-only HTTP client dedicated to communicating with local Riot APIs (127.0.0.1).
+///
+/// INVARIANT: This client ONLY exposes a `get` method. No POST, PUT, DELETE, PATCH or
+/// any other mutating HTTP methods are implemented or exposed.
+#[derive(Clone)]
+pub struct ReadOnlyRiotClient {
+    inner: reqwest::Client,
+}
+
+impl Default for ReadOnlyRiotClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReadOnlyRiotClient {
+    /// Creates a new `ReadOnlyRiotClient` configured with a 5-second timeout
+    /// and accepting self-signed certificates strictly for local 127.0.0.1 connections.
+    pub fn new() -> Self {
+        let inner = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("Failed to initialize reqwest client for ReadOnlyRiotClient");
+
+        Self { inner }
+    }
+
+    /// Performs a strict GET request to https://127.0.0.1:{port}{path_and_query}.
+    ///
+    /// Validations:
+    /// - `path_and_query` MUST start with `/`
+    /// - `path_and_query` MUST NOT contain `://`
+    /// - `path_and_query` MUST NOT contain `..`
+    ///
+    /// The target host is hardcoded to `127.0.0.1` by construction.
+    pub async fn get(
+        &self,
+        port: u16,
+        auth_token: Option<&str>,
+        path_and_query: &str,
+    ) -> Result<(StatusCode, HeaderMap, serde_json::Value)> {
+        // Validate path to prevent directory traversal, protocol smuggling or open redirect
+        if !path_and_query.starts_with('/') {
+            bail!("Path must start with '/': '{}'", path_and_query);
+        }
+        if path_and_query.contains("://") {
+            bail!("Path must not contain '://': '{}'", path_and_query);
+        }
+        if path_and_query.contains("..") {
+            bail!("Path must not contain '..': '{}'", path_and_query);
+        }
+
+        let url = format!("https://127.0.0.1:{}{}", port, path_and_query);
+
+        let mut req = self.inner.get(&url);
+
+        if let Some(token) = auth_token {
+            let auth_header = if token.starts_with("Basic ") || token.starts_with("Bearer ") {
+                token.to_string()
+            } else {
+                format!("Basic {}", BASE64_STANDARD.encode(format!("riot:{}", token)))
+            };
+            req = req.header("Authorization", auth_header);
+        }
+
+        let resp = req
+            .send()
+            .await
+            .with_context(|| format!("Failed to send GET request to {}", url))?;
+
+        let status = StatusCode::from_u16(resp.status().as_u16())
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let headers = resp.headers().clone();
+
+        let bytes = resp
+            .bytes()
+            .await
+            .with_context(|| format!("Failed to read response body from {}", url))?;
+
+        let body: serde_json::Value = if bytes.is_empty() {
+            serde_json::Value::Null
+        } else {
+            match serde_json::from_slice(&bytes) {
+                Ok(val) => val,
+                Err(_) => {
+                    // Fallback to string if not valid JSON
+                    let text = String::from_utf8_lossy(&bytes).to_string();
+                    serde_json::Value::String(text)
+                }
+            }
+        };
+
+        Ok((status, headers, body))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_path_validation_rejects_invalid_paths() {
+        let client = ReadOnlyRiotClient::new();
+
+        // Must start with '/'
+        assert!(client.get(1234, None, "swagger/v3").await.is_err());
+        assert!(client.get(1234, None, "").await.is_err());
+
+        // Must not contain '://'
+        assert!(client
+            .get(1234, None, "/http://evil.com/api")
+            .await
+            .is_err());
+
+        // Must not contain '..'
+        assert!(client
+            .get(1234, None, "/../../etc/passwd")
+            .await
+            .is_err());
+    }
+}

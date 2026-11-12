@@ -1,23 +1,25 @@
 # Hypatia
 
-> **High-fidelity local observatory and real-time event inspector for Riot Games client APIs.**
+> **Local League of Legends companion — Pit-Wall Chronometer desktop app, second-monitor mini widget, toggleable Telemetry Observatory, and opt-in Mobile Remote accessibility controller.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.2.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
-[![WebAssembly](https://img.shields.io/badge/frontend-Leptos%20WASM-purple.svg)](https://leptos.dev)
+[![Slint](https://img.shields.io/badge/UI-Slint%201.18-purple.svg)](https://slint.dev)
 
 ---
 
 ## Overview
 
-**Hypatia** is a self-contained local developer observatory written in **Rust** and **WebAssembly (Leptos 0.7)**. It automatically discovers, inspects, and streams real-time events from local Riot Games services on your machine:
+**Hypatia** is a self-contained native desktop companion written in **Rust** and **Slint**. It automatically discovers and follows your local Riot Games and League of Legends client services:
 
-- **Riot Client** & **League Client Ux (LCU)** (lockfile discovery, passive WAMP WebSocket, OpenAPI/help catalog)
-- **Live Client Data & Replay API** (active match polling on port `2999`)
-- **System Footprint** (running Riot processes, listening ports, established remote sockets)
-
-Distributed as a **single, dependency-free binary (< 10 MB)** with the web UI fully embedded.
+- **Main Window (`MainWindow`)**: Phase-aware Pit-Wall Chronometer view for Lobby, Queue, Ready Check, Champion Select (team line roster, lane diagram, enemy picks & bans), Live Game (team score, tower status map, objective ramp, event feed), and End of Game. Supports **Dark (Night)** and **Light (Day)** themes.
+- **Toggleable Telemetry Observatory (`Telemetry` button / `--telemetry`)**: Can be turned **ON or OFF** at any time from the top bar and displayed **Side-by-Side (alongside the companion view)** or **Full Screen**:
+  1. **Live Telemetry Stream**: Real-time WAMP (`OnJsonApiEvent`) and LiveClient (`:2999`) event stream with source/kind filters, pause/resume, **JSON Payload Inspector**, **Previous vs Current State Diff**, and **Secret Reveal**.
+  2. **API Endpoints & GET Tester**: Interactive OpenAPI / `/help` catalog for LCU, Riot Client, and Live Game (`:2999`) with an integrated read-only `GET` runner.
+  3. **System Footprint**: Active Riot processes (PID, CPU, RAM, executable path), listening local ports (`127.0.0.1`), and established network connections.
+- **Mini Widget (`MiniWidget`)**: Compact, always-on-top companion for a second monitor while playing.
+- **Mobile Remote Accessibility Companion (`Mobile remote` button / `--remote`)**: Opt-in LAN server paired via a 128-bit QR code token. Scan the QR code on your PC screen with your phone to control **Lobby role selection, Queue start/cancel, Match Found accept/decline, Champion ban & pick, Summoner Spells, Skins, Rune pages (1-tap recommended presets, saved pages, or 1-hand custom builder), and Role / Pick Order / Champion swaps** one-handed from your phone, with multi-layer **Notifications, Audio Chimes, Lock-Screen Media Controls, and Vibration**.
 
 ---
 
@@ -25,113 +27,74 @@ Distributed as a **single, dependency-free binary (< 10 MB)** with the web UI fu
 
 | Guarantee | Mechanism |
 |---|---|
-| **Read-Only by Design** | Strict GET-only HTTP proxy (`ReadOnlyRiotClient`) and passive WAMP subscriptions. Zero write operations (`POST`/`PUT`/`PATCH`/`DELETE`). |
-| **Ephemeral Secret Vault** | Auth tokens (`accessToken`, JWTs, lockfile passwords) are automatically masked as `{"$secret": { id, len, hint }}`. Plaintext values are stored in an in-memory LRU vault with explicit 30s timed reveals. |
-| **DNS Rebinding & CSRF Protection** | Binds strictly to `127.0.0.1`. Middleware validates `Host` and `Origin` on all HTTP/WebSocket requests, dropping external browser payloads (HTTP 403). |
-| **Zero Telemetry** | 100% offline and local. Remote socket endpoints are listed by IP:Port without DNS reverse lookups. No tracking, analytics, or external CDN calls. |
+| **Read-Only Desktop Core** | The desktop observatory uses `ReadOnlyRiotClient` (strictly `GET` requests and passive WAMP WebSocket subscriptions). |
+| **Allowlisted Mobile Remote (Opt-in)** | Disabled by default. When enabled, `LcuActionClient` only accepts variants of the closed `RemoteCommand` enum — no arbitrary paths or payloads, and zero background automation. Every action requires an explicit user tap. |
+| **128-bit QR Pairing & Host Guard** | Pairing uses a random 128-bit token (`/?token=...`) exchangeable for an `HttpOnly; SameSite=Strict` session cookie, with one-click token rotation/revocation and `Host`/`Origin` validation. |
+| **Ephemeral Secret Vault** | Auth tokens (`accessToken`, JWTs, lockfile passwords) are automatically masked as `{"$secret": { id, len, hint }}` in an in-memory LRU vault. |
+| **Zero Telemetry** | 100% offline and local. Zero external CDN calls, zero analytics. |
 
 ---
 
 ## ⚡ Quick Start
 
-### 1. Download Prebuilt Binary
-
-Grab the archive for your operating system from the [Latest Releases](https://github.com/RubenVP2/hypatia/releases/latest):
-
-- **Windows x86_64**: `hypatia-windows-x86_64.zip`
-- **Linux x86_64**: `hypatia-linux-x86_64.tar.gz`
-- **macOS Apple Silicon**: `hypatia-macos-arm64.tar.gz`
-- **macOS Intel**: `hypatia-macos-x86_64.tar.gz`
-
-### 2. Run
-
 ```bash
-# Launch Hypatia (automatically opens http://127.0.0.1:7878 in default browser)
-./hypatia-server
+# Run Hypatia with a live League of Legends client
+cargo run -p hypatia
 
-# Windows
-.\hypatia-server.exe
+# Run with the Telemetry Observatory open alongside the companion
+cargo run -p hypatia -- --telemetry
+
+# Run in Demo Mode with Telemetry and Mobile Remote QR code open on startup
+cargo run -p hypatia -- --demo --telemetry --remote
 ```
 
 ---
 
-## 🕹️ Demo Mode
+## 📱 Mobile Remote (Accessibility Companion)
 
-Test all features without League of Legends or Riot Client running:
-
-```bash
-./hypatia-server --demo
-```
-
-Simulates the complete match lifecycle:
-$$\text{Lobby} \longrightarrow \text{Matchmaking} \longrightarrow \text{ReadyCheck} \longrightarrow \text{ChampSelect} \longrightarrow \text{InProgress} \longrightarrow \text{EndOfGame}$$
-
-Tune event generation throughput up to 300 events/sec:
-```bash
-./hypatia-server --demo --demo-rate 100
-```
-
----
-
-## ⌨️ Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `1` | **Live Stream** (esport broadcast layout, proportional phase timeline, virtualized event feed) |
-| `2` | **Endpoints** (interactive Riot API catalog, schema viewer, in-browser GET tester) |
-| `3` | **System** (active Riot processes, listening ports, remote connections) |
-| `4` | **About** (security spec, lockfile mechanics, replay guide) |
-| `Space` | **Pause / Resume** real-time event ingestion (with missed counter badge) |
-| `Ctrl + K` / `Cmd + K` | **Command Palette** (quick jump to any endpoint, filter, or view) |
-| `/` | Focus search bar in the source rail |
-| `Esc` | Clear selection / close command palette |
+1. Click **Mobile remote** in the top bar of the Hypatia desktop window (or pass `--remote` on startup).
+2. Scan the QR code displayed on your PC with your phone camera (your phone and PC must be on the same local Wi-Fi network).
+3. Tap **Arm Alerts** at the top of the mobile screen once to arm:
+   - **Web Notifications & Service Worker**
+   - **Synthesized Web Audio Chimes & Background Audio Keep-Alive** (with lock-screen `MediaSession` status)
+   - **Haptic Vibration Patterns** (`navigator.vibrate`)
+   - **Screen Wake Lock** (`navigator.wakeLock`)
+4. Use the one-handed bottom thumb-zone dock to start queues, accept matches, ban/pick champions, switch Summoner Spells (including `D ↔ F` swap) and Skins, equip 1-tap Recommended or custom Runes, and request or accept Role / Pick Order / Champion swaps.
 
 ---
 
 ## ⚙️ CLI Reference
 
 ```text
-Usage: hypatia-server [OPTIONS]
+Usage: hypatia [OPTIONS]
 
 Options:
-  -p, --port <PORT>        HTTP / WebSocket listen port [default: 7878]
-      --no-open            Do not open default browser on startup
-      --dev                Allow Trunk development server origin (port 8080)
-      --demo               Start in demo mode with synthetic event streams
-      --demo-rate <RATE>   Demo events generated per second [default: 10.0]
-  -h, --help               Print help
+      --demo                   Start in demo mode with synthetic event streams
+      --demo-rate <DEMO_RATE>  Demo events generated per second [default: 2.0]
+      --telemetry              Start with the League of Legends Telemetry Observatory open
+      --remote                 Start with Mobile Remote server enabled and QR code visible
+      --no-remote              Disable automatic startup of the Mobile Remote server
+      --remote-port <PORT>     Preferred LAN port for Mobile Remote server [default: 7879]
+      --light                  Start in Light (Day) theme instead of Dark (Night)
+      --widget                 Open the always-on-top Mini Widget on startup
+      --phase <PHASE>          Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
+  -h, --help                   Print help
+  -V, --version                Print version
 ```
 
 ---
 
 ## 🏗️ Architecture
 
-```
+```text
 crates/
-├── shared/   # Common data models, WebSocket protocols (ServerMsg/ClientMsg), security types
-├── server/   # Native Axum + Tokio backend, process discovery, secret vault, rust-embed
-└── web/      # Single Page App in Leptos 0.7 WASM (Dark theme, virtual scroll, JsonDiff)
-```
-
-### Build from Source
-
-```bash
-# Prerequisites: Rust 1.85+, wasm32-unknown-unknown, Trunk
-git clone https://github.com/RubenVP2/hypatia.git
-cd hypatia
-
-# 1. Build WebAssembly UI
-cd crates/web && trunk build --release && cd ../..
-
-# 2. Build Server Binary
-cargo build --release -p hypatia-server
-
-# Or on Windows via PowerShell script:
-.\build.ps1
+├── shared/    # Common data models, LiveBoard, SummarySnapshot, RemoteCommand & RemoteStateSnapshot
+├── core/      # Lockfile/process discovery, WAMP & LiveClient connectors, LcuActionClient, LAN Remote server
+└── desktop/   # Native Slint 1.18 desktop application (MainWindow, MiniWidget, QR pairing drawer)
 ```
 
 ---
 
 ## 📄 License & Disclaimer
 
-Hypatia is an independent open-source research and observation tool. It is **not** affiliated with, endorsed by, or sponsored by Riot Games, Inc. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.
+Hypatia is an independent open-source companion tool. It is **not** affiliated with, endorsed by, or sponsored by Riot Games, Inc. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.

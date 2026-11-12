@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-12T22:50:00Z",
+  "title": "Design System: Hypatia — Pit-Wall Chronometer",
+  "extensions": {
+    "colorMeta": {
+      "signal": {
+        "role": "primary",
+        "displayName": "Pit-Wall Amber",
+        "canonical": "oklch(81% 0.17 84)",
+        "tonalRamp": ["#2d1f00", "#573d00", "#8a5600", "#b87300", "#db9900", "#f5b400", "#ffd24d", "#ffebb3"]
+      },
+      "shell": {
+        "role": "neutral",
+        "displayName": "Carbon Shell",
+        "canonical": "oklch(16% 0.01 258)",
+        "tonalRamp": ["#090b0f", "#0b0d11", "#0f1116", "#161922", "#1f2430", "#3c4356", "#9ca3b5", "#edeff4"]
+      },
+      "blue": {
+        "role": "secondary",
+        "displayName": "Team Blue",
+        "canonical": "oklch(64% 0.18 258)",
+        "tonalRamp": ["#0f2447", "#193973", "#2052b0", "#2664d4", "#4c8df6", "#76a8fa", "#9cc0fb", "#d4e4fe"]
+      },
+      "red": {
+        "role": "secondary",
+        "displayName": "Team Red",
+        "canonical": "oklch(63% 0.19 25)",
+        "tonalRamp": ["#471110", "#731e1b", "#a62b26", "#c9342e", "#f0605a", "#f48580", "#f6a29d", "#fbd4d2"]
+      },
+      "live-green": {
+        "role": "secondary",
+        "displayName": "Telemetry Green",
+        "canonical": "oklch(73% 0.15 153)",
+        "tonalRamp": ["#0e361f", "#165732", "#1e7f48", "#2d9f5e", "#45c47f", "#6ed49d", "#9ee3be", "#d5f5e3"]
+      }
+    },
+    "typographyMeta": {
+      "specimen": { "displayName": "Phase Specimen", "purpose": "Desktop countdown clocks and final post-game figures." },
+      "display": { "displayName": "Specimen Display", "purpose": "Mobile countdown clocks and live scoreboards." },
+      "score": { "displayName": "Kill Scoreboard", "purpose": "Mobile live match blue/red kill totals." },
+      "timer": { "displayName": "Inline Phase Timer", "purpose": "Compact card countdown readout." },
+      "headline": { "displayName": "Plate Headline", "purpose": "Urgent turn plates and section headings." },
+      "title": { "displayName": "Panel Title", "purpose": "Workspace drawers and mobile headers." },
+      "name": { "displayName": "Summoner / Section Name", "purpose": "Player names, card subheadings, and mobile brand header." },
+      "body": { "displayName": "Body Copy", "purpose": "Champion rows, summoner statuses, primary buttons, and notes." },
+      "small": { "displayName": "Secondary Metadata", "purpose": "Muted explanations, feed items, and role metadata." },
+      "label": { "displayName": "Mono Telemetry", "purpose": "Timestamps, ports, JSON, and status badges (>=11px floor)." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "ease-snap", "value": "110ms cubic-bezier(0.2, 0.8, 0.2, 1)", "purpose": "Fast surface & border transitions on buttons and rail rows." }
+    ],
+    "breakpoints": [
+      { "name": "compact-stage", "value": "680px" },
+      { "name": "desktop-min", "value": "980px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Signal Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "High-contrast pit-wall amber CTA used for Lock In, GET execution, and primary mobile triggers.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Lock Pick: Ahri</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 16px;border-radius:4px;border:1px solid #f5b400;background:#f5b400;color:#0f1116;font-family:'Overpass',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:transform 80ms ease-out,filter 110ms ease-out;}.ds-btn-primary:hover{filter:brightness(1.06);}.ds-btn-primary:focus-visible{outline:2px solid #f5b400;outline-offset:2px;}.ds-btn-primary:active{transform:scale(0.985);}"
+    },
+    {
+      "name": "Secondary Action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Recessed 1px bordered control for panel splits, token rotation, and non-destructive actions.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Split View</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border-radius:4px;border:1px solid #3c4356;background:#161922;color:#edeff4;font-family:'Overpass',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:background-color 110ms ease-out;}.ds-btn-secondary:hover{background:#1f2430;}.ds-btn-secondary:focus-visible{outline:2px solid #f5b400;outline-offset:2px;}"
+    },
+    {
+      "name": "Rail Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-rail-item",
+      "description": "Left workspace rail navigation item with 2px-stroke SVG icon, label, and optional monospace badge.",
+      "html": "<button class=\"ds-rail-item active\" type=\"button\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12H7L10 5L14 19L17 12H21\"/></svg><span style=\"flex:1;text-align:left\">Telemetry Lab</span><span class=\"ds-rail-badge\">SPLIT</span></button>",
+      "css": ".ds-rail-item{display:flex;align-items:center;gap:9px;width:180px;height:36px;padding:0 10px;border-radius:4px;border:1px solid transparent;background:transparent;color:#9ca3b5;font-family:'Overpass',sans-serif;font-size:12px;font-weight:700;cursor:pointer;}.ds-rail-item:hover{background:#1f2430;color:#edeff4;}.ds-rail-item.active{background:rgba(245,180,0,0.14);border-color:#f5b400;color:#edeff4;}.ds-rail-badge{padding:2px 6px;border-radius:4px;background:#f5b400;color:#0f1116;font-family:'Overpass Mono',monospace;font-size:11px;font-weight:700;}.ds-rail-item:focus-visible{outline:2px solid #f5b400;outline-offset:2px;}"
+    },
+    {
+      "name": "Instrument Panel Card",
+      "kind": "card",
+      "refersTo": "card-panel",
+      "description": "Flat carbon container framed with 1px hairline border and Barlow Condensed section title.",
+      "html": "<section class=\"ds-card\"><div class=\"ds-card-head\"><h3 class=\"ds-card-title\">ALLIES DRAFT</h3><span class=\"ds-chip\">Solo/Duo</span></div><p class=\"ds-card-copy\">Ahri locked in Mid · Electrocute loaded</p></section>",
+      "css": ".ds-card{background:#161922;border:1px solid #262b38;border-radius:6px;padding:14px;color:#edeff4;font-family:'Overpass',sans-serif;}.ds-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}.ds-card-title{margin:0;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;letter-spacing:0.4px;}.ds-card-copy{margin:0;color:#9ca3b5;font-size:14px;}.ds-chip{padding:2px 8px;border-radius:4px;background:#1f2430;border:1px solid #3c4356;font-size:11px;font-weight:700;}"
+    },
+    {
+      "name": "Status / Ban Chip",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "Compact 1px-bordered ban or queue chip without shadow or side stripe.",
+      "html": "<span class=\"ds-ban-chip\">Zed Banned</span>",
+      "css": ".ds-ban-chip{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#1f2430;border:1px solid #f0605a;color:#edeff4;font-family:'Overpass',sans-serif;font-size:11px;font-weight:700;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Pit-Wall Chronometer",
+    "overview": "Hypatia frames every stage of a League of Legends match as a compact motorsport timing wall. Unhurried carbon panels establish a calm backdrop while pure inverted ivory plates and crisp amber signals mark immediate action moments.",
+    "keyCharacteristics": [
+      "Dark carbon Night (default) and warm drafting-paper Day printings meeting WCAG AA contrast.",
+      "Barlow Condensed timing numerals, Overpass UI copy, and Overpass Mono telemetry streams.",
+      "Semantic separation between live source green, signal amber, Blue/Red teams, and Summoner's Rift lane inks.",
+      "Strict 11px minimum functional typography floor across desktop and mobile."
+    ],
+    "rules": [
+      { "name": "The Signal Restraint Rule", "body": "Pit-Wall Amber never appears as passive decoration; it marks active navigation, active phase milestones, or player turns/CTAs.", "section": "colors" },
+      { "name": "The Lane-Team Separation Rule", "body": "Lane inks draw only tracks and roundels while Team Blue/Red own champions, objectives, towers, and bans.", "section": "colors" },
+      { "name": "The 11px Floor Rule", "body": "Every interactive label, timestamp, and badge stays at 11px or larger across Slint and HTML.", "section": "typography" },
+      { "name": "The No-Eyebrow Rule", "body": "Section cards and plates lead with their headline first; supporting details follow beside or below.", "section": "typography" },
+      { "name": "The Full-Perimeter 1px Rule", "body": "Highlighted rows and alerts use soft surface tints and full 1px perimeter borders instead of thick side stripes.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do highlight active picks, ready checks, and selected tabs with signal-soft fills and 1px full-perimeter borders.",
+      "Do format countdowns, HTTP paths, ports, and KDA values in Overpass Mono with tabular figures.",
+      "Do maintain >= 11px font sizes and bundle font assets locally offline."
+    ],
+    "donts": [
+      "Don't place miniature eyebrows above headlines or section titles.",
+      "Don't use >1px border-left/right accent stripes on cards, rows, or alerts.",
+      "Don't prefix tabs with ordinal numbers (1 · / 2 ·) or replace 2px SVG icons with Unicode glyphs."
+    ]
+  }
+}

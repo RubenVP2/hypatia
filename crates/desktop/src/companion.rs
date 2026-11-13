@@ -29,6 +29,75 @@ fn objective_kind_index(kind: ObjectiveKind) -> i32 {
     }
 }
 
+fn canonical_rank_tier(raw: Option<&str>) -> SharedString {
+    let Some(token) = raw.and_then(|s| s.split_whitespace().next()) else {
+        return SharedString::default();
+    };
+    let upper = token.to_ascii_uppercase();
+    match upper.as_str() {
+        "IRON" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "EMERALD" | "DIAMOND" | "MASTER"
+        | "GRANDMASTER" | "CHALLENGER" => SharedString::from(upper),
+        _ => SharedString::default(),
+    }
+}
+
+fn resolve_splash(
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+    preferred_id: i64,
+    champ_id: i64,
+) -> Image {
+    if !app_state.flags.splash_backdrops() {
+        return Image::default();
+    }
+    let target_id = if preferred_id > 0 {
+        preferred_id
+    } else if champ_id > 0 {
+        champ_id * 1000
+    } else {
+        return Image::default();
+    };
+    let img = loader.resolve(app_state, "splash", target_id);
+    if img.size().width > 0 {
+        return img;
+    }
+    if champ_id > 0 {
+        let base_id = champ_id * 1000;
+        if base_id != target_id && app_state.assets.cached_image_path("splash", base_id).is_some() {
+            return loader.resolve(app_state, "splash", base_id);
+        }
+    }
+    Image::default()
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+struct PitSummary {
+    my_drakes: i32,
+    enemy_drakes: i32,
+    baron_owner: i32,
+    herald_owner: i32,
+}
+
+fn summarize_pits(board: &LiveBoard) -> PitSummary {
+    let mut out = PitSummary::default();
+    for obj in &board.objectives {
+        let mine = obj.by_order == board.my_team_is_order;
+        match obj.kind {
+            ObjectiveKind::Drake | ObjectiveKind::Elder => {
+                if mine {
+                    out.my_drakes += 1;
+                } else {
+                    out.enemy_drakes += 1;
+                }
+            }
+            ObjectiveKind::Baron => out.baron_owner = if mine { 1 } else { 2 },
+            ObjectiveKind::Herald => out.herald_owner = if mine { 1 } else { 2 },
+            ObjectiveKind::Grubs => {}
+        }
+    }
+    out
+}
+
 fn build_ban_entries(
     names: &[String],
     ids: &[i64],
@@ -97,10 +166,19 @@ fn build_champ_select_view(
     let mut map_allies = Vec::new();
     let mut acting_label = None;
     let mut my_turn = false;
+    let mut self_splash: Option<(i64, i64)> = None;
+    let mut fallback_splash: Option<(i64, i64)> = None;
 
     for ally in &cs.my_team {
         let lane = Position::parse(&ally.assigned_position).map_or(-1, Position::desktop_index);
         let has_champ = ally.has_champion();
+        if has_champ {
+            if ally.is_self {
+                self_splash = Some((ally.selected_skin_id, ally.champion_id));
+            } else if fallback_splash.is_none() {
+                fallback_splash = Some((ally.selected_skin_id, ally.champion_id));
+            }
+        }
         let champ_str = if has_champ {
             ally.champion_name.as_str()
         } else {
@@ -161,7 +239,7 @@ fn build_champ_select_view(
             lane,
             champion: SharedString::from(champ_str),
             initials: champ_initials(champ_str),
-            icon: champ_icon,
+            icon: champ_icon.clone(),
             spell1_icon: loader.resolve(app_state, "spell", ally.spell1_id),
             spell1_name: SharedString::from(spell1_name),
             spell2_icon: loader.resolve(app_state, "spell", ally.spell2_id),
@@ -172,6 +250,7 @@ fn build_champ_select_view(
                     .as_deref()
                     .unwrap_or(lang.pick("Unranked", "Non classé")),
             ),
+            rank_tier: canonical_rank_tier(ally.rank_label.as_deref()),
             is_self: ally.is_self,
             is_premade: ally.is_premade,
             picking,
@@ -194,6 +273,8 @@ fn build_champ_select_view(
             x,
             y,
             label: SharedString::from(map_label),
+            initials: champ_initials(champ_str),
+            icon: champ_icon,
             is_self: ally.is_self,
             label_pos,
         });
@@ -240,6 +321,7 @@ fn build_champ_select_view(
     let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, app_state, loader);
     let their_ban_list =
         build_ban_entries(&cs.their_team_bans, &cs.their_team_ban_ids, app_state, loader);
+    let (splash_skin, splash_champ) = self_splash.or(fallback_splash).unwrap_or((0, 0));
 
     ChampSelectView {
         title: SharedString::from(title),
@@ -255,6 +337,7 @@ fn build_champ_select_view(
         my_ban_list: ModelRc::new(VecModel::from(my_ban_list)),
         their_ban_list: ModelRc::new(VecModel::from(their_ban_list)),
         anonymized: cs.is_ranked_solo_anonymized,
+        splash_icon: resolve_splash(app_state, loader, splash_skin, splash_champ),
     }
 }
 
@@ -396,6 +479,7 @@ fn build_live_view(
     } else {
         self_champion_id
     };
+    let pits = summarize_pits(b);
 
     LiveView {
         title: SharedString::from(title),
@@ -403,10 +487,16 @@ fn build_live_view(
         dead: self_dead,
         active_initials: champ_initials(&lg.active_champion),
         active_icon: loader.resolve(app_state, "champion", active_cid),
+        splash_icon: resolve_splash(app_state, loader, active_cid * 1000, active_cid),
         my_score: b.my_kills() as i32,
         enemy_score: b.enemy_kills() as i32,
         clock: format_mm_ss(lg.game_time_sec),
         self_kda: SharedString::from(self_kda),
+        my_drakes: pits.my_drakes,
+        enemy_drakes: pits.enemy_drakes,
+        baron_owner: pits.baron_owner,
+        herald_owner: pits.herald_owner,
+        order_is_mine: b.my_team_is_order,
         my_players: ModelRc::new(VecModel::from(my_players)),
         enemy_players: ModelRc::new(VecModel::from(enemy_players)),
         towers: ModelRc::new(VecModel::from(towers)),
@@ -458,6 +548,7 @@ fn build_end_view(
         champion_name: SharedString::from(eog.champion_name.as_str()),
         champion_initials: champ_initials(&eog.champion_name),
         champion_icon: loader.resolve(app_state, "champion", cid),
+        splash_icon: resolve_splash(app_state, loader, cid * 1000, cid),
         stats: ModelRc::new(VecModel::from(stats)),
     }
 }
@@ -466,6 +557,7 @@ fn build_end_view(
 struct RenderContext {
     lang: Lang,
     icons_enabled: bool,
+    splash_enabled: bool,
     /// Bumped by the asset cache each time a new icon lands on disk.
     icons_revision: u64,
     mini_open: bool,
@@ -553,6 +645,7 @@ impl Companion {
         let context = RenderContext {
             lang: app_state.lang(),
             icons_enabled: app_state.flags.game_icons(),
+            splash_enabled: app_state.flags.splash_backdrops(),
             icons_revision: app_state.assets.image_revision(),
             mini_open,
         };
@@ -637,6 +730,11 @@ fn apply_summary(
         app_state
             .assets
             .trigger_metadata_sync(&app_state.discovery, &app_state.riot_client);
+        if app_state.flags.game_icons() {
+            app_state
+                .assets
+                .prefetch_demo_showcase(&app_state.discovery, &app_state.riot_client);
+        }
     }
 
     let view = match phase_str {
@@ -836,6 +934,9 @@ fn apply_summary(
             summoner_name: summoner_header_name,
             summoner_initials,
             summoner_icon,
+            rank_tier: canonical_rank_tier(
+                snap.summoner.as_ref().and_then(|s| s.rank_tier.as_deref()),
+            ),
             notes: ModelRc::new(VecModel::from(notes)),
         };
         if mini_open {
@@ -929,5 +1030,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn extracts_rank_tiers_and_summarizes_live_pits() {
+        assert_eq!(canonical_rank_tier(Some("EMERALD II (64 LP)")), "EMERALD");
+        assert_eq!(canonical_rank_tier(Some("diamond")), "DIAMOND");
+        assert_eq!(canonical_rank_tier(Some("Unranked")), "");
+
+        let mut board = LiveBoard {
+            my_team_is_order: false,
+            ..LiveBoard::default()
+        };
+        board.objectives.push(hypatia_shared::ObjectiveTaken {
+            kind: ObjectiveKind::Drake,
+            label: "Drake".into(),
+            by_order: false,
+            time_sec: 400.0,
+        });
+        board.objectives.push(hypatia_shared::ObjectiveTaken {
+            kind: ObjectiveKind::Drake,
+            label: "Drake".into(),
+            by_order: true,
+            time_sec: 700.0,
+        });
+        board.objectives.push(hypatia_shared::ObjectiveTaken {
+            kind: ObjectiveKind::Baron,
+            label: "Baron".into(),
+            by_order: false,
+            time_sec: 1400.0,
+        });
+        board.objectives.push(hypatia_shared::ObjectiveTaken {
+            kind: ObjectiveKind::Herald,
+            label: "Herald".into(),
+            by_order: true,
+            time_sec: 900.0,
+        });
+        let pits = summarize_pits(&board);
+        assert_eq!(pits.my_drakes, 1);
+        assert_eq!(pits.enemy_drakes, 1);
+        assert_eq!(pits.baron_owner, 1);
+        assert_eq!(pits.herald_owner, 2);
     }
 }

@@ -33,6 +33,10 @@ pub struct Settings {
     pub light_theme: bool,
     /// Turn every UI animation off, on top of the OS reduced-motion preference.
     pub reduce_motion: bool,
+    /// Visual LoL integration variant: 0 = Current, 1 = Tactical LoL, 2 = Hextech Hybrid, 3 = Riot Client.
+    pub visual_style: u8,
+    /// Render cached champion splash backdrops behind headers when visual_style >= 1.
+    pub splash_backdrops: bool,
 }
 
 impl Default for Settings {
@@ -48,6 +52,8 @@ impl Default for Settings {
             eco_mode: false,
             light_theme: false,
             reduce_motion: false,
+            visual_style: 2,
+            splash_backdrops: true,
         }
     }
 }
@@ -95,10 +101,16 @@ impl Settings {
             "eco_mode" => &mut self.eco_mode,
             "light_theme" => &mut self.light_theme,
             "reduce_motion" => &mut self.reduce_motion,
+            "splash_backdrops" => &mut self.splash_backdrops,
             _ => return false,
         };
         *field = !*field;
         true
+    }
+
+    /// Clamps a raw UI style index into the supported `0..=3` variant range.
+    pub fn clamp_visual_style(style: i32) -> u8 {
+        style.clamp(0, 3) as u8
     }
 }
 
@@ -109,6 +121,7 @@ pub struct Flags {
     riot_client: AtomicBool,
     replay_api: AtomicBool,
     game_icons: AtomicBool,
+    splash_backdrops: AtomicBool,
     system_footprint: AtomicBool,
     endpoint_catalog: AtomicBool,
     eco_mode: AtomicBool,
@@ -127,6 +140,7 @@ impl Flags {
         self.riot_client.store(s.riot_client, Ordering::Relaxed);
         self.replay_api.store(s.replay_api, Ordering::Relaxed);
         self.game_icons.store(s.game_icons, Ordering::Relaxed);
+        self.splash_backdrops.store(s.splash_backdrops, Ordering::Relaxed);
         self.system_footprint.store(s.system_footprint, Ordering::Relaxed);
         self.endpoint_catalog.store(s.endpoint_catalog, Ordering::Relaxed);
         self.eco_mode.store(s.eco_mode, Ordering::Relaxed);
@@ -146,6 +160,10 @@ impl Flags {
 
     pub fn game_icons(&self) -> bool {
         self.game_icons.load(Ordering::Relaxed)
+    }
+
+    pub fn splash_backdrops(&self) -> bool {
+        self.game_icons() && self.splash_backdrops.load(Ordering::Relaxed)
     }
 
     pub fn eco_mode(&self) -> bool {
@@ -191,6 +209,10 @@ mod tests {
         let partial = Settings::load_from(&path);
         assert!(!partial.live_game);
         assert!(partial.riot_client, "missing keys fall back to defaults");
+        assert_eq!(partial.visual_style, 2);
+        assert!(partial.splash_backdrops);
+        assert_eq!(Settings::clamp_visual_style(-1), 0);
+        assert_eq!(Settings::clamp_visual_style(9), 3);
     }
 
     #[test]

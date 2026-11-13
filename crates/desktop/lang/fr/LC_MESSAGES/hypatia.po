@@ -868,3 +868,38 @@ msgstr "Niv. {0} · {1} CS"
 msgctxt "Theme"
 msgid "Fill"
 msgstr "Tous postes"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "VISUAL STYLE"
+msgstr "STYLE VISUEL"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Current"
+msgstr "Actuel"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Tactical"
+msgstr "Tactique"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Hextech"
+msgstr "Hextech"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Riot"
+msgstr "Riot Pur"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Splash backdrops"
+msgstr "Arrière-plans Splash"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Fetches and blends cached champion splash art behind stage headers in LoL styles."
+msgstr "Récupère et fond les splash arts en cache derrière les en-têtes dans les styles LoL."

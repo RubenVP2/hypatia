@@ -11,6 +11,7 @@ export struct AllyRow {
     spell2-name: string,
     player: string,
     rank: string,
+    rank-tier: string,
     is-self: bool,
     is-premade: bool,
     picking: bool,
@@ -67,6 +68,8 @@ export struct MapAlly {
     x: float,
     y: float,
     label: string,
+    initials: string,
+    icon: image,
     is-self: bool,
     // 0: right, 1: left, 2: above, 3: below
     label-pos: int,
@@ -162,6 +165,16 @@ export component Card inherits Rectangle {
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: Theme.rule;
+
+    // Subtle top metallic bevel highlight on Hextech Hybrid & Riot Client variants.
+    if Theme.style >= 2: Rectangle {
+        x: 1px;
+        y: 1px;
+        width: max(0px, parent.width - 2px);
+        height: 1px;
+        background: Theme.gold-bright;
+        opacity: Theme.style >= 3 ? 0.32 : 0.14;
+    }
 }
 
 // 1px horizontal hairline between sections.
@@ -170,19 +183,20 @@ export component Divider inherits Rectangle {
     background: Theme.rule;
 }
 
-// Lane-colored ring with geometric 2px role emblem.
+// Lane-colored ring with authentic LoL position crest (style >= 1) or Observatory stroke (style == 0).
 export component Roundel inherits Rectangle {
     in property <int> lane;
     in property <length> size: 40px;
     width: size;
     height: size;
     border-radius: size / 2;
-    border-width: max(2px, size * 0.14);
+    border-width: max(2px, size * 0.12);
     border-color: Theme.lane-color(lane);
-    background: Theme.ground;
+    background: Theme.style >= 2 ? Theme.panel-raised : Theme.ground;
     accessible-role: text;
     accessible-label: Theme.lane-name(root.lane);
-    if root.size >= 16px: Path {
+
+    if root.size >= 16px && Theme.style == 0: Path {
         property <length> icon-sz: max(10px, root.size * 0.56);
         x: (root.width - self.icon-sz) / 2;
         y: (root.height - self.icon-sz) / 2;
@@ -196,6 +210,31 @@ export component Roundel inherits Rectangle {
         stroke-line-cap: round;
         stroke-line-join: round;
         fill: transparent;
+    }
+
+    if root.size >= 16px && Theme.style >= 1 && Theme.lol-lane-context-path(root.lane) != "": Path {
+        property <length> icon-sz: max(10px, root.size * 0.54);
+        x: (root.width - self.icon-sz) / 2;
+        y: (root.height - self.icon-sz) / 2;
+        width: self.icon-sz;
+        height: self.icon-sz;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: Theme.lol-lane-context-path(root.lane);
+        fill: root.lane >= 0 ? Theme.lane-color(root.lane) : Theme.muted;
+        opacity: 0.28;
+    }
+
+    if root.size >= 16px && Theme.style >= 1: Path {
+        property <length> icon-sz: max(10px, root.size * 0.54);
+        x: (root.width - self.icon-sz) / 2;
+        y: (root.height - self.icon-sz) / 2;
+        width: self.icon-sz;
+        height: self.icon-sz;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: Theme.lol-lane-primary-path(root.lane);
+        fill: root.lane >= 0 ? Theme.lane-color(root.lane) : Theme.text;
     }
 }
 
@@ -230,21 +269,24 @@ export component GameIconBadge inherits Rectangle {
     }
 }
 
-// Team-colored champion plate: local image icon when available, otherwise initials.
+// Team-colored champion plate: square in Current/Tactical; circular Hextech portrait in Hybrid/Riot.
 export component ChampPlate inherits Rectangle {
     in property <string> label;
     in property <image> icon;
     in property <bool> mine: true;
+    in property <bool> is-self: false;
     in property <bool> empty: false;
     in property <bool> faded: false;
     in property <length> size: 56px;
     width: size;
     height: size;
-    border-radius: Theme.radius;
+    border-radius: Theme.style >= 2 ? size / 2 : Theme.radius;
     clip: true;
     background: empty ? Theme.panel-raised : Theme.team-color(mine);
-    border-width: empty ? 1px : 0px;
-    border-color: Theme.rule-strong;
+    border-width: empty ? 1px : (Theme.style >= 2 ? max(1.5px, size * 0.05) : 0px);
+    border-color: empty
+        ? (Theme.style >= 2 ? Theme.gold : Theme.rule-strong)
+        : (is-self && Theme.style >= 2 ? Theme.gold-bright : (mine && Theme.style >= 2 ? Theme.gold : Theme.team-color(mine)));
     opacity: faded ? 0.45 : 1.0;
     animate opacity { duration: Theme.dur-slow; easing: ease-out; }
     if !root.empty && root.icon.width == 0: Text {
@@ -264,6 +306,88 @@ export component ChampPlate inherits Rectangle {
     }
 }
 
+// Compact ranked tier vector crest matching League's rank palette (active in style >= 1).
+export component RankedCrest inherits Rectangle {
+    in property <string> tier;
+    in property <length> size: 16px;
+    width: size;
+    height: size;
+    background: transparent;
+    if root.tier != "" && Theme.style >= 1: Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M 12 2 L 20 7 L 17 16 L 12 22 L 7 16 L 4 7 Z";
+        fill: Theme.rank-tier-color(root.tier);
+        stroke: Theme.gold-bright;
+        stroke-width: 1.2px;
+    }
+    if root.tier != "" && Theme.style >= 1: Path {
+        x: root.size * 0.28;
+        y: root.size * 0.25;
+        width: root.size * 0.44;
+        height: root.size * 0.44;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M 12 3 L 21 12 L 12 21 L 3 12 Z";
+        fill: #ffffff;
+        opacity: 0.42;
+    }
+}
+
+// Cached champion splash backdrop (or atmospheric Hextech gradient when no splash is cached yet).
+export component SplashBackdrop inherits Rectangle {
+    in property <image> splash;
+    in property <color> tint: Theme.accent;
+    clip: true;
+    background: transparent;
+
+    if Theme.style >= 1 && root.splash.width > 0: Image {
+        width: 100%;
+        height: 100%;
+        source: root.splash;
+        image-fit: cover;
+        opacity: Theme.style >= 3
+            ? (Theme.dark ? 0.46 : 0.26)
+            : (Theme.style == 2 ? (Theme.dark ? 0.34 : 0.20) : (Theme.dark ? 0.20 : 0.12));
+    }
+
+    if Theme.style >= 1 && root.splash.width == 0: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(125deg, root.tint 0%, Theme.ground 68%);
+        opacity: Theme.style >= 3 ? (Theme.dark ? 0.24 : 0.14) : (Theme.dark ? 0.14 : 0.08);
+    }
+
+    if Theme.style >= 2 && root.splash.width == 0: Path {
+        x: parent.width * 0.62;
+        y: -parent.height * 0.1;
+        width: parent.height * 1.2;
+        height: parent.height * 1.2;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M 12 2 L 21 7 L 21 17 L 12 22 L 3 17 L 3 7 Z M 12 6 L 17.5 9.2 V 14.8 L 12 18 L 6.5 14.8 V 9.2 Z";
+        stroke: Theme.gold-bright;
+        stroke-width: 0.8px;
+        fill: transparent;
+        opacity: Theme.style >= 3 ? 0.14 : 0.08;
+    }
+
+    // Readability veil fading smoothly into Theme.ground.
+    if Theme.style >= 1: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(180deg, transparent 0%, Theme.ground 96%);
+    }
+    if Theme.style >= 1: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(90deg, Theme.ground 0%, transparent 55%, Theme.ground 100%);
+        opacity: Theme.style >= 3 ? 0.52 : 0.72;
+    }
+}
+
 export component SectionLabel inherits Text {
     color: Theme.muted;
     font-size: Type.label;
@@ -280,10 +404,19 @@ export component Plate inherits Rectangle {
     background: active-turn ? Theme.signal : Theme.panel;
     border-radius: Theme.radius;
     border-width: 1px;
-    border-color: active-turn ? Theme.signal : Theme.rule-strong;
+    border-color: active-turn ? Theme.signal : (Theme.style >= 3 ? Theme.gold : Theme.rule-strong);
     accessible-role: text;
     accessible-label: root.title + ". " + root.detail;
     animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+
+    // Left metallic bar on Hextech/Riot variants when calm (keeps amber strictly for active-turn).
+    if Theme.style >= 2 && !root.active-turn: Rectangle {
+        x: 0px;
+        y: 6px;
+        width: 3px;
+        height: max(0px, parent.height - 12px);
+        background: Theme.gold-bright;
+    }
 
     // Created when the turn starts: its opacity runs 1 -> 0 twice, then it stays invisible.
     // An animation never plays on an element's first value, so `init` flips `fired` after
@@ -669,14 +802,198 @@ export component LineMap inherits Rectangle {
     in property <[TowerDot]> towers;
     in property <[MapAlly]> allies;
     in property <bool> show-jungle: true;
+    in property <bool> show-pits: false;
+    in property <bool> order-is-mine: true;
+    in property <int> my-drakes: 0;
+    in property <int> enemy-drakes: 0;
+    in property <int> baron-owner: 0; // 0 none, 1 mine, 2 enemy
+    in property <int> herald-owner: 0; // 0 none, 1 mine, 2 enemy
     in property <length> line-width: 8px;
     in property <length> station: 20px;
     in property <color> halo: Theme.panel;
-    background: transparent;
+    background: Theme.style >= 1 ? Theme.map-ground : transparent;
+    border-radius: Theme.style >= 1 ? Theme.radius : 0px;
+    border-width: Theme.style >= 1 ? 1px : 0px;
+    border-color: Theme.style >= 2 ? Theme.gold : Theme.rule;
+    clip: Theme.style >= 1;
     accessible-role: image;
     accessible-label: @tr("Three-lane map");
 
-    Path {
+    // ===== Style >= 1: Summoner's Rift terrain plateaus, river, bases & pits =====
+    if Theme.style >= 1 && root.show-jungle: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        // 4 jungle islands (top-left Order, top-right Chaos, bot-left Order, bot-right Chaos)
+        commands: "M 66 156 L 146 218 L 66 290 Z M 138 66 L 306 66 L 208 164 Z M 94 328 L 190 232 L 260 328 Z M 248 190 L 334 108 L 334 252 Z";
+        fill: Theme.map-jungle;
+    }
+
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 54 78 L 342 316";
+        stroke: Theme.map-river;
+        stroke-width: root.line-width * 3.4;
+        stroke-line-cap: round;
+        fill: transparent;
+    }
+
+    // Order base pad (bottom-left) & Chaos base pad (top-right)
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 18 378 L 18 292 L 106 378 Z";
+        fill: Theme.team-color(root.order-is-mine);
+        opacity: 0.22;
+    }
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 382 18 L 382 104 L 294 18 Z";
+        fill: Theme.team-color(!root.order-is-mine);
+        opacity: 0.22;
+    }
+
+    // Curved Summoner's Rift lanes (background road)
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 40 348 L 40 108 Q 40 42 108 42 L 358 42 M 40 348 L 358 42 M 40 348 L 292 348 Q 358 348 358 282 L 358 42";
+        stroke: Theme.map-lane;
+        stroke-width: root.line-width * 1.45;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        fill: transparent;
+    }
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 40 348 L 40 108 Q 40 42 108 42 L 358 42";
+        stroke: Theme.lane-top;
+        stroke-width: max(2px, root.line-width * 0.45);
+        opacity: 0.55;
+        fill: transparent;
+    }
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 40 348 L 358 42";
+        stroke: Theme.lane-mid;
+        stroke-width: max(2px, root.line-width * 0.45);
+        opacity: 0.55;
+        fill: transparent;
+    }
+    if Theme.style >= 1: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 40 348 L 292 348 Q 358 348 358 282 L 358 42";
+        stroke: Theme.lane-bot;
+        stroke-width: max(2px, root.line-width * 0.45);
+        opacity: 0.55;
+        fill: transparent;
+    }
+
+    // Order & Chaos Nexus diamonds
+    if Theme.style >= 1: Path {
+        x: root.width * 40 / 400 - root.station * 0.65;
+        y: root.height * 348 / 400 - root.station * 0.65;
+        width: root.station * 1.3;
+        height: root.station * 1.3;
+        viewbox-width: 24; viewbox-height: 24;
+        commands: "M 12 2 L 22 12 L 12 22 L 2 12 Z";
+        fill: Theme.team-color(root.order-is-mine);
+        stroke: Theme.gold-bright;
+        stroke-width: 1.5px;
+    }
+    if Theme.style >= 1: Path {
+        x: root.width * 358 / 400 - root.station * 0.65;
+        y: root.height * 42 / 400 - root.station * 0.65;
+        width: root.station * 1.3;
+        height: root.station * 1.3;
+        viewbox-width: 24; viewbox-height: 24;
+        commands: "M 12 2 L 22 12 L 12 22 L 2 12 Z";
+        fill: Theme.team-color(!root.order-is-mine);
+        stroke: Theme.gold-bright;
+        stroke-width: 1.5px;
+    }
+
+    // Baron / Herald Pit (top-left river alcove)
+    if Theme.style >= 1: Rectangle {
+        property <color> pit-c: root.baron-owner == 1
+            ? Theme.blue
+            : (root.baron-owner == 2
+                ? Theme.red
+                : (root.herald-owner == 1 ? Theme.blue : (root.herald-owner == 2 ? Theme.red : Theme.muted)));
+        x: root.width * 132 / 400 - self.width / 2;
+        y: root.height * 116 / 400 - self.height / 2;
+        width: root.show-pits ? root.station * 1.3 : root.station * 0.95;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: Theme.map-ground;
+        border-width: 1.5px;
+        border-color: (root.baron-owner > 0 || root.herald-owner > 0) ? self.pit-c : Theme.rule-strong;
+        opacity: root.show-pits ? 1.0 : 0.65;
+
+        Path {
+            property <length> icon-sz: max(9px, parent.width * 0.62);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: Theme.lol-objective-path(root.baron-owner > 0 || root.herald-owner == 0 ? 0 : 3);
+            fill: (root.baron-owner > 0 || root.herald-owner > 0)
+                ? parent.pit-c
+                : Theme.objective-color(0);
+        }
+    }
+
+    // Dragon Pit (bottom-right river alcove) + live drake count chip
+    if Theme.style >= 1: Rectangle {
+        x: root.width * 266 / 400 - self.width / 2;
+        y: root.height * 276 / 400 - self.height / 2;
+        width: root.show-pits ? root.station * 1.3 : root.station * 0.95;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: Theme.map-ground;
+        border-width: 1.5px;
+        border-color: (root.my-drakes > 0 || root.enemy-drakes > 0) ? Theme.objective-color(2) : Theme.rule-strong;
+        opacity: root.show-pits ? 1.0 : 0.65;
+
+        Path {
+            property <length> icon-sz: max(9px, parent.width * 0.62);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: Theme.lol-objective-path(2);
+            fill: Theme.objective-color(2);
+        }
+    }
+
+    if Theme.style >= 1 && root.show-pits && (root.my-drakes > 0 || root.enemy-drakes > 0): Rectangle {
+        x: root.width * 266 / 400 - self.width / 2;
+        y: root.height * 276 / 400 + root.station * 0.72;
+        width: drake-txt.preferred-width + 8px;
+        height: 15px;
+        border-radius: 3px;
+        background: Theme.panel;
+        border-width: 1px;
+        border-color: Theme.rule-strong;
+        drake-txt := Text {
+            text: root.my-drakes + ":" + root.enemy-drakes;
+            color: Theme.text;
+            font-family: Type.mono-family;
+            font-size: 9px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // ===== Style == 0: Original Observatory metro track =====
+    if Theme.style == 0: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
         commands: "M 40 348 L 40 42 L 358 42";
@@ -684,7 +1001,7 @@ export component LineMap inherits Rectangle {
         stroke-width: root.line-width;
         fill: transparent;
     }
-    Path {
+    if Theme.style == 0: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
         commands: "M 40 348 L 358 42";
@@ -692,7 +1009,7 @@ export component LineMap inherits Rectangle {
         stroke-width: root.line-width;
         fill: transparent;
     }
-    Path {
+    if Theme.style == 0: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
         commands: "M 40 348 L 358 348 L 358 42";
@@ -700,7 +1017,7 @@ export component LineMap inherits Rectangle {
         stroke-width: root.line-width;
         fill: transparent;
     }
-    if root.show-jungle: Path {
+    if Theme.style == 0 && root.show-jungle: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
         commands: "M 95 215 L 107 226 M 120 238 L 132 249 M 145 261 L 157 272 M 210 112 L 222 123 M 235 135 L 247 146 M 260 158 L 272 169";
@@ -709,26 +1026,86 @@ export component LineMap inherits Rectangle {
         fill: transparent;
     }
 
+    // ===== Towers =====
     for t in root.towers: Rectangle {
         x: root.width * t.x / 400 - self.width / 2;
         y: root.height * t.y / 400 - self.height / 2;
-        width: t.standing ? root.station : root.station * 0.78;
+        width: Theme.style >= 1
+            ? (t.standing ? root.station * 1.15 : root.station * 0.8)
+            : (t.standing ? root.station : root.station * 0.78);
         height: self.width;
         border-radius: self.width / 2;
-        background: t.standing ? Theme.team-color(t.mine) : root.halo;
-        border-width: t.standing ? 3px : 2.5px;
-        border-color: t.standing ? root.halo : Theme.team-color(t.mine);
+        background: Theme.style >= 1
+            ? (t.standing ? Theme.map-ground : root.halo)
+            : (t.standing ? Theme.team-color(t.mine) : root.halo);
+        border-width: Theme.style >= 1 ? (t.standing ? 1.5px : 1.5px) : (t.standing ? 3px : 2.5px);
+        border-color: Theme.style >= 1
+            ? Theme.team-color(t.mine)
+            : (t.standing ? root.halo : Theme.team-color(t.mine));
+        opacity: Theme.style >= 1 && !t.standing ? 0.55 : 1.0;
+
+        if Theme.style >= 1 && t.standing: Path {
+            property <length> icon-sz: max(9px, parent.width * 0.65);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: Theme.lol-turret-path();
+            fill: Theme.team-color(t.mine);
+        }
+
+        if Theme.style >= 1 && !t.standing: Path {
+            property <length> icon-sz: max(7px, parent.width * 0.52);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: "M 6 6 L 18 18 M 18 6 L 6 18";
+            stroke: Theme.team-color(t.mine);
+            stroke-width: 2.2px;
+            stroke-line-cap: round;
+        }
     }
 
+    // ===== Allies (Champ Select tokens) =====
     for a in root.allies: Rectangle {
         x: root.width * a.x / 400 - self.width / 2;
         y: root.height * a.y / 400 - self.height / 2;
-        width: a.is-self ? root.station * 1.5 : root.station * 1.25;
+        width: a.is-self ? root.station * 1.65 : root.station * 1.35;
         height: self.width;
-        border-radius: self.width / 2;
-        background: a.is-self ? Theme.plate : Theme.blue;
-        border-width: 3px;
-        border-color: root.halo;
+        background: transparent;
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: self.width / 2;
+            clip: true;
+            background: Theme.style >= 1
+                ? (a.is-self ? Theme.gold : Theme.blue)
+                : (a.is-self ? Theme.plate : Theme.blue);
+            border-width: a.is-self && Theme.style >= 1 ? 2.5px : 2.5px;
+            border-color: Theme.style >= 1
+                ? (a.is-self ? Theme.gold-bright : Theme.blue)
+                : root.halo;
+
+            if Theme.style >= 1 && a.icon.width > 0: Image {
+                width: 100%;
+                height: 100%;
+                source: a.icon;
+                image-fit: cover;
+            }
+            if Theme.style >= 1 && a.icon.width == 0 && a.initials != "": Text {
+                text: a.initials;
+                color: Theme.on-team;
+                font-family: Type.display-family;
+                font-size: max(9px, parent.width * 0.42);
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
 
         Text {
             x: a.label-pos == 1
@@ -742,7 +1119,7 @@ export component LineMap inherits Rectangle {
                     ? parent.height + 5px
                     : (parent.height - self.height) / 2;
             text: a.label;
-            color: Theme.text;
+            color: a.is-self && Theme.style >= 2 ? Theme.gold-bright : Theme.text;
             font-size: Type.small;
             font-weight: 800;
             horizontal-alignment: a.label-pos == 1 ? right : ((a.label-pos == 2 || a.label-pos == 3) ? center : left);
@@ -807,8 +1184,10 @@ export component ObjectiveRow inherits HorizontalLayout {
             height: 14px + c.weight * 3px;
             y: (parent.height - self.height) / 2;
             border-radius: Theme.radius-sm;
-            background: Theme.team-color(c.mine);
-            Path {
+            background: Theme.style >= 1 ? Theme.panel-raised : Theme.team-color(c.mine);
+            border-width: Theme.style >= 1 ? 1.5px : 0px;
+            border-color: Theme.team-color(c.mine);
+            if Theme.style == 0: Path {
                 property <length> icon-sz: max(10px, parent.height - 5px);
                 x: (parent.width - self.icon-sz) / 2;
                 y: (parent.height - self.icon-sz) / 2;
@@ -822,6 +1201,17 @@ export component ObjectiveRow inherits HorizontalLayout {
                 stroke-line-cap: round;
                 stroke-line-join: round;
                 fill: transparent;
+            }
+            if Theme.style >= 1: Path {
+                property <length> icon-sz: max(10px, parent.height - 5px);
+                x: (parent.width - self.icon-sz) / 2;
+                y: (parent.height - self.icon-sz) / 2;
+                width: self.icon-sz;
+                height: self.icon-sz;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: Theme.lol-objective-path(c.kind);
+                fill: Theme.objective-color(c.kind);
             }
         }
 
@@ -845,8 +1235,8 @@ export component ObjectiveRow inherits HorizontalLayout {
                         width: 18px;
                         height: 18px;
                         border-radius: Theme.radius-sm;
-                        background: Theme.team-color(c.mine);
-                        Path {
+                        background: Theme.style >= 1 ? Theme.ground : Theme.team-color(c.mine);
+                        if Theme.style == 0: Path {
                             x: 3px;
                             y: 3px;
                             width: 12px;
@@ -859,6 +1249,16 @@ export component ObjectiveRow inherits HorizontalLayout {
                             stroke-line-cap: round;
                             stroke-line-join: round;
                             fill: transparent;
+                        }
+                        if Theme.style >= 1: Path {
+                            x: 3px;
+                            y: 3px;
+                            width: 12px;
+                            height: 12px;
+                            viewbox-width: 24;
+                            viewbox-height: 24;
+                            commands: Theme.lol-objective-path(c.kind);
+                            fill: Theme.objective-color(c.kind);
                         }
                     }
                 }
@@ -937,6 +1337,7 @@ export component PlayerRow inherits Rectangle {
                 label: root.p.initials;
                 icon: root.p.icon;
                 mine: root.mine;
+                is-self: root.p.is-self;
                 faded: root.p.dead;
             }
         }

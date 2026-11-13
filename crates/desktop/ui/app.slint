@@ -3,7 +3,7 @@ import {
     AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
-    Roundel, ChampPlate, GameIconBadge, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
+    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
     PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
@@ -35,6 +35,7 @@ export struct PerfSettings {
     riot-client: bool,
     replay-api: bool,
     game-icons: bool,
+    splash-backdrops: bool,
     mobile-remote: bool,
     system-footprint: bool,
     endpoint-catalog: bool,
@@ -49,6 +50,7 @@ export struct WaitView {
     summoner-name: string,
     summoner-initials: string,
     summoner-icon: image,
+    rank-tier: string,
     notes: [StatLine],
 }
 
@@ -67,6 +69,7 @@ export struct ChampSelectView {
     my-ban-list: [BanEntry],
     their-ban-list: [BanEntry],
     anonymized: bool,
+    splash-icon: image,
 }
 
 export struct LiveView {
@@ -75,10 +78,16 @@ export struct LiveView {
     dead: bool,
     active-initials: string,
     active-icon: image,
+    splash-icon: image,
     my-score: int,
     enemy-score: int,
     clock: string,
     self-kda: string,
+    my-drakes: int,
+    enemy-drakes: int,
+    baron-owner: int,
+    herald-owner: int,
+    order-is-mine: bool,
     my-players: [PlayerLine],
     enemy-players: [PlayerLine],
     towers: [TowerDot],
@@ -95,6 +104,7 @@ export struct EndView {
     champion-name: string,
     champion-initials: string,
     champion-icon: image,
+    splash-icon: image,
     stats: [StatLine],
 }
 
@@ -218,6 +228,7 @@ component RosterRow inherits Rectangle {
                 label: root.ally.initials;
                 icon: root.ally.icon;
                 mine: true;
+                is-self: root.ally.is-self;
                 empty: root.ally.champion == "";
             }
         }
@@ -321,17 +332,31 @@ component RosterRow inherits Rectangle {
                 }
             }
 
-            Text {
-                text: Theme.lane-name(root.ally.lane)
-                    + " · "
-                    + (root.ally.is-self ? @tr("You · ") : "")
-                    + root.ally.player
-                    + (root.ally.is-premade ? @tr(" (Premade)") : "")
-                    + (!root.ally.hidden && root.ally.rank != "" ? " · " + root.ally.rank : "");
-                color: Theme.muted;
-                font-size: Type.small;
-                font-weight: 600;
-                overflow: elide;
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                if !root.ally.hidden && root.ally.rank-tier != "" && Theme.style >= 1: Rectangle {
+                    width: 15px;
+                    RankedCrest {
+                        y: (parent.height - self.height) / 2;
+                        size: 15px;
+                        tier: root.ally.rank-tier;
+                    }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: Theme.lane-name(root.ally.lane)
+                        + " · "
+                        + (root.ally.is-self ? @tr("You · ") : "")
+                        + root.ally.player
+                        + (root.ally.is-premade ? @tr(" (Premade)") : "")
+                        + (!root.ally.hidden && root.ally.rank != "" ? " · " + root.ally.rank : "");
+                    color: Theme.muted;
+                    font-size: Type.small;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
             }
         }
     }
@@ -344,7 +369,17 @@ component ChampSelectScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: body.preferred-height;
 
+    if Theme.style >= 1: SplashBackdrop {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: Theme.style >= 3 ? 300px : 210px;
+        splash: root.cs.splash-icon;
+        tint: Theme.accent;
+    }
+
     body := VerticalLayout {
+        width: 100%;
         padding: Theme.gutter;
         spacing: Space.lg;
 
@@ -604,7 +639,17 @@ component LiveScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: live-body.preferred-height;
 
+    if Theme.style >= 1: SplashBackdrop {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: Theme.style >= 3 ? 290px : 196px;
+        splash: root.live.splash-icon;
+        tint: root.live.dead ? Theme.danger : Theme.blue;
+    }
+
     live-body := VerticalLayout {
+        width: 100%;
         padding: Theme.gutter;
         spacing: Space.lg;
 
@@ -613,7 +658,7 @@ component LiveScreen inherits Flickable {
             background: root.live.dead ? Theme.danger-soft : Theme.panel;
             border-radius: Theme.radius;
             border-width: 1px;
-            border-color: root.live.dead ? Theme.danger : Theme.rule;
+            border-color: root.live.dead ? Theme.danger : (Theme.style >= 3 ? Theme.gold : Theme.rule);
 
             HorizontalLayout {
                 padding: Space.md;
@@ -628,6 +673,7 @@ component LiveScreen inherits Flickable {
                         label: root.live.active-initials;
                         icon: root.live.active-icon;
                         mine: true;
+                        is-self: true;
                         faded: root.live.dead;
                     }
                 }
@@ -731,7 +777,13 @@ component LiveScreen inherits Flickable {
                     width: 228px;
                     height: 228px;
                     towers: root.live.towers;
-                    show-jungle: false;
+                    show-jungle: Theme.style >= 1;
+                    show-pits: true;
+                    order-is-mine: root.live.order-is-mine;
+                    my-drakes: root.live.my-drakes;
+                    enemy-drakes: root.live.enemy-drakes;
+                    baron-owner: root.live.baron-owner;
+                    herald-owner: root.live.herald-owner;
                     line-width: 7px;
                     station: 15px;
                     halo: Theme.panel;
@@ -808,7 +860,16 @@ component WaitScreen inherits Flickable {
     callback toggle-demo();
     content-height: wait-body.preferred-height;
 
+    if Theme.style >= 1: SplashBackdrop {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: Theme.style >= 3 ? 280px : 190px;
+        tint: root.is-ready-check ? Theme.signal : Theme.accent;
+    }
+
     wait-body := VerticalLayout {
+        width: 100%;
         padding: Theme.gutter;
         spacing: Space.xl;
 
@@ -917,6 +978,14 @@ component WaitScreen inherits Flickable {
                                 font-weight: 800;
                                 vertical-alignment: center;
                             }
+                            if root.wait.rank-tier != "" && Theme.style >= 1: Rectangle {
+                                width: 20px;
+                                RankedCrest {
+                                    y: (parent.height - self.height) / 2;
+                                    size: 18px;
+                                    tier: root.wait.rank-tier;
+                                }
+                            }
                         }
                         for n in root.wait.notes: NoteRow { note: n; }
                     }
@@ -987,6 +1056,14 @@ component WaitScreen inherits Flickable {
                             font-size: Type.body;
                             font-weight: 800;
                             vertical-alignment: center;
+                        }
+                        if root.wait.rank-tier != "" && Theme.style >= 1: Rectangle {
+                            width: 18px;
+                            RankedCrest {
+                                y: (parent.height - self.height) / 2;
+                                size: 16px;
+                                tier: root.wait.rank-tier;
+                            }
                         }
                     }
                     if root.show-party: VerticalLayout {
@@ -1815,7 +1892,17 @@ component EndScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: end-body.preferred-height;
 
+    if Theme.style >= 1: SplashBackdrop {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: Theme.style >= 3 ? 290px : 210px;
+        splash: root.end.splash-icon;
+        tint: root.end.victory ? Theme.live-green : Theme.red;
+    }
+
     end-body := VerticalLayout {
+        width: 100%;
         padding: Theme.gutter;
         spacing: Space.xl;
 
@@ -1840,6 +1927,7 @@ component EndScreen inherits Flickable {
                         label: root.end.champion-initials;
                         icon: root.end.champion-icon;
                         mine: true;
+                        is-self: true;
                     }
                     VerticalLayout {
                         alignment: center;
@@ -1917,6 +2005,8 @@ export component MainWindow inherits Window {
     in property <PerfSettings> perf;
     in-out property <bool> settings-open: false;
     callback toggle-setting(string);
+    in-out property <int> visual-style: 2;
+    callback select-visual-style(int);
 
     callback toggle-widget();
     callback toggle-remote-panel();
@@ -2153,6 +2243,43 @@ export component MainWindow inherits Window {
                         label: @tr("Live Game");
                         port: root.game-live ? ":2999" : @tr("idle");
                         live: root.game-live;
+                    }
+                }
+
+                Divider { }
+
+                SectionLabel { text: @tr("VISUAL STYLE"); }
+                VerticalLayout {
+                    spacing: Space.xs;
+                    HorizontalLayout {
+                        spacing: Space.xs;
+                        Action {
+                            horizontal-stretch: 1;
+                            text: @tr("Current");
+                            selected: root.visual-style == 0;
+                            clicked => { root.select-visual-style(0); }
+                        }
+                        Action {
+                            horizontal-stretch: 1;
+                            text: @tr("Tactical");
+                            selected: root.visual-style == 1;
+                            clicked => { root.select-visual-style(1); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Space.xs;
+                        Action {
+                            horizontal-stretch: 1;
+                            text: @tr("Hextech");
+                            selected: root.visual-style == 2;
+                            clicked => { root.select-visual-style(2); }
+                        }
+                        Action {
+                            horizontal-stretch: 1;
+                            text: @tr("Riot");
+                            selected: root.visual-style == 3;
+                            clicked => { root.select-visual-style(3); }
+                        }
                     }
                 }
 
@@ -2601,6 +2728,12 @@ export component MainWindow inherits Window {
                                     toggled => { root.toggle-setting("game_icons"); }
                                 }
                                 SettingRow {
+                                    title: @tr("Splash backdrops");
+                                    detail: @tr("Fetches and blends cached champion splash art behind stage headers in LoL styles.");
+                                    checked: root.perf.splash-backdrops;
+                                    toggled => { root.toggle-setting("splash_backdrops"); }
+                                }
+                                SettingRow {
                                     title: @tr("Riot Client connection");
                                     detail: @tr("Keeps a second WebSocket open to the Riot Client (chat presence).");
                                     checked: root.perf.riot-client;
@@ -2687,6 +2820,7 @@ component MiniAllyRow inherits Rectangle {
                 label: root.ally.initials;
                 icon: root.ally.icon;
                 mine: true;
+                is-self: root.ally.is-self;
                 empty: root.ally.champion == "";
             }
         }
@@ -2729,9 +2863,12 @@ component MiniPlayerCell inherits VerticalLayout {
             label: root.p.initials;
             icon: root.p.icon;
             mine: root.mine;
+            is-self: root.p.is-self;
             faded: root.p.dead;
-            border-width: root.p.is-self ? 2px : 0px;
-            border-color: Theme.plate;
+            border-width: Theme.style == 0 ? (root.p.is-self ? 2px : 0px) : (root.p.is-self ? 2px : 1.5px);
+            border-color: Theme.style >= 2 && root.p.is-self
+                ? Theme.gold-bright
+                : (Theme.style >= 2 && root.mine ? Theme.gold : (root.p.is-self ? Theme.plate : Theme.team-color(root.mine)));
         }
     }
     Text {
@@ -2765,6 +2902,15 @@ export component MiniWidget inherits Window {
     in property <int> clock-total: 0;
     in property <bool> clock-down: true;
     property <bool> drafting: !root.in-game && root.view == Screen.champ-select;
+
+    if Theme.style >= 1 && (root.drafting || root.in-game): SplashBackdrop {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 170px;
+        splash: root.in-game ? root.live.splash-icon : root.champ.splash-icon;
+        tint: root.in-game && root.live.dead ? Theme.danger : Theme.accent;
+    }
 
     // Between games: what the client is doing, with the queue or ready-check clock.
     if !root.in-game && !root.drafting: VerticalLayout {
@@ -2896,6 +3042,7 @@ export component MiniWidget inherits Window {
                         label: root.live.active-initials;
                         icon: root.live.active-icon;
                         mine: true;
+                        is-self: true;
                         faded: root.live.dead;
                     }
                 }
@@ -2949,7 +3096,13 @@ export component MiniWidget inherits Window {
                     x: 8px;
                     y: 8px;
                     towers: root.live.towers;
-                    show-jungle: false;
+                    show-jungle: Theme.style >= 1;
+                    show-pits: true;
+                    order-is-mine: root.live.order-is-mine;
+                    my-drakes: root.live.my-drakes;
+                    enemy-drakes: root.live.enemy-drakes;
+                    baron-owner: root.live.baron-owner;
+                    herald-owner: root.live.herald-owner;
                     line-width: 5px;
                     station: 10px;
                     halo: Theme.panel;

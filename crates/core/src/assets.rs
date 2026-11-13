@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -31,6 +31,7 @@ pub struct GameAssetCache {
     in_flight: Mutex<HashSet<String>>,
     failed_until: Mutex<HashMap<String, Instant>>,
     meta_synced_port: tokio::sync::Mutex<Option<u16>>,
+    demo_warmed_port: AtomicU16,
     champ_names_by_id: RwLock<HashMap<i64, String>>,
     champ_ids_by_key: RwLock<HashMap<String, i64>>,
     champ_paths: RwLock<HashMap<i64, String>>,
@@ -64,6 +65,7 @@ impl GameAssetCache {
             in_flight: Mutex::new(HashSet::new()),
             failed_until: Mutex::new(HashMap::new()),
             meta_synced_port: tokio::sync::Mutex::new(None),
+            demo_warmed_port: AtomicU16::new(0),
             champ_names_by_id: RwLock::new(HashMap::new()),
             champ_ids_by_key: RwLock::new(HashMap::new()),
             champ_paths: RwLock::new(HashMap::new()),
@@ -198,6 +200,49 @@ impl GameAssetCache {
                 this.mark_failed(&meta_key, Duration::from_secs(5));
             }
             this.in_flight.lock().unwrap().remove(&meta_key);
+        });
+    }
+
+    /// Prefetches the showcase assets used by `--demo` (champion icons, spells, and
+    /// splash arts) once per LCU port while the real League Client is running so offline
+    /// Demo previews immediately display authentic cached Riot artwork.
+    pub fn prefetch_demo_showcase(
+        self: &Arc<Self>,
+        discovery: &Arc<DiscoveryManager>,
+        client: &ReadOnlyRiotClient,
+    ) {
+        let Some((port, password)) = resolve_live_lcu_creds(discovery) else {
+            return;
+        };
+        if self.demo_warmed_port.load(Ordering::Relaxed) == port {
+            return;
+        }
+        let key = format!("__demo_warmup__:{port}");
+        {
+            let mut inflight = self.in_flight.lock().unwrap();
+            if !inflight.insert(key.clone()) {
+                return;
+            }
+        }
+        self.demo_warmed_port.store(port, Ordering::Relaxed);
+
+        let this = Arc::clone(self);
+        let client = client.clone();
+        tokio::spawn(async move {
+            this.ensure_metadata_synced_with_creds(port, &password, &client).await;
+            const GROUPS: &[(&str, &[i64])] = &[
+                ("champion", &[266, 64, 103, 222, 412, 122, 234, 86, 238, 145, 111, 157, 35, 777, 233]),
+                ("spell", &[4, 7, 11, 12, 14]),
+                ("splash", &[103027, 103000, 266000, 64000, 222000, 412000]),
+            ];
+            for &(cat, ids) in GROUPS {
+                for &id in ids {
+                    if this.cached_image_path(cat, id).is_none() {
+                        let _ = this.fetch_from_lcu_with_creds(cat, id, port, &password, &client).await;
+                    }
+                }
+            }
+            this.in_flight.lock().unwrap().remove(&key);
         });
     }
 
@@ -421,6 +466,28 @@ impl GameAssetCache {
                     if !out.contains(&canonical) {
                         out.push(canonical);
                     }
+                }
+            }
+            "splash" => {
+                let (champ_id, skin_id) =
+                    if id >= 1000 { (id / 1000, id) } else { (id, id * 1000) };
+                let base_id = champ_id * 1000;
+                for sid in [skin_id, base_id] {
+                    for path in [
+                        format!("/lol-game-data/assets/v1/champion-splashes/{champ_id}/{sid}.jpg"),
+                        format!(
+                            "/lol-game-data/assets/v1/champion-splashes/uncentered/{champ_id}/{sid}.jpg"
+                        ),
+                    ] {
+                        if !out.contains(&path) {
+                            out.push(path);
+                        }
+                    }
+                }
+                let tile =
+                    format!("/lol-game-data/assets/v1/champion-tiles/{champ_id}/{skin_id}.jpg");
+                if !out.contains(&tile) {
+                    out.push(tile);
                 }
             }
             _ => {}
@@ -708,7 +775,7 @@ fn asset_key(category: &str, id: i64) -> String {
 fn is_valid_asset_id(category: &str, id: i64) -> bool {
     match category {
         "profile" => id >= 0,
-        "champion" | "spell" | "perk" | "style" | "skin" => id > 0,
+        "champion" | "spell" | "perk" | "style" | "skin" | "splash" => id > 0,
         _ => false,
     }
 }
@@ -900,6 +967,24 @@ mod tests {
         assert_eq!(
             cache.candidate_lcu_paths("perk", 8112),
             vec!["/lol-game-data/assets/v1/perk-images/Styles/Domination/Electrocute/Electrocute.png".to_string()]
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("splash", 103027),
+            vec![
+                "/lol-game-data/assets/v1/champion-splashes/103/103027.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103027.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-tiles/103/103027.jpg",
+            ]
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("splash", 103),
+            vec![
+                "/lol-game-data/assets/v1/champion-splashes/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-tiles/103/103000.jpg",
+            ]
         );
 
         let png_bytes = b"\x89PNG\r\n\x1a\nFAKEPNGDATA".to_vec();

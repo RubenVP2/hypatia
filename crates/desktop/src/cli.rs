@@ -52,6 +52,10 @@ pub struct Cli {
     /// Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
     #[arg(long)]
     pub phase: Option<String>,
+
+    /// Select initial visual variant (0=current, 1=tactical, 2=hextech, 3=riot)
+    #[arg(long)]
+    pub style: Option<String>,
 }
 
 impl Cli {
@@ -65,6 +69,17 @@ impl Cli {
             "live" | "inprogress" | "game" => "InProgress",
             "end" | "eog" | "endofgame" => "EndOfGame",
             _ => "ChampSelect",
+        })
+    }
+
+    /// Initial visual LoL integration variant requested on the CLI, if any.
+    pub fn initial_style(&self) -> Option<i32> {
+        let raw = self.style.as_deref()?;
+        Some(match raw.trim().to_ascii_lowercase().as_str() {
+            "0" | "current" | "actuel" | "brut" => 0,
+            "1" | "tactical" | "tactique" => 1,
+            "3" | "riot" | "pur" => 3,
+            _ => 2,
         })
     }
 }

@@ -183,6 +183,18 @@ struct DraftModels {
     their_bans: Rc<VecModel<BanEntry>>,
 }
 
+/// Row models of the live game view, kept like `DraftModels` so a tower that falls or an
+/// objective that is taken updates its own row and plays its moment once.
+#[derive(Default)]
+struct LiveModels {
+    my_players: Rc<VecModel<PlayerLine>>,
+    enemy_players: Rc<VecModel<PlayerLine>>,
+    towers: Rc<VecModel<TowerDot>>,
+    my_objectives: Rc<VecModel<ObjectiveChip>>,
+    enemy_objectives: Rc<VecModel<ObjectiveChip>>,
+    feed: Rc<VecModel<FeedLine>>,
+}
+
 /// Brings `model` to `rows`, touching only the rows that differ.
 fn sync_rows<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: Vec<T>) -> ModelRc<T> {
     let keep = rows.len();
@@ -408,6 +420,7 @@ fn build_live_view(
     board: Option<&LiveBoard>,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
+    models: &LiveModels,
     lang: Lang,
 ) -> LiveView {
     let default_board = LiveBoard::default();
@@ -419,6 +432,7 @@ fn build_live_view(
     let mut self_respawn = 0.0;
     let mut self_kda = format!("{} / {} / {}", lg.kills, lg.deaths, lg.assists);
     let mut self_champion_id = 0;
+    let mut self_skin_id = 0;
 
     for p in &lg.players {
         let mine = (p.team == "ORDER") == b.my_team_is_order;
@@ -431,13 +445,16 @@ fn build_live_view(
             self_kda = kda_str.clone();
             if cid > 0 {
                 self_champion_id = cid;
+                self_skin_id = p.skin_id;
             }
         }
+        let skin = if cid > 0 { cid * 1000 + p.skin_id } else { 0 };
         let row = PlayerLine {
             lane,
             champion: SharedString::from(p.champion_name.as_str()),
             initials: champ_initials(&p.champion_name),
             icon: loader.resolve(app_state, "champion", cid),
+            banner: resolve_skin_art(app_state, loader, art::BANNER_CATEGORY, skin, cid),
             level: p.level as i32,
             kda: SharedString::from(kda_str),
             cs: p.creep_score as i32,
@@ -505,15 +522,15 @@ fn build_live_view(
         })
         .collect();
 
+    let respawn_secs = self_respawn.ceil() as i32;
     let (title, detail) = if self_dead {
-        let respawn_secs = self_respawn.ceil() as i32;
         (
             if lang.is_fr() {
                 format!("Réapparition dans {}s", respawn_secs)
             } else {
                 format!("Respawn in {}s", respawn_secs)
             },
-            format!("{} · {} {}", lg.active_champion, lang.pick("You", "Vous"), self_kda),
+            format!("{} · {}", lg.active_champion, self_kda),
         )
     } else {
         (
@@ -541,6 +558,12 @@ fn build_live_view(
     } else {
         self_champion_id
     };
+    // The skin number belongs to the player's row; it applies only to that same champion.
+    let self_skin = if active_cid > 0 && active_cid == self_champion_id {
+        active_cid * 1000 + self_skin_id
+    } else {
+        0
+    };
     let pits = summarize_pits(b);
 
     LiveView {
@@ -549,7 +572,8 @@ fn build_live_view(
         dead: self_dead,
         active_initials: champ_initials(&lg.active_champion),
         active_icon: loader.resolve(app_state, "champion", active_cid),
-        splash_icon: resolve_splash(app_state, loader, active_cid * 1000, active_cid),
+        splash_icon: resolve_splash(app_state, loader, self_skin, active_cid),
+        respawn_seconds: if self_dead { respawn_secs.max(0) } else { -1 },
         my_score: b.my_kills() as i32,
         enemy_score: b.enemy_kills() as i32,
         clock: format_mm_ss(lg.game_time_sec),
@@ -559,12 +583,12 @@ fn build_live_view(
         baron_owner: pits.baron_owner,
         herald_owner: pits.herald_owner,
         order_is_mine: b.my_team_is_order,
-        my_players: ModelRc::new(VecModel::from(my_players)),
-        enemy_players: ModelRc::new(VecModel::from(enemy_players)),
-        towers: ModelRc::new(VecModel::from(towers)),
-        my_objectives: ModelRc::new(VecModel::from(my_objectives)),
-        enemy_objectives: ModelRc::new(VecModel::from(enemy_objectives)),
-        feed: ModelRc::new(VecModel::from(feed)),
+        my_players: sync_rows(&models.my_players, my_players),
+        enemy_players: sync_rows(&models.enemy_players, enemy_players),
+        towers: sync_rows(&models.towers, towers),
+        my_objectives: sync_rows(&models.my_objectives, my_objectives),
+        enemy_objectives: sync_rows(&models.enemy_objectives, enemy_objectives),
+        feed: sync_rows(&models.feed, feed),
     }
 }
 
@@ -713,6 +737,7 @@ pub struct Companion {
     /// `(splash_enabled, icons_revision)` the client artwork was last resolved for.
     art_key: Option<(bool, u64)>,
     draft: DraftModels,
+    live: LiveModels,
 }
 
 impl Companion {
@@ -751,6 +776,7 @@ impl Companion {
             app_state,
             &mut self.loader,
             &self.draft,
+            &self.live,
             &snapshot,
             self.shown.as_ref(),
             mini_open,
@@ -812,6 +838,7 @@ fn apply_summary(
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
     draft: &DraftModels,
+    live: &LiveModels,
     snap: &SummarySnapshot,
     previous: Option<&Shown>,
     mini_open: bool,
@@ -1114,7 +1141,7 @@ fn apply_summary(
 
     if let Some(ref lg) = snap.live_game {
         if prev.is_none_or(|p| p.live_game.as_ref() != Some(lg) || p.board != snap.board) {
-            let lv = build_live_view(lg, snap.board.as_ref(), app_state, loader, lang);
+            let lv = build_live_view(lg, snap.board.as_ref(), app_state, loader, live, lang);
             // The mini widget only receives data while it is on screen.
             if mini_open {
                 mini_win.set_live(lv.clone());

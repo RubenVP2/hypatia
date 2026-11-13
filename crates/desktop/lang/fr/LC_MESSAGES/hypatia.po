@@ -128,9 +128,13 @@ msgid "Red:"
 msgstr "Rouge :"
 
 #: ui/app.slint:574
-msgctxt "ScoreSpecimen"
-msgid "Score: allies {0}, enemies {1}"
-msgstr "Score : alliés {0}, ennemis {1}"
+msgctxt "LiveHud"
+msgid "Score: allies {0}, enemies {1}, game time {2}"
+msgstr "Score : alliés {0}, ennemis {1}, temps de jeu {2}"
+
+msgctxt "LiveHud"
+msgid "RESPAWN"
+msgstr "RÉAPPARITION"
 
 #: ui/app.slint:701 ui/app.slint:714
 msgctxt "LiveScreen"

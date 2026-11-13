@@ -81,6 +81,8 @@ export struct LiveView {
     active-initials: string,
     active-icon: image,
     splash-icon: image,
+    // Seconds until the player respawns; -1 while alive.
+    respawn-seconds: int,
     my-score: int,
     enemy-score: int,
     clock: string,
@@ -646,36 +648,146 @@ component ChampSelectScreen inherits Flickable {
     }
 }
 
-component ScoreSpecimen inherits HorizontalLayout {
-    in property <int> mine;
-    in property <int> theirs;
-    spacing: Space.sm;
-    alignment: end;
-    accessible-role: text;
-    accessible-label: @tr("Score: allies {0}, enemies {1}", root.mine, root.theirs);
-    Text {
-        text: root.mine;
-        color: Theme.blue;
-        font-family: Type.display-family;
-        font-size: Type.score;
-        font-weight: 800;
-        vertical-alignment: center;
+// One team's kill count in the live HUD. When it goes up, the figure swells and its plate
+// lights in the team colour once (about 350 ms); a drop (a new demo loop) stays silent.
+component HudScore inherits Rectangle {
+    in property <int> value;
+    in property <color> ink;
+    property <int> seen: 0;
+    property <bool> pop: false;
+    init => { self.seen = self.value; }
+    changed value => {
+        if self.value > self.seen && Theme.motion {
+            self.pop = true;
+            settle.running = true;
+        }
+        self.seen = self.value;
     }
-    Text {
-        text: ":";
-        color: Theme.muted;
-        font-family: Type.display-family;
-        font-size: Type.score * 0.75;
-        font-weight: 700;
-        vertical-alignment: center;
+    settle := Timer {
+        interval: Theme.dur-fast;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.pop = false;
+        }
     }
-    Text {
-        text: root.theirs;
-        color: Theme.red;
-        font-family: Type.display-family;
-        font-size: Type.score;
-        font-weight: 800;
-        vertical-alignment: center;
+    width: 64px;
+    height: 44px;
+    background: root.ink.with-alpha(root.pop ? 0.6 : 0.2);
+    border-width: 1px;
+    border-color: root.ink;
+    animate background { duration: root.pop ? Theme.dur-fast : Theme.dur-slow; easing: ease-out; }
+
+    Rectangle {
+        transform-scale: root.pop ? 1.3 : 1;
+        animate transform-scale { duration: root.pop ? Theme.dur-fast : Theme.dur-slow; easing: ease-out; }
+        Text {
+            text: root.value;
+            color: Theme.text;
+            font-family: Type.display-family;
+            font-size: Type.title + 6px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Top of the live screen, over the player's splash: the score band of the in-game HUD (blue
+// kills, game clock, red kills), then the player. While the player is dead, the respawn
+// countdown takes the player's line, one step per second.
+component LiveHud inherits VerticalLayout {
+    in property <LiveView> live;
+    in property <string> clock;
+    // Separate properties: Slint 1.18's code generator mis-moves struct fields read twice.
+    property <int> mine: root.live.my-score;
+    property <int> theirs: root.live.enemy-score;
+    spacing: Space.lg;
+
+    HorizontalLayout {
+        alignment: center;
+        accessible-role: text;
+        accessible-label: @tr("Score: allies {0}, enemies {1}, game time {2}", root.mine, root.theirs, root.clock);
+        HudScore { value: root.mine; ink: Theme.blue; }
+        Rectangle {
+            width: 92px;
+            height: 44px;
+            background: Theme.panel.with-alpha(Theme.dark ? 0.8 : 0.88);
+            border-width: 1px;
+            border-color: Theme.gold;
+            Text {
+                text: root.clock;
+                color: Theme.text;
+                font-family: Type.mono-family;
+                font-size: Type.name;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        HudScore { value: root.theirs; ink: Theme.red; }
+    }
+
+    HorizontalLayout {
+        spacing: Space.lg;
+        alignment: start;
+
+        if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
+            width: 56px;
+            ChampPlate {
+                y: (parent.height - self.height) / 2;
+                size: 56px;
+                label: root.live.active-initials;
+                icon: root.live.active-icon;
+                mine: true;
+                is-self: true;
+                faded: root.live.dead;
+            }
+        }
+
+        if !root.live.dead: VerticalLayout {
+            alignment: center;
+            spacing: Space.xxs;
+            Text {
+                text: root.live.title;
+                color: Theme.text;
+                font-family: Type.display-family;
+                font-size: Type.headline;
+                font-weight: 800;
+            }
+            Text {
+                text: root.live.detail;
+                color: Theme.muted;
+                font-size: Type.body;
+                font-weight: 600;
+            }
+        }
+
+        if root.live.dead: VerticalLayout {
+            alignment: center;
+            spacing: 0px;
+            Text {
+                text: @tr("RESPAWN");
+                color: Theme.danger;
+                font-family: Type.mono-family;
+                font-size: Type.label;
+                font-weight: 800;
+                letter-spacing: 1.5px;
+            }
+            Text {
+                text: Theme.clock-text(Math.max(0, root.live.respawn-seconds));
+                color: Theme.danger;
+                font-family: Type.display-family;
+                font-size: Type.timer + 8px;
+                font-weight: 800;
+            }
+            Text {
+                text: root.live.detail;
+                color: Theme.muted;
+                font-size: Type.body;
+                font-weight: 600;
+            }
+        }
     }
 }
 
@@ -685,13 +797,24 @@ component LiveScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: live-body.preferred-height;
 
-    SplashBackdrop {
+    HeroSplash {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: 196px;
+        height: 230px;
         splash: root.live.splash-icon;
-        tint: root.live.dead ? Theme.danger : Theme.blue;
+    }
+
+    // Death: a dark red veil falls over the splash until the player respawns.
+    Rectangle {
+        property <color> veil: Theme.dark ? #1c0507 : Theme.danger-soft;
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 230px;
+        background: @linear-gradient(180deg, self.veil 0%, self.veil 55%, self.veil.with-alpha(0) 100%);
+        opacity: root.live.dead ? 0.8 : 0;
+        animate opacity { duration: Theme.dur-slow; easing: ease-out; }
     }
 
     live-body := VerticalLayout {
@@ -699,112 +822,9 @@ component LiveScreen inherits Flickable {
         padding: Theme.gutter;
         spacing: Space.lg;
 
-        // Top score & game clock telemetry bar
-        Rectangle {
-            background: root.live.dead ? Theme.danger-soft : Theme.panel;
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: root.live.dead ? Theme.danger : Theme.rule;
-
-            if !root.live.dead: Rectangle {
-                width: 100%;
-                height: 100%;
-                border-radius: parent.border-radius;
-                clip: true;
-                SplashBackdrop {
-                    width: 100%;
-                    height: 100%;
-                    splash: root.live.splash-icon;
-                    tint: Theme.blue;
-                    surface: Theme.panel;
-                    card-mode: true;
-                }
-            }
-
-            if !root.live.dead: Rectangle {
-                x: 0px;
-                y: 6px;
-                width: 3px;
-                height: max(0px, parent.height - 12px);
-                background: Theme.gold-bright;
-            }
-
-            HorizontalLayout {
-                padding: Space.md;
-                spacing: Space.lg;
-                alignment: stretch;
-
-                if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
-                    width: 46px;
-                    ChampPlate {
-                        y: (parent.height - self.height) / 2;
-                        size: 46px;
-                        label: root.live.active-initials;
-                        icon: root.live.active-icon;
-                        mine: true;
-                        is-self: true;
-                        faded: root.live.dead;
-                    }
-                }
-
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    alignment: center;
-                    spacing: Space.xxs;
-                    Text {
-                        text: root.live.title;
-                        color: root.live.dead ? Theme.danger : Theme.text;
-                        font-family: Type.display-family;
-                        font-size: Type.headline;
-                        font-weight: 800;
-                    }
-                    Text {
-                        text: root.live.detail;
-                        color: Theme.muted;
-                        font-size: Type.body;
-                        font-weight: 600;
-                    }
-                }
-
-                if !root.compact: VerticalLayout {
-                    alignment: center;
-                    ScoreSpecimen { mine: root.live.my-score; theirs: root.live.enemy-score; }
-                }
-
-                Rectangle {
-                    width: 112px;
-                    background: Theme.ground;
-                    border-radius: Theme.radius-sm;
-                    border-width: 1px;
-                    border-color: Theme.rule;
-                    VerticalLayout {
-                        padding: Space.sm;
-                        alignment: center;
-                        spacing: 1px;
-                        Text {
-                            text: root.clock-seconds >= 0 ? Theme.clock-text(root.clock-seconds) : root.live.clock;
-                            color: Theme.text;
-                            font-family: Type.mono-family;
-                            font-size: Type.title;
-                            font-weight: 700;
-                            horizontal-alignment: center;
-                        }
-                        Text {
-                            text: root.live.self-kda;
-                            color: Theme.muted;
-                            font-family: Type.mono-family;
-                            font-size: Type.label;
-                            horizontal-alignment: center;
-                        }
-                    }
-                }
-            }
-        }
-
-        if root.compact: ScoreSpecimen {
-            alignment: center;
-            mine: root.live.my-score;
-            theirs: root.live.enemy-score;
+        LiveHud {
+            live: root.live;
+            clock: root.clock-seconds >= 0 ? Theme.clock-text(root.clock-seconds) : root.live.clock;
         }
 
         if !root.compact: HorizontalLayout {

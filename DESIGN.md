@@ -187,7 +187,8 @@ Imagery comes only from the player's own League client, fetched read-only over t
 - **Ready-check medallion**: the client's round valley disc takes the centre of the ready check (`ReadyMedallion`), clipped to its circle, inside a countdown ring that loses one notch per second. The ring is amber, then red under 5 s; Hextech cyan with a check once accepted; red with a cross if declined. The medallion stays a dark object in Day as well.
 - **Victory and defeat crests**, prepared for the Results redesign.
 - **Champion splash art** behind phase headers once a champion is known. In Champion Select it runs full-bleed behind the header (the player's own skin, veiled on the left, fading into the page), and the headline plate turns translucent (`glass`) instead of carrying its own copy.
-- **Draft banners** (asset category `banner`): a 480x120 strip cut from each ally's chosen-skin splash fills the right of their draft row and melts into it from the left. A hovered champion shows at 40%, a locked pick at full strength.
+- **Draft banners** (asset category `banner`): a 480x120 strip cut from each ally's chosen-skin splash fills the right of their draft row and melts into it from the left. A hovered champion shows at 40%, a locked pick at full strength. In game the same strip, from each player's `skinID`, fills the right of all ten scoreboard rows and goes out (10%) while that player is dead.
+- **In game**, the player's own skin splash runs full-bleed behind the live HUD, as in Champion Select; a dark red veil falls over it while the player is dead.
 Each piece is cropped, downscaled to about twice its largest on-screen size, and blurred if needed **once in Rust** before it reaches the disk cache; the UI never scales a full-size texture or blurs at render time. The *Client artwork* switch (with *Game icons*) turns all of it off.
 
 ### Named Rules
@@ -207,7 +208,7 @@ Each piece is cropped, downscaled to about twice its largest on-screen size, and
 
 ### Hierarchy
 - **Specimen** (`800`, `88px` desktop / `64px` compact and mini widget / `56px` mobile, `-1px` tracking): The one running clock, or the final KDA, on each phase header.
-- **Display Score** (`800`, `56px` desktop / `46px` mobile / `32px` mini widget): Live team kill comparisons in `ScoreSpecimen`.
+- **Display Score** (`800`, `28px` in the desktop live HUD / `46px` mobile / `32px` mini widget): team kills. On desktop they sit in the `LiveHud` score band (blue plate, gold-ruled clock plate, red plate), like the in-game scoreboard; the respawn countdown that replaces the player's line while dead is `40px` `danger`.
 - **Timer** (`800`, `32px`): Secondary clocks such as the mini widget game time.
 - **Headline / Title** (`800`, `22px–26px`, uppercase condensed in panel headers): Attention plates, modal headers, and mobile section headings.
 - **Body** (`600`, `14px`): Primary status copy, summoner/champion rows, and descriptions.
@@ -270,6 +271,11 @@ Motion marks a change of state that matters to the player; nothing loops and not
   - **Enemy reveal:** the portrait scales in from 80% and a red ring fades out.
 
   The draft row models live for the whole session and are updated in place (`DraftModels` in `companion.rs`), so a new model never rebuilds the rows and replays them. Between moments the window stays at the idle frame rate.
+- **Live moments**, each played once on the event, never on a drop (`LiveModels` keep the rows in place):
+  - **Kill:** the scoring team's figure swells to 130% and its plate lights in the team color (`110ms` up, `240ms` back).
+  - **Objective taken:** the chip fades in (`240ms`) and a ring flares from its pit on the map and fades (`Ping`, `360ms`).
+  - **Tower destroyed:** a ring in the tower's team color flares from it and fades (`Ping`, `360ms`).
+  - **Death:** the red veil fades over the splash (`240ms`) and the respawn countdown steps down once per second, untweened.
 - **Phase ticker:** connector and node fill over `240ms`. Whole screens never crossfade.
 - **Reduced motion:** `Theme.motion` is false when Windows "Show animations" is off, when *Reduce motion* is on in the Performance sheet, or with `--reduce-motion`; every duration then becomes 0. The mobile page honors `prefers-reduced-motion`.
 

@@ -62,6 +62,8 @@ export struct PlayerLine {
     champion: string,
     initials: string,
     icon: image,
+    // Splash strip of the player's skin (prepared `banner` asset); empty until cached.
+    banner: image,
     level: int,
     kda: string,
     cs: int,
@@ -1059,6 +1061,38 @@ export global ClientArt {
 // Summoner's Rift map: the client's painted rift when cached, a vector rift otherwise.
 // Markers live in a 400-unit plan (Order base bottom-left, Chaos top-right). On the painting
 // they are projected through its four lane corners, which absorbs the slight perspective.
+// A ring that flares from an element and fades once each time `count` goes up (a tower falls,
+// a pit is taken). A drop stays silent, so a reset or a new demo loop never plays it.
+export component Ping inherits Rectangle {
+    in property <int> count;
+    in property <color> ink: Theme.gold-bright;
+    property <int> seen: 0;
+    property <bool> lit: false;
+    init => { self.seen = self.count; }
+    changed count => {
+        if self.count > self.seen && Theme.motion {
+            self.lit = true;
+            hold.running = true;
+        }
+        self.seen = self.count;
+    }
+    hold := Timer {
+        interval: 60ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.lit = false;
+        }
+    }
+    border-radius: self.width / 2;
+    border-width: 2px;
+    border-color: root.ink;
+    opacity: root.lit ? 1 : 0;
+    transform-scale: root.lit ? 1 : 1.9;
+    // Lighting is instant; only the fade and the spread are animated.
+    animate opacity, transform-scale { duration: root.lit ? 0ms : Theme.dur-reveal; easing: ease-out; }
+}
+
 export component LineMap inherits Rectangle {
     in property <[TowerDot]> towers;
     in property <[MapAlly]> allies;
@@ -1235,6 +1269,15 @@ export component LineMap inherits Rectangle {
         border-color: (root.baron-owner > 0 || root.herald-owner > 0) ? self.pit-c : Theme.rule-strong;
         opacity: root.show-pits ? 1.0 : 0.65;
 
+        Ping {
+            x: -4px;
+            y: -4px;
+            width: parent.width + 8px;
+            height: parent.height + 8px;
+            count: root.baron-owner * 3 + root.herald-owner;
+            ink: parent.pit-c;
+        }
+
         Path {
             property <length> icon-sz: max(9px, parent.width * 0.62);
             x: (parent.width - self.icon-sz) / 2;
@@ -1260,6 +1303,15 @@ export component LineMap inherits Rectangle {
         border-width: 1.5px;
         border-color: (root.my-drakes > 0 || root.enemy-drakes > 0) ? Theme.objective-color(2) : Theme.rule-strong;
         opacity: root.show-pits ? 1.0 : 0.65;
+
+        Ping {
+            x: -4px;
+            y: -4px;
+            width: parent.width + 8px;
+            height: parent.height + 8px;
+            count: root.my-drakes + root.enemy-drakes;
+            ink: Theme.objective-color(2);
+        }
 
         Path {
             property <length> icon-sz: max(9px, parent.width * 0.62);
@@ -1327,6 +1379,16 @@ export component LineMap inherits Rectangle {
             stroke: Theme.team-color(t.mine);
             stroke-width: 2.2px;
             stroke-line-cap: round;
+        }
+
+        // Falls: a ring flares from the tower once (rows are updated in place).
+        Ping {
+            x: -5px;
+            y: -5px;
+            width: parent.width + 10px;
+            height: parent.height + 10px;
+            count: t.standing ? 0 : 1;
+            ink: Theme.team-color(t.mine);
         }
     }
 
@@ -1441,6 +1503,10 @@ export component ObjectiveRow inherits HorizontalLayout {
         accessible-label: c.label;
 
         if root.compact: Rectangle {
+            property <bool> fired: false;
+            init => { self.fired = true; }
+            opacity: self.fired ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
             width: 14px + c.weight * 3px;
             height: 14px + c.weight * 3px;
             y: (parent.height - self.height) / 2;
@@ -1462,6 +1528,10 @@ export component ObjectiveRow inherits HorizontalLayout {
         }
 
         if !root.compact: Rectangle {
+            property <bool> fired: false;
+            init => { self.fired = true; }
+            opacity: self.fired ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
             height: 26px;
             width: chip-row.preferred-width;
             y: (parent.height - self.height) / 2;
@@ -1567,12 +1637,31 @@ export component PlayerRow inherits Rectangle {
     height: 50px;
     border-radius: Theme.radius;
     background: p.is-self ? Theme.panel-raised : Theme.panel;
-    border-width: 1px;
-    border-color: p.is-self ? Theme.rule-strong : Theme.rule;
+    clip: true;
     accessible-role: text;
     accessible-label: (root.p.is-self ? @tr("{0}, you", root.p.champion) : root.p.champion)
         + ", " + root.p.kda
         + (root.p.dead ? @tr(", dead, respawn in {0}", root.p.respawn) : "");
+
+    // Splash strip of the player's skin on the right, melting into the row; it goes out while
+    // the player is dead.
+    if root.p.banner.width > 0: Rectangle {
+        x: parent.width * 0.42;
+        width: parent.width * 0.58;
+        height: 100%;
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.p.banner;
+            image-fit: cover;
+            opacity: root.p.dead ? 0.1 : (Theme.dark ? 0.7 : 0.55);
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        Rectangle {
+            background: @linear-gradient(90deg, root.background 0%, root.background.with-alpha(0.55) 45%, root.background.with-alpha(0.3) 100%);
+        }
+    }
+
     HorizontalLayout {
         padding-left: Space.md;
         padding-right: Space.md;
@@ -1623,6 +1712,13 @@ export component PlayerRow inherits Rectangle {
             vertical-alignment: center;
             min-width: 68px;
         }
+    }
+
+    // Border drawn over the strip.
+    Rectangle {
+        border-radius: root.border-radius;
+        border-width: 1px;
+        border-color: root.p.is-self ? Theme.rule-strong : Theme.rule;
     }
 }
 

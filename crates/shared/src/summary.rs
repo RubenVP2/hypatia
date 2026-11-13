@@ -204,6 +204,9 @@ pub struct LiveGamePlayerSummary {
     pub is_dead: bool,
     #[serde(default)]
     pub respawn_timer_sec: f64,
+    /// Skin number within the champion (`skinID`, 0 for the base skin).
+    #[serde(default)]
+    pub skin_id: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1174,6 +1177,7 @@ fn extract_live_game_summary(
 
             let is_dead = p.get("isDead").and_then(|v| v.as_bool()).unwrap_or(false);
             let respawn_timer_sec = p.get("respawnTimer").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let skin_id = p.get("skinID").and_then(|v| v.as_i64()).unwrap_or(0);
             let champion_id = p
                 .get("championId")
                 .and_then(|v| v.as_i64())
@@ -1182,6 +1186,7 @@ fn extract_live_game_summary(
             let summary = LiveGamePlayerSummary {
                 is_dead,
                 respawn_timer_sec,
+                skin_id,
                 riot_id: p_riot_id.to_string(),
                 champion_id,
                 champion_name: champ,
@@ -1560,7 +1565,8 @@ mod tests {
                     "championName": "Kai'Sa",
                     "rawChampionName": "game_character_displayname_Kaisa",
                     "team": "ORDER",
-                    "position": "BOTTOM"
+                    "position": "BOTTOM",
+                    "skinID": 14
                 },
                 {
                     "riotId": "Ally#EUW",
@@ -1588,6 +1594,8 @@ mod tests {
         assert_eq!(live.players[0].champion_id, 145);
         assert_eq!(live.players[1].champion_id, 11);
         assert_eq!(live.players[1].champion_alias, "MasterYi");
+        assert_eq!(live.players[0].skin_id, 14);
+        assert_eq!(live.players[1].skin_id, 0);
         assert!(snap.board.is_some());
 
         let eog = snap.end_of_game.unwrap();

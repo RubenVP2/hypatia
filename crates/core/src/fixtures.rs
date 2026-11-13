@@ -381,7 +381,7 @@ pub fn spawn_demo_generator(
                         restart_demo_draft_timer(&store, &active, &vault, left_ms);
                     }
                     if override_phase == "InProgress" {
-                        game_time_sec += 1;
+                        game_time_sec = next_demo_game_time(game_time_sec);
                         let Some(mut s) = lock_if_active(&store, &active) else {
                             continue;
                         };
@@ -706,7 +706,7 @@ pub fn spawn_demo_generator(
                     }
                 }
                 "InProgress" => {
-                    game_time_sec += 1;
+                    game_time_sec = next_demo_game_time(game_time_sec);
                     let sub = tick_counter % 3;
                     match sub {
                         0 => (
@@ -787,6 +787,23 @@ fn demo_their_team(tick: u64) -> serde_json::Value {
     json!(members)
 }
 
+/// The demo match replays this stretch of game clock, so kills, a tower, a drake and the
+/// player's own death keep coming back (the live board's one-shot moments).
+const DEMO_LIVE_LOOP: std::ops::RangeInclusive<u32> = 1122..=1260;
+
+/// The demo game clock one tick later, looping over `DEMO_LIVE_LOOP`.
+fn next_demo_game_time(game_time_sec: u32) -> u32 {
+    let next = game_time_sec + 1;
+    if DEMO_LIVE_LOOP.contains(&next) { next } else { *DEMO_LIVE_LOOP.start() }
+}
+
+/// Kills inside the demo loop: (game time, killer index, victim index) into `DEMO_PLAYERS`.
+const DEMO_LATE_KILLS: [(u32, usize, usize); 3] = [(1172, 0, 5), (1205, 7, 2), (1245, 3, 8)];
+/// The player (Ahri) is dead over this stretch of the loop.
+const DEMO_SELF_DEATH: std::ops::Range<u32> = 1205..1220;
+/// Skin number per demo player (Ahri wears the skin shown in the demo draft).
+const DEMO_SKINS: [i64; 10] = [0, 0, 27, 0, 0, 0, 0, 0, 0, 0];
+
 const DEMO_PLAYERS: [(&str, &str, &str, &str); 10] = [
     ("Nightfall#EUW", "Garen", "ORDER", "TOP"),
     ("KronoTrigger#EUW", "Lee Sin", "ORDER", "JUNGLE"),
@@ -824,18 +841,30 @@ pub(crate) fn seed_demo_live_snapshot(
 
 /// Full Live Client Data payload for the demo match, consistent with `demo_eventdata`.
 fn demo_allgamedata(game_time_sec: u32) -> serde_json::Value {
-    let kda = [
+    let mut kda = [
         (2, 2, 3), (3, 1, 6), (6, 1, 8), (3, 2, 4), (0, 1, 9),
         (3, 3, 1), (2, 2, 2), (2, 4, 1), (1, 2, 2), (1, 2, 3),
     ];
+    for &(t, killer, victim) in &DEMO_LATE_KILLS {
+        if t <= game_time_sec {
+            kda[killer].0 += 1;
+            kda[victim].1 += 1;
+        }
+    }
     let levels = [11, 10, 12, 10, 9, 12, 10, 11, 11, 8];
     let zed_dead = game_time_sec % 40 < 14;
+    let self_dead = DEMO_SELF_DEATH.contains(&game_time_sec);
     let players: Vec<serde_json::Value> = DEMO_PLAYERS
         .iter()
         .enumerate()
         .map(|(i, (riot_id, champ, team, pos))| {
             let (k, d, a) = kda[i];
-            let dead = i == 7 && zed_dead;
+            let dead = (i == 7 && zed_dead) || (i == 2 && self_dead);
+            let respawn = match i {
+                2 if self_dead => (DEMO_SELF_DEATH.end - game_time_sec) as f64,
+                7 if zed_dead => (14 - game_time_sec % 40) as f64,
+                _ => 0.0,
+            };
             json!({
                 "riotId": riot_id,
                 "riotIdGameName": riot_id.split('#').next().unwrap_or(riot_id),
@@ -845,7 +874,8 @@ fn demo_allgamedata(game_time_sec: u32) -> serde_json::Value {
                 "position": pos,
                 "level": levels[i],
                 "isDead": dead,
-                "respawnTimer": if dead { (14 - game_time_sec % 40) as f64 } else { 0.0 },
+                "respawnTimer": respawn,
+                "skinID": DEMO_SKINS[i],
                 "scores": { "kills": k, "deaths": d, "assists": a, "creepScore": 120 + i * 9 }
             })
         })
@@ -858,7 +888,7 @@ fn demo_allgamedata(game_time_sec: u32) -> serde_json::Value {
             "summonerName": "HypatiaObserver#EUW",
             "currentGold": 1450 + (game_time_sec % 120) * 15,
             "level": 12,
-            "scores": { "kills": 6, "deaths": 1, "assists": 8, "creepScore": 154 }
+            "scores": { "kills": kda[2].0, "deaths": kda[2].1, "assists": kda[2].2, "creepScore": 154 }
         },
         "allPlayers": players,
         "events": demo_eventdata(game_time_sec),
@@ -887,6 +917,11 @@ fn demo_eventdata(game_time_sec: u32) -> serde_json::Value {
         (1135.0, json!({"EventName": "DragonKill", "DragonType": "Earth", "KillerName": "Sora", "Stolen": "False"})),
         (1150.0, json!({"EventName": "ChampionKill", "KillerName": "Vesper", "VictimName": "Moonwell"})),
         (1160.0, json!({"EventName": "BaronKill", "KillerName": "KronoTrigger", "Stolen": "True"})),
+        (1172.0, json!({"EventName": "ChampionKill", "KillerName": "Nightfall", "VictimName": "Blackwood"})),
+        (1188.0, json!({"EventName": "TurretKilled", "TurretKilled": "Turret_T2_C_04_A", "KillerName": "HypatiaObserver"})),
+        (1205.0, json!({"EventName": "ChampionKill", "KillerName": "Kagero", "VictimName": "HypatiaObserver"})),
+        (1230.0, json!({"EventName": "DragonKill", "DragonType": "Air", "KillerName": "Hollow", "Stolen": "False"})),
+        (1245.0, json!({"EventName": "ChampionKill", "KillerName": "Sora", "VictimName": "Vesper"})),
     ];
     let events: Vec<serde_json::Value> = log
         .iter()

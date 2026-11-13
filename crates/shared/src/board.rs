@@ -436,6 +436,7 @@ mod tests {
             is_self,
             is_dead: false,
             respawn_timer_sec: 0.0,
+            skin_id: 0,
         }
     }
 

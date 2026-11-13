@@ -205,8 +205,8 @@ impl GameAssetCache {
         });
     }
 
-    /// Prefetches the showcase assets used by `--demo` (champion icons, spells, and
-    /// splash arts) once per LCU port while the real League Client is running so offline
+    /// Prefetches the showcase assets used by `--demo` (champion icons, spells, splash arts
+    /// and the Summoner's Rift client artwork) once per LCU port while the real League Client is running so offline
     /// Demo previews immediately display authentic cached Riot artwork.
     pub fn prefetch_demo_showcase(
         self: &Arc<Self>,
@@ -236,6 +236,7 @@ impl GameAssetCache {
                 ("champion", &[266, 64, 103, 222, 412, 122, 234, 86, 238, 145, 111, 157, 35, 777, 233]),
                 ("spell", &[4, 7, 11, 12, 14]),
                 ("splash", &[103027, 103000, 266000, 64000, 222000, 412000]),
+                (crate::art::CATEGORY, &[1, 2, 3, 4, 5, 6]),
             ];
             for &(cat, ids) in GROUPS {
                 for &id in ids {
@@ -373,7 +374,17 @@ impl GameAssetCache {
         for lcu_path in candidates {
             match client.get_bytes(port, Some(password), &lcu_path).await {
                 Ok((status, _, bytes)) if status.is_success() => {
-                    if let Some((ext, mime)) = detect_image_format(&bytes) {
+                    let prepared = match crate::art::ClientArt::from_id(id) {
+                        Some(art) if category == crate::art::CATEGORY => {
+                            // Decode, crop, scale and blur off the async workers, once.
+                            tokio::task::spawn_blocking(move || art.prepare(&bytes))
+                                .await
+                                .ok()
+                                .flatten()
+                        }
+                        _ => detect_image_format(&bytes).map(|(ext, mime)| (bytes, ext, mime)),
+                    };
+                    if let Some((bytes, ext, mime)) = prepared {
                         let path = self.file_path(category, id, ext);
                         if let Some(parent) = path.parent() {
                             let _ = tokio::fs::create_dir_all(parent).await;
@@ -391,7 +402,7 @@ impl GameAssetCache {
                         self.signal.bump();
                         return Some((mime, bytes));
                     } else {
-                        debug!("Skipping non-PNG/JPEG payload from LCU {}", lcu_path);
+                        debug!("Skipping unusable image payload from LCU {}", lcu_path);
                     }
                 }
                 Ok((status, _, _)) if status.as_u16() == 404 => {
@@ -420,6 +431,9 @@ impl GameAssetCache {
     fn candidate_lcu_paths(&self, category: &str, id: i64) -> Vec<String> {
         let mut out = Vec::new();
         match category {
+            crate::art::CATEGORY => {
+                out.extend(crate::art::ClientArt::from_id(id).map(|a| a.lcu_path()));
+            }
             "champion" => {
                 if let Some(p) = self.champ_paths.read().unwrap().get(&id) {
                     out.push(p.clone());
@@ -545,9 +559,11 @@ impl GameAssetCache {
                         continue;
                     };
                     names.insert(id, name.to_string());
-                    keys.insert(normalize_champion_key(name), id);
+                    // Game-mode variants (e.g. `Jade_Annie`, id 60001) reuse the base champion's
+                    // display name: a name always resolves to the lowest id, the real champion.
+                    keep_lowest_id(&mut keys, normalize_champion_key(name), id);
                     if let Some(alias) = entry.get("alias").and_then(|v| v.as_str()) {
-                        keys.insert(normalize_champion_key(alias), id);
+                        keep_lowest_id(&mut keys, normalize_champion_key(alias), id);
                     }
                     if let Some(raw_path) = entry.get("squarePortraitPath").and_then(|v| v.as_str()) {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
@@ -568,7 +584,8 @@ impl GameAssetCache {
                         bannable: true,
                     });
                 }
-                catalog.sort_by(|a, b| a.name.cmp(&b.name));
+                catalog.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+                catalog.dedup_by(|later, first| later.name == first.name);
                 if !catalog.is_empty() {
                     *self.champ_catalog.write().unwrap() = catalog;
                 }
@@ -820,10 +837,17 @@ fn asset_key(category: &str, id: i64) -> String {
     format!("{category}/{id}")
 }
 
+fn keep_lowest_id(keys: &mut HashMap<String, i64>, key: String, id: i64) {
+    keys.entry(key)
+        .and_modify(|existing| *existing = (*existing).min(id))
+        .or_insert(id);
+}
+
 fn is_valid_asset_id(category: &str, id: i64) -> bool {
     match category {
         "profile" => id >= 0,
         "champion" | "spell" | "perk" | "style" | "skin" | "splash" => id > 0,
+        crate::art::CATEGORY => crate::art::ClientArt::from_id(id).is_some(),
         _ => false,
     }
 }
@@ -972,6 +996,29 @@ mod tests {
         assert_eq!(sanitize_lcu_asset_path("/lol-summoner/v1/current-summoner"), None);
         assert_eq!(sanitize_lcu_asset_path("/lol-game-data/assets/../../etc/passwd"), None);
         assert_eq!(sanitize_lcu_asset_path("https://cdn.example.com/103.png"), None);
+    }
+
+    #[test]
+    fn game_mode_variants_never_shadow_the_real_champion() {
+        let dir = temp_cache_dir("mode_variants");
+        let cache = GameAssetCache::with_dir(dir.clone());
+        cache.ingest_metadata(
+            "champion-summary.json",
+            &json!([
+                {"id": 60086, "name": "Garen", "alias": "Jade_Garen"},
+                {"id": 86, "name": "Garen", "alias": "Garen"},
+                {"id": 60103, "name": "Ahri", "alias": "Jade_Ahri"},
+                {"id": 103, "name": "Ahri", "alias": "Ahri"}
+            ]),
+        );
+        assert_eq!(cache.resolve_champion_id("Garen"), 86);
+        assert_eq!(cache.resolve_champion_id("Ahri"), 103);
+        assert_eq!(cache.resolve_champion_id("Jade_Ahri"), 60103);
+        let catalog = cache.champion_catalog();
+        let garens: Vec<i64> = catalog.iter().filter(|c| c.name == "Garen").map(|c| c.id).collect();
+        assert_eq!(garens, vec![86], "one picker entry per champion name");
+        assert!(catalog.iter().all(|c| c.id < 60000));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

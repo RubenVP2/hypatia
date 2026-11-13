@@ -97,6 +97,51 @@ fn lock_if_active<'a>(
     active.load(Ordering::SeqCst).then_some(guard)
 }
 
+/// Endpoint carrying the demo post-game summary.
+pub(crate) const DEMO_EOG_URI: &str = "/lol-end-of-game/v1/eog-stats-block";
+
+/// Post-game stats block for the demo match (Ahri, victory).
+pub(crate) fn demo_eog_stats() -> serde_json::Value {
+    json!({
+        "gameId": 894512301,
+        "gameLength": 1694,
+        "gameMode": "CLASSIC",
+        "gameResult": "Victory",
+        "localPlayer": {
+            "championName": "Ahri",
+            "stats": {
+                "CHAMPIONS_KILLED": 9,
+                "NUM_DEATHS": 2,
+                "ASSISTS": 14,
+                "GOLD_EARNED": 14950,
+                "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 34820
+            }
+        }
+    })
+}
+
+/// A pinned draft never advances on its own: once its countdown runs out, start it again
+/// (alternating 30 s / 29 s so the projection sees a new timer and re-anchors its clock).
+fn restart_demo_draft_timer(
+    store: &RwLock<EventStore>,
+    active: &AtomicBool,
+    vault: &SecretVault,
+    left_ms: u64,
+) {
+    const URI: &str = "/lol-champ-select/v1/session";
+    let Some(mut s) = lock_if_active(store, active) else {
+        return;
+    };
+    let Some(mut session) = s.current(SourceId::LeagueClient, URI).map(|v| (*v).clone()) else {
+        return;
+    };
+    if let Some(timer) = session.get_mut("timer").and_then(|t| t.as_object_mut()) {
+        timer.insert("adjustedTimeLeftInPhase".to_string(), json!(left_ms));
+        timer.insert("totalTimeInPhase".to_string(), json!(30_000));
+    }
+    s.insert_event(SourceId::LeagueClient, EventKind::Update, URI.to_string(), session, vault);
+}
+
 /// Writes the synthetic baseline (summoner, ranked, lobby, Lobby phase) so the projection is
 /// immediately rich when Demo starts.
 fn seed_demo_baseline(store: &RwLock<EventStore>, active: &AtomicBool, vault: &SecretVault) {
@@ -212,6 +257,10 @@ pub fn spawn_demo_generator(
         let mut tick_counter: u64 = 0;
         let mut game_time_sec: u32 = 1122;
         let mut running = false;
+        // Pinned Champ Select: when the current countdown ends, and which length comes next.
+        let mut pinned_phase = String::new();
+        let mut draft_deadline = Instant::now();
+        let mut draft_flip = false;
 
         loop {
             if !active.load(Ordering::Relaxed) {
@@ -239,6 +288,17 @@ pub fn spawn_demo_generator(
                     (g.manual_override, g.phase.clone())
                 };
                 if overridden {
+                    if override_phase != pinned_phase {
+                        // `DemoSetPhase` just wrote a 24 s draft countdown.
+                        draft_deadline = Instant::now() + Duration::from_secs(24);
+                        pinned_phase = override_phase.clone();
+                    }
+                    if override_phase == "ChampSelect" && Instant::now() >= draft_deadline {
+                        let left_ms = if draft_flip { 29_000 } else { 30_000 };
+                        draft_flip = !draft_flip;
+                        draft_deadline = Instant::now() + Duration::from_millis(left_ms);
+                        restart_demo_draft_timer(&store, &active, &vault, left_ms);
+                    }
                     if override_phase == "InProgress" {
                         game_time_sec += 1;
                         let Some(mut s) = lock_if_active(&store, &active) else {
@@ -261,6 +321,7 @@ pub fn spawn_demo_generator(
                     }
                     continue;
                 }
+                pinned_phase.clear();
             }
 
             let (current_phase, phase_duration_sec) = phases[phase_idx];
@@ -606,23 +667,8 @@ pub fn spawn_demo_generator(
                 "EndOfGame" => (
                     SourceId::LeagueClient,
                     EventKind::Update,
-                    "/lol-end-of-game/v1/eog-stats-block".to_string(),
-                    json!({
-                        "gameId": 894512301,
-                        "gameLength": 1694,
-                        "gameMode": "CLASSIC",
-                        "gameResult": "Victory",
-                        "localPlayer": {
-                            "championName": "Ahri",
-                            "stats": {
-                                "CHAMPIONS_KILLED": 9,
-                                "NUM_DEATHS": 2,
-                                "ASSISTS": 14,
-                                "GOLD_EARNED": 14950,
-                                "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 34820
-                            }
-                        }
-                    }),
+                    DEMO_EOG_URI.to_string(),
+                    demo_eog_stats(),
                 ),
                 _ => unreachable!(),
             };

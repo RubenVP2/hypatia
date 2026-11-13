@@ -2011,6 +2011,7 @@ dependencies = [
  "base64 0.22.1",
  "futures-util",
  "hypatia-shared",
+ "image",
  "native-tls",
  "netstat2",
  "qrcode",

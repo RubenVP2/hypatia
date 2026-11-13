@@ -871,35 +871,10 @@ msgstr "Tous postes"
 
 #: ui/app.slint
 msgctxt "MainWindow"
-msgid "VISUAL STYLE"
-msgstr "STYLE VISUEL"
+msgid "Client artwork"
+msgstr "Illustrations du client"
 
 #: ui/app.slint
 msgctxt "MainWindow"
-msgid "Current"
-msgstr "Actuel"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Tactical"
-msgstr "Tactique"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Hextech"
-msgstr "Hextech"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Riot"
-msgstr "Riot Pur"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Splash backdrops"
-msgstr "Arrière-plans Splash"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Fetches and blends cached champion splash art behind stage headers in LoL styles."
-msgstr "Récupère et fond les splash arts en cache derrière les en-têtes dans les styles LoL."
+msgid "Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map."
+msgstr "Affiche les splash arts en cache et les illustrations de la Faille du client League derrière les en-têtes et la carte."

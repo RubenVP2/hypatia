@@ -2,22 +2,25 @@
 name: Hypatia — Observatory Chronometer
 description: A calm, read-only observation instrument for League of Legends: desktop companion, mini widget, Observatory (advanced view), and LAN mobile remote.
 colors:
-  shell: "#0b0d11"
-  ground: "#0f1116"
-  backdrop: "#090b0f"
-  panel: "#161922"
-  panel-raised: "#1f2430"
-  rule: "#262b38"
-  rule-strong: "#3c4356"
-  text: "#edeff4"
-  muted: "#9ca3b5"
+  shell: "#070b12"
+  ground: "#0b111b"
+  backdrop: "#05080d"
+  panel: "#111926"
+  panel-raised: "#182334"
+  rule: "#223047"
+  rule-strong: "#53462c"
+  text: "#eef0f5"
+  muted: "#9aa7bd"
   plate: "#edeff4"
   on-plate: "#0f1116"
   signal: "#f5b400"
   signal-text: "#ffd24d"
   live-green: "#45c47f"
-  blue: "#4c8df6"
+  blue: "#3b9eff"
   red: "#f0605a"
+  gold: "#6e5730"
+  gold-bright: "#c8aa6e"
+  accent: "#0ac8b9"
   lane-top: "#e3b341"
   lane-jungle: "#45c47f"
   lane-mid: "#b07cf0"
@@ -98,7 +101,6 @@ motion:
   fast: "110ms ease-out"
   base: "180ms ease-out"
   slow: "240ms ease-out"
-  tick: "1000ms linear"
   pulse: "650ms ease-out x2"
 components:
   button-primary:
@@ -159,23 +161,37 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 - **Amber Text** (`#ffd24d` Night / `#8a5600` Day): High-contrast amber text used on dark or soft-tinted plates where `#f5b400` alone would lose contrast at small body sizes.
 
 ### Secondary
-- **Team Blue** (`#4c8df6` Night / `#2664d4` Day): Strictly scoped to Allied scoreboard headers, objective indicators, standing blue towers, and allied draft plates/bans.
+- **Team Blue** (`#3b9eff` Night / `#1f62c9` Day): Strictly scoped to Allied scoreboard headers, objective indicators, standing blue towers, and allied draft plates/bans.
 - **Team Red** (`#f0605a` Night / `#c9342e` Day): Strictly scoped to Enemy scoreboard headers, objective indicators, standing red towers, and red team bans or respawn timers.
 - **Live Telemetry Green** (`#45c47f` Night / `#1e7f48` Day): Riot source connection status (`LCU`, `Riot Client`, `Live :2999`), paired WebSocket dots, and Ready Check `ACCEPT` CTA.
 
 ### Neutral
-- **Carbon Shell** (`#0b0d11` Night / `#e5e1d6` Day): Left `216px` workspace rail and mobile sticky topbar/bottom dock.
-- **Primary Ground** (`#0f1116` Night / `#efece3` Day): Phase canvas background and roundel core fill.
-- **Viewport Backdrop** (`#090b0f` Night / `#dfdacf` Day): Recessed code/JSON inspector well and text input wells.
-- **Instrument Panel** (`#161922` Night / `#faf8f2` Day): Default card surface, telemetry stream container, and scoreboard rows.
-- **Raised Surface** (`#1f2430` Night / `#ebe7dc` Day): Hover fills, source cards, and secondary chip backing.
-- **Hairline Rule & Strong Rule** (`#262b38` / `#3c4356` Night; `#d4cfc2` / `#a59f8f` Day): Exact `1px` boundaries replacing shadows.
-- **Primary Ink & Muted Ink** (`#edeff4` / `#9ca3b5` Night; `#14171f` / `#555a66` Day): Readable foreground ink and secondary copy.
+- **Carbon Shell** (`#070b12` Night / `#e4e1d5` Day): Left `216px` workspace rail and mobile sticky topbar/bottom dock.
+- **Primary Ground** (`#0b111b` Night / `#ede9dd` Day): Phase canvas background and roundel core fill.
+- **Viewport Backdrop** (`#05080d` Night / `#d9d5c8` Day): Recessed code/JSON inspector well and text input wells.
+- **Instrument Panel** (`#111926` Night / `#f9f7ef` Day): Default card surface, telemetry stream container, and scoreboard rows.
+- **Raised Surface** (`#182334` Night / `#e6e1d3` Day): Hover fills, source cards, and secondary chip backing.
+- **Hairline Rule & Strong Rule** (`#223047` / `#53462c` Night; `#c9c1ad` / `#99855a` Day): Exact `1px` boundaries replacing shadows.
+- **Primary Ink & Muted Ink** (`#eef0f5` / `#9aa7bd` Night; `#14171f` / `#525968` Day): Readable foreground ink and secondary copy.
+
+### Hextech Materials
+One direction, Hextech: Hypatia's instrument grammar dressed in League's own materials. There is no style switcher.
+- **Gold & Bright Gold** (`#6e5730` / `#c8aa6e` Night; `#8a6d38` / `#7a5c24` Day): metallic frames — map border, allied portrait rims, the player's own portrait and map label, card top bevel.
+- **Hextech Cyan** (`#0ac8b9` Night / `#087c73` Day): calm accent tint behind headers when no artwork is cached.
+- Gold is a material, never a signal: it does not replace amber for "act now".
+
+### Client Artwork
+Imagery comes only from the player's own League client, fetched read-only over the LCU and never bundled or redistributed (`hypatia_core::art`, asset category `art`):
+- **Painted Summoner's Rift** (`map-south` / `map-north`, beam on the player's base) behind the `LineMap` markers; the vector rift remains the fallback.
+- **Rift valley backdrop** (`gameflow-background`), pre-blurred, behind the pre-draft phase headers.
+- **Ready-check medallion, victory and defeat crests**, prepared for the phase redesigns.
+- **Champion splash art** behind phase headers once a champion is known.
+Each piece is cropped, downscaled to about twice its largest on-screen size, and blurred if needed **once in Rust** before it reaches the disk cache; the UI never scales a full-size texture or blurs at render time. The *Client artwork* switch (with *Game icons*) turns all of it off.
 
 ### Named Rules
 **The Signal Restraint Rule.** Amber means "act now". It never marks a selected toggle, a filter, an active nav item, the player's own row, a victory, or a demo badge. Selection is quiet: `panel-raised` fill with a 1px `text` border; a panel's single main action is an ivory `plate` fill. The phase plate is a quiet `panel` by default and turns amber only for the player's turn or a ready check.
 
-**The Urgency Ramp Rule.** A countdown is `text` above 10 s, `signal-text` from 10 s, and `danger` at 5 s or less, with a 3px bar beneath it draining linearly each second. Counting-up clocks (queue time, game time) never escalate.
+**The Urgency Ramp Rule.** A countdown is `text` above 10 s, `signal-text` from 10 s, and `danger` at 5 s or less, with a 3px bar beneath it that steps down once per second. Counting-up clocks (queue time, game time) never escalate.
 
 **The Lane-Team Separation Rule.** Lane colors (`#e3b341`, `#45c47f`, `#b07cf0`, `#ef8bb5`) draw only metro tracks and role roundels, while Team Blue and Team Red own champions, objectives, towers, and bans.
 
@@ -240,8 +256,10 @@ All interactive controls, inputs, status chips, and tabs share a crisp `4px` (`r
 
 Motion marks a change of state that matters to the player; nothing loops and nothing decorates.
 
+**The Idle Budget Rule.** At rest the window draws nothing new: no animation may run while nothing changes. Transitions are triggered by an event, last under `400ms`, and only touch opacity, position, or scale (never layout). A loop is allowed only while the player must act (their turn, a ready check) and stops under reduced motion or eco mode. Every visual change is measured with `bench/measure.ps1` (idle, champ select, live game) before it ships.
+
 - **Turn start:** the phase plate fades to amber (`180ms`) and a 2px ring around it fades out twice (`650ms` x2), then holds still. On mobile the spotlight card's outline does the same.
-- **Countdown:** the urgency ramp colors fade over `240ms`; the drain bar moves linearly over each `1s` tick. Clocks are extrapolated locally between Riot events (desktop: a 250ms Slint timer; mobile: a 250ms interval), so they never freeze.
+- **Countdown:** the urgency ramp colors fade over `240ms`; the drain bar steps down once per second with no tween: under Slint 1.18 any `animate` on it kept the window repainting at ~36 fps for the whole draft, and a few-pixel step does not need one. Clocks are extrapolated locally between Riot events (desktop: a 250ms Slint timer; mobile: a 250ms interval), so they never freeze.
 - **Rows and plates:** the acting row's tint fades in and out (`180ms`); a player who dies fades to 45% (`240ms`).
 - **Phase ticker:** connector and node fill over `240ms`. Whole screens never crossfade.
 - **Reduced motion:** `Theme.motion` is false when Windows "Show animations" is off, when *Reduce motion* is on in the Performance sheet, or with `--reduce-motion`; every duration then becomes 0. The mobile page honors `prefers-reduced-motion`.

@@ -4,18 +4,19 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use hypatia_core::art::{self, ClientArt as ArtPiece};
 use hypatia_core::AppState;
 use hypatia_shared::{
     spell_name_from_id_localized, ChampSelectSummary, EndOfGameSummary, Lane, Lang, LiveBoard,
     LiveGameSummary, ObjectiveKind, Position, SourceId, SourceStatus, SummarySnapshot,
     SummonerSummary,
 };
-use slint::{Image, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::icons::DesktopAssetLoader;
 use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
 use crate::{
-    AllyRow, BanEntry, ChampSelectView, EndView, EnemyPick, FeedLine, LiveView, MainWindow,
+    AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, FeedLine, LiveView, MainWindow,
     MapAlly, MiniWidget, ObjectiveChip, PartyRow, PlayerLine, Screen, StatLine, TowerDot, WaitView,
 };
 
@@ -604,6 +605,23 @@ impl PhaseClock {
     pub fn counts_down(&self) -> bool {
         self.counts_down
     }
+
+    /// The clock to show after a new snapshot. A snapshot is rebuilt for any event, but the
+    /// clock reading inside it only changes when the Riot client sends a new one: re-anchoring
+    /// an unchanged reading would rewind the clock to that older value on every unrelated
+    /// event (and restart the drain-bar animation each time).
+    fn follow(current: Option<Self>, next: Option<Self>) -> Option<Self> {
+        match (current, next) {
+            (Some(cur), Some(new))
+                if cur.base_sec == new.base_sec
+                    && cur.counts_down == new.counts_down
+                    && cur.total_sec == new.total_sec =>
+            {
+                Some(cur)
+            }
+            _ => next,
+        }
+    }
 }
 
 /// Which clock, if any, the active view shows.
@@ -631,6 +649,8 @@ pub struct Companion {
     loader: DesktopAssetLoader,
     shown: Option<Shown>,
     clock: Option<PhaseClock>,
+    /// `(splash_enabled, icons_revision)` the client artwork was last resolved for.
+    art_key: Option<(bool, u64)>,
 }
 
 impl Companion {
@@ -649,6 +669,11 @@ impl Companion {
             icons_revision: app_state.assets.image_revision(),
             mini_open,
         };
+        let art_key = (context.splash_enabled, context.icons_revision);
+        if self.art_key != Some(art_key) {
+            apply_client_art(main_win, mini_win, app_state, &mut self.loader, context.splash_enabled);
+            self.art_key = Some(art_key);
+        }
         // A different context invalidates every section; an identical projection none.
         let previous = self.shown.take().filter(|shown| shown.context == context);
         if let Some(shown) = previous {
@@ -667,8 +692,10 @@ impl Companion {
             self.shown.as_ref(),
             mini_open,
         );
-        // Re-anchor only on a new snapshot: each LCU event carries a fresh reading.
-        self.clock = phase_clock(&snapshot, view);
+        // Re-anchor only on a fresh reading of the same view's clock.
+        let same_view = self.shown.as_ref().is_some_and(|shown| shown.view == view);
+        let current = if same_view { self.clock } else { None };
+        self.clock = PhaseClock::follow(current, phase_clock(&snapshot, view));
         self.shown = Some(Shown {
             snapshot,
             view,
@@ -679,6 +706,38 @@ impl Companion {
     /// The clock the active view shows, if it has one.
     pub fn clock(&self) -> Option<PhaseClock> {
         self.clock
+    }
+}
+
+/// Resolves the prepared Summoner's Rift artwork (fetching what is missing) into both windows.
+/// Runs only when the artwork switch or the icon cache changed, never per frame.
+fn apply_client_art(
+    main_win: &MainWindow,
+    mini_win: &MiniWidget,
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+    enabled: bool,
+) {
+    let mut get = |piece: ArtPiece| {
+        if enabled {
+            loader.resolve(app_state, art::CATEGORY, piece.id())
+        } else {
+            Image::default()
+        }
+    };
+    let map_south = get(ArtPiece::MapSouth);
+    let map_north = get(ArtPiece::MapNorth);
+    let ready_check = get(ArtPiece::ReadyCheck);
+    let victory = get(ArtPiece::Victory);
+    let defeat = get(ArtPiece::Defeat);
+    let backdrop = get(ArtPiece::Backdrop);
+    for target in [main_win.global::<ClientArt>(), mini_win.global::<ClientArt>()] {
+        target.set_map_south(map_south.clone());
+        target.set_map_north(map_north.clone());
+        target.set_ready_check(ready_check.clone());
+        target.set_victory(victory.clone());
+        target.set_defeat(defeat.clone());
+        target.set_backdrop(backdrop.clone());
     }
 }
 
@@ -1000,6 +1059,20 @@ fn apply_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phase_clock_keeps_its_anchor_until_the_client_sends_a_new_reading() {
+        let first = PhaseClock::down(30.0, 30);
+        let later = Instant::now() + std::time::Duration::from_secs(5);
+        // An unrelated event rebuilds the snapshot with the same 30 s reading: keep counting.
+        let kept = PhaseClock::follow(Some(first), Some(PhaseClock::down(30.0, 30))).unwrap();
+        assert_eq!(kept.seconds_now(later), first.seconds_now(later));
+        // A new reading from the client re-anchors.
+        let fresh = PhaseClock::follow(Some(first), Some(PhaseClock::down(29.0, 30))).unwrap();
+        assert_eq!(fresh.base_sec, 29.0);
+        assert!(PhaseClock::follow(Some(first), None).is_none());
+        assert!(PhaseClock::follow(None, Some(first)).is_some());
+    }
 
     #[test]
     fn maps_objective_kinds_to_distinct_icon_indices() {

@@ -861,6 +861,15 @@ impl DemoRemoteState {
         if self.phase == "InProgress" {
             crate::fixtures::seed_demo_live_snapshot(&mut store, vault, 1185);
         }
+        if self.phase == "EndOfGame" {
+            store.insert_event(
+                SourceId::LeagueClient,
+                EventKind::Update,
+                crate::fixtures::DEMO_EOG_URI.to_string(),
+                crate::fixtures::demo_eog_stats(),
+                vault,
+            );
+        }
 
         let pick_swaps: Vec<Value> = (0..5)
             .filter(|&i| i != 2)

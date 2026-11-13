@@ -160,21 +160,6 @@ impl Ui {
         }
     }
 
-    fn set_visual_style(&self, style: i32, persist: bool) {
-        let clamped = Settings::clamp_visual_style(style);
-        let val = clamped as i32;
-        Theme::get(&self.main).set_style(val);
-        Theme::get(&self.mini).set_style(val);
-        self.main.set_visual_style(val);
-        if persist {
-            let mut settings = self.settings.borrow_mut();
-            if settings.visual_style != clamped {
-                settings.visual_style = clamped;
-                settings.save();
-            }
-        }
-    }
-
     /// Animations run unless the OS, the settings sheet or `--reduce-motion` turns them off.
     fn apply_motion(&self) {
         let motion = !(self.cli.reduce_motion
@@ -410,7 +395,6 @@ fn wire_callbacks(ui: &Rc<Ui>) {
     let main = &ui.main;
 
     main.on_set_dark(|dark| with_ui(|ui| ui.set_dark(dark)));
-    main.on_select_visual_style(|style| with_ui(|ui| ui.set_visual_style(style, true)));
     main.on_select_language(|code| {
         if let Some(lang) = Lang::from_code(&code) {
             with_ui(|ui| ui.set_lang(lang));
@@ -541,11 +525,6 @@ fn main() {
 
     let dark = !(ui.cli.light || ui.settings.borrow().light_theme);
     ui.set_dark(dark);
-    let (style, persist_style) = match ui.cli.initial_style() {
-        Some(s) => (s, false),
-        None => (ui.settings.borrow().visual_style as i32, false),
-    };
-    ui.set_visual_style(style, persist_style);
     ui.apply_motion();
     apply_ui_language(&ui.main, lang);
     if let Some(phase) = ui.cli.pinned_phase() {

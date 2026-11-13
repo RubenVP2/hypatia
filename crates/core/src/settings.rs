@@ -33,9 +33,7 @@ pub struct Settings {
     pub light_theme: bool,
     /// Turn every UI animation off, on top of the OS reduced-motion preference.
     pub reduce_motion: bool,
-    /// Visual LoL integration variant: 0 = Current, 1 = Tactical LoL, 2 = Hextech Hybrid, 3 = Riot Client.
-    pub visual_style: u8,
-    /// Render cached champion splash backdrops behind headers when visual_style >= 1.
+    /// Show cached champion splash art and Summoner's Rift client artwork (needs `game_icons`).
     pub splash_backdrops: bool,
 }
 
@@ -52,7 +50,6 @@ impl Default for Settings {
             eco_mode: false,
             light_theme: false,
             reduce_motion: false,
-            visual_style: 2,
             splash_backdrops: true,
         }
     }
@@ -106,11 +103,6 @@ impl Settings {
         };
         *field = !*field;
         true
-    }
-
-    /// Clamps a raw UI style index into the supported `0..=3` variant range.
-    pub fn clamp_visual_style(style: i32) -> u8 {
-        style.clamp(0, 3) as u8
     }
 }
 
@@ -209,10 +201,7 @@ mod tests {
         let partial = Settings::load_from(&path);
         assert!(!partial.live_game);
         assert!(partial.riot_client, "missing keys fall back to defaults");
-        assert_eq!(partial.visual_style, 2);
         assert!(partial.splash_backdrops);
-        assert_eq!(Settings::clamp_visual_style(-1), 0);
-        assert_eq!(Settings::clamp_visual_style(9), 3);
     }
 
     #[test]

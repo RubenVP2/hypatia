@@ -19,6 +19,7 @@ $ErrorActionPreference = "Stop"
 
 $scenarios = @(
     @{ Name = "idle (League closed)";        Args = @("--no-remote") },
+    @{ Name = "demo champ select";           Args = @("--demo", "--phase", "champ-select", "--no-remote") },
     @{ Name = "demo live game";              Args = @("--demo", "--phase", "live", "--no-remote") },
     @{ Name = "demo + telemetry + remote";   Args = @("--demo", "--demo-rate", "20", "--telemetry", "--remote") }
 )

@@ -4,7 +4,7 @@ import {
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
     Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
-    PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
+    PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
@@ -13,7 +13,7 @@ import "fonts/BarlowCondensed-Bold.ttf";
 import "fonts/BarlowCondensed-ExtraBold.ttf";
 import "fonts/OverpassMono.ttf";
 
-export { Theme }
+export { Theme, ClientArt }
 
 // Which companion screen the client's gameflow phase maps to. Set from Rust.
 export enum Screen {
@@ -341,7 +341,7 @@ component RosterRow inherits Rectangle {
             HorizontalLayout {
                 spacing: Space.xs;
                 alignment: start;
-                if !root.ally.hidden && root.ally.rank-tier != "" && Theme.style >= 1: Rectangle {
+                if !root.ally.hidden && root.ally.rank-tier != "": Rectangle {
                     width: 15px;
                     RankedCrest {
                         y: (parent.height - self.height) / 2;
@@ -375,11 +375,11 @@ component ChampSelectScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: body.preferred-height;
 
-    if Theme.style >= 1: SplashBackdrop {
+    SplashBackdrop {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: Theme.style >= 3 ? 300px : 210px;
+        height: 210px;
         splash: root.cs.splash-icon;
         tint: Theme.accent;
     }
@@ -647,11 +647,11 @@ component LiveScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: live-body.preferred-height;
 
-    if Theme.style >= 1: SplashBackdrop {
+    SplashBackdrop {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: Theme.style >= 3 ? 290px : 196px;
+        height: 196px;
         splash: root.live.splash-icon;
         tint: root.live.dead ? Theme.danger : Theme.blue;
     }
@@ -666,9 +666,9 @@ component LiveScreen inherits Flickable {
             background: root.live.dead ? Theme.danger-soft : Theme.panel;
             border-radius: Theme.radius;
             border-width: 1px;
-            border-color: root.live.dead ? Theme.danger : (Theme.style >= 3 ? Theme.gold : Theme.rule);
+            border-color: root.live.dead ? Theme.danger : Theme.rule;
 
-            if Theme.style >= 1 && !root.live.dead: Rectangle {
+            if !root.live.dead: Rectangle {
                 width: 100%;
                 height: 100%;
                 border-radius: parent.border-radius;
@@ -683,7 +683,7 @@ component LiveScreen inherits Flickable {
                 }
             }
 
-            if Theme.style >= 2 && !root.live.dead: Rectangle {
+            if !root.live.dead: Rectangle {
                 x: 0px;
                 y: 6px;
                 width: 3px;
@@ -808,7 +808,7 @@ component LiveScreen inherits Flickable {
                     width: 228px;
                     height: 228px;
                     towers: root.live.towers;
-                    show-jungle: Theme.style >= 1;
+                    show-jungle: true;
                     show-pits: true;
                     order-is-mine: root.live.order-is-mine;
                     my-drakes: root.live.my-drakes;
@@ -891,11 +891,13 @@ component WaitScreen inherits Flickable {
     callback toggle-demo();
     content-height: wait-body.preferred-height;
 
-    if Theme.style >= 1: SplashBackdrop {
+    SplashBackdrop {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: Theme.style >= 3 ? 280px : 190px;
+        height: 190px;
+        // No champion yet before the draft: the client's Summoner's Rift valley sets the scene.
+        splash: ClientArt.backdrop;
         tint: root.is-ready-check ? Theme.signal : Theme.accent;
     }
 
@@ -1010,7 +1012,7 @@ component WaitScreen inherits Flickable {
                                 font-weight: 800;
                                 vertical-alignment: center;
                             }
-                            if root.wait.rank-tier != "" && Theme.style >= 1: Rectangle {
+                            if root.wait.rank-tier != "": Rectangle {
                                 width: 20px;
                                 RankedCrest {
                                     y: (parent.height - self.height) / 2;
@@ -1089,7 +1091,7 @@ component WaitScreen inherits Flickable {
                             font-weight: 800;
                             vertical-alignment: center;
                         }
-                        if root.wait.rank-tier != "" && Theme.style >= 1: Rectangle {
+                        if root.wait.rank-tier != "": Rectangle {
                             width: 18px;
                             RankedCrest {
                                 y: (parent.height - self.height) / 2;
@@ -1924,11 +1926,11 @@ component EndScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: end-body.preferred-height;
 
-    if Theme.style >= 1: SplashBackdrop {
+    SplashBackdrop {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: Theme.style >= 3 ? 290px : 210px;
+        height: 210px;
         splash: root.end.splash-icon;
         tint: root.end.victory ? Theme.live-green : Theme.red;
     }
@@ -2039,8 +2041,6 @@ export component MainWindow inherits Window {
     in property <PerfSettings> perf;
     in-out property <bool> settings-open: false;
     callback toggle-setting(string);
-    in-out property <int> visual-style: 2;
-    callback select-visual-style(int);
 
     callback toggle-widget();
     callback toggle-remote-panel();
@@ -2277,43 +2277,6 @@ export component MainWindow inherits Window {
                         label: @tr("Live Game");
                         port: root.game-live ? ":2999" : @tr("idle");
                         live: root.game-live;
-                    }
-                }
-
-                Divider { }
-
-                SectionLabel { text: @tr("VISUAL STYLE"); }
-                VerticalLayout {
-                    spacing: Space.xs;
-                    HorizontalLayout {
-                        spacing: Space.xs;
-                        Action {
-                            horizontal-stretch: 1;
-                            text: @tr("Current");
-                            selected: root.visual-style == 0;
-                            clicked => { root.select-visual-style(0); }
-                        }
-                        Action {
-                            horizontal-stretch: 1;
-                            text: @tr("Tactical");
-                            selected: root.visual-style == 1;
-                            clicked => { root.select-visual-style(1); }
-                        }
-                    }
-                    HorizontalLayout {
-                        spacing: Space.xs;
-                        Action {
-                            horizontal-stretch: 1;
-                            text: @tr("Hextech");
-                            selected: root.visual-style == 2;
-                            clicked => { root.select-visual-style(2); }
-                        }
-                        Action {
-                            horizontal-stretch: 1;
-                            text: @tr("Riot");
-                            selected: root.visual-style == 3;
-                            clicked => { root.select-visual-style(3); }
-                        }
                     }
                 }
 
@@ -2762,8 +2725,8 @@ export component MainWindow inherits Window {
                                     toggled => { root.toggle-setting("game_icons"); }
                                 }
                                 SettingRow {
-                                    title: @tr("Splash backdrops");
-                                    detail: @tr("Fetches and blends cached champion splash art behind stage headers in LoL styles.");
+                                    title: @tr("Client artwork");
+                                    detail: @tr("Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map.");
                                     checked: root.perf.splash-backdrops;
                                     toggled => { root.toggle-setting("splash_backdrops"); }
                                 }
@@ -2899,10 +2862,10 @@ component MiniPlayerCell inherits VerticalLayout {
             mine: root.mine;
             is-self: root.p.is-self;
             faded: root.p.dead;
-            border-width: Theme.style == 0 ? (root.p.is-self ? 2px : 0px) : (root.p.is-self ? 2px : 1.5px);
-            border-color: Theme.style >= 2 && root.p.is-self
+            border-width: root.p.is-self ? 2px : 1.5px;
+            border-color: root.p.is-self
                 ? Theme.gold-bright
-                : (Theme.style >= 2 && root.mine ? Theme.gold : (root.p.is-self ? Theme.plate : Theme.team-color(root.mine)));
+                : (root.mine ? Theme.gold : Theme.team-color(root.mine));
         }
     }
     Text {
@@ -2937,7 +2900,7 @@ export component MiniWidget inherits Window {
     in property <bool> clock-down: true;
     property <bool> drafting: !root.in-game && root.view == Screen.champ-select;
 
-    if Theme.style >= 1 && (root.drafting || root.in-game): SplashBackdrop {
+    if root.drafting || root.in-game: SplashBackdrop {
         x: 0px;
         y: 0px;
         width: 100%;
@@ -3131,7 +3094,7 @@ export component MiniWidget inherits Window {
                     x: 8px;
                     y: 8px;
                     towers: root.live.towers;
-                    show-jungle: Theme.style >= 1;
+                    show-jungle: true;
                     show-pits: true;
                     order-is-mine: root.live.order-is-mine;
                     my-drakes: root.live.my-drakes;

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -110,6 +110,10 @@ pub struct ChampSelectAlly {
     pub is_premade: bool,
     #[serde(default)]
     pub selected_skin_id: i64,
+    /// True once this slot's pick is locked in; false while the champion is only hovered or
+    /// declared. Slots of a session without pick actions count as locked when they hold one.
+    #[serde(default)]
+    pub pick_locked: bool,
     #[serde(default)]
     pub acting_type: Option<String>,
     #[serde(default)]
@@ -706,6 +710,26 @@ fn parse_swap_map(cs: &Value, key: &str) -> HashMap<i64, (i64, String)> {
     map
 }
 
+/// Cells whose pick action is completed, or `None` when the session carries no pick action
+/// at all (some queues and fixtures), in which case lock state is unknown.
+fn completed_pick_cells(cs: &Value) -> Option<HashSet<i64>> {
+    let turns = cs.get("actions")?.as_array()?;
+    let mut any_pick = false;
+    let mut locked = HashSet::new();
+    for act in turns.iter().filter_map(|t| t.as_array()).flatten() {
+        if act.get("type").and_then(|v| v.as_str()) != Some("pick") {
+            continue;
+        }
+        any_pick = true;
+        if act.get("completed").and_then(|v| v.as_bool()) == Some(true) {
+            if let Some(cell) = act.get("actorCellId").and_then(|v| v.as_i64()) {
+                locked.insert(cell);
+            }
+        }
+    }
+    any_pick.then_some(locked)
+}
+
 fn parse_champ_select_actions(
     cs: &Value,
     local_cell_id: i64,
@@ -829,6 +853,7 @@ fn extract_champ_select_summary(
     let trades = parse_swap_map(cs, "trades");
     let (acting_cell_id, acting_type, cell_acting, local_action) =
         parse_champ_select_actions(cs, local_cell_id, champions, lang);
+    let locked_cells = completed_pick_cells(cs);
 
     let premade_puuids: Vec<String> = lobby
         .map(|l| l.members.iter().filter_map(|m| m.puuid.clone()).collect())
@@ -953,6 +978,8 @@ fn extract_champ_select_summary(
                 is_self,
                 is_premade,
                 selected_skin_id,
+                pick_locked: champ_id > 0
+                    && locked_cells.as_ref().is_none_or(|cells| cells.contains(&cell_id)),
                 acting_type: cell_acting.get(&cell_id).cloned(),
                 position_swap_id: p_swap.as_ref().map(|x| x.0),
                 position_swap_state: p_swap.map(|x| x.1),
@@ -1511,6 +1538,10 @@ mod tests {
 
         assert_eq!(p.my_team_ban_ids, vec![238]);
         assert_eq!(p.their_team_ban_ids, vec![157]);
+        // Only hovered so far: the session has pick actions and none is completed.
+        assert!(!p.my_team[0].pick_locked);
+        assert!(!p.my_team[1].pick_locked);
+        assert!(!p.my_team[2].pick_locked);
 
         let act = p.local_action.unwrap();
         assert_eq!(act.action_id, 10);
@@ -1564,5 +1595,41 @@ mod tests {
         assert_eq!(eog.game_length_sec, 0);
         assert_eq!(eog.champion_id, 0);
         assert_eq!(eog.champion_name, "");
+    }
+
+    #[test]
+    fn champ_select_marks_locked_picks() {
+        let cs = json!({
+            "localPlayerCellId": 0,
+            "timer": {"phase": "BAN_PICK", "adjustedTimeLeftInPhase": 20000},
+            "actions": [[
+                {"id": 1, "actorCellId": 0, "type": "pick", "championId": 266, "completed": true, "isInProgress": false},
+                {"id": 2, "actorCellId": 1, "type": "pick", "championId": 64, "completed": false, "isInProgress": true}
+            ]],
+            "myTeam": [
+                {"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 1, "puuid": "a"},
+                {"cellId": 1, "assignedPosition": "JUNGLE", "championId": 64, "summonerId": 2, "puuid": "b"}
+            ]
+        });
+        let snap = project_match(
+            &MatchInputs { champ_select: Some(&cs), ..Default::default() },
+            &CustomSyncedLookup,
+            Lang::En,
+        );
+        let team = snap.champ_select.unwrap().my_team;
+        assert!(team[0].pick_locked);
+        assert!(!team[1].pick_locked);
+
+        // Without any pick action the lock state is unknown: a chosen champion counts as locked.
+        let bare = json!({
+            "localPlayerCellId": 0,
+            "myTeam": [{"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 1, "puuid": "a"}]
+        });
+        let snap = project_match(
+            &MatchInputs { champ_select: Some(&bare), ..Default::default() },
+            &CustomSyncedLookup,
+            Lang::En,
+        );
+        assert!(snap.champ_select.unwrap().my_team[0].pick_locked);
     }
 }

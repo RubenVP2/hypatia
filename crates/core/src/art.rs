@@ -104,6 +104,31 @@ impl ClientArt {
     }
 }
 
+/// Asset-cache category of the wide strips cut from champion splash art for the draft rows.
+/// Ids are skin ids, like the `splash` category they are cut from.
+pub const BANNER_CATEGORY: &str = "banner";
+/// Prepared strip size: a 4:1 band, about twice the on-screen strip for HiDPI.
+const BANNER_SIZE: (u32, u32) = (480, 120);
+
+/// Cuts the band of a splash where the champion stands (centered splashes keep the face in the
+/// upper half) into a small 4:1 strip. Five draft rows then decode about 1 MB in all instead
+/// of five full 1280x720 splashes.
+pub fn prepare_banner(raw: &[u8]) -> Option<(Vec<u8>, &'static str, &'static str)> {
+    let img = image::load_from_memory(raw).ok()?;
+    let (w, h) = (img.width(), img.height());
+    if w < 64 || h < 32 {
+        return None;
+    }
+    let band = (w / 4).min(h);
+    let top = ((h as f32 * 0.08) as u32).min(h - band);
+    let strip = img.crop_imm(0, top, w, band).resize_exact(
+        BANNER_SIZE.0,
+        BANNER_SIZE.1,
+        FilterType::Triangle,
+    );
+    encode_jpeg(&strip, 82)
+}
+
 fn encode_jpeg(img: &DynamicImage, quality: u8) -> Option<(Vec<u8>, &'static str, &'static str)> {
     let mut out = Vec::new();
     JpegEncoder::new_with_quality(&mut out, quality)
@@ -168,6 +193,23 @@ mod tests {
         let out = image::load_from_memory(&bytes).unwrap();
         assert_eq!((out.width(), out.height()), (256, 256));
         assert!(out.color().has_alpha());
+    }
+
+    #[test]
+    fn banners_are_small_four_to_one_strips() {
+        let raw = png_bytes(DynamicImage::ImageRgb8(RgbImage::from_pixel(
+            1280,
+            720,
+            Rgb([90, 40, 30]),
+        )));
+        let (bytes, ext, _) = prepare_banner(&raw).unwrap();
+        assert_eq!(ext, "jpg");
+        let out = image::load_from_memory(&bytes).unwrap();
+        assert_eq!((out.width(), out.height()), BANNER_SIZE);
+        // A square champion tile still yields a strip.
+        let tile = png_bytes(DynamicImage::ImageRgb8(RgbImage::new(380, 380)));
+        assert!(prepare_banner(&tile).is_some());
+        assert!(prepare_banner(&png_bytes(DynamicImage::ImageRgb8(RgbImage::new(20, 20)))).is_none());
     }
 
     #[test]

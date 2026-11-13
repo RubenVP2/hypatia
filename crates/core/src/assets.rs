@@ -233,9 +233,13 @@ impl GameAssetCache {
         tokio::spawn(async move {
             this.ensure_metadata_synced_with_creds(port, &password, &client).await;
             const GROUPS: &[(&str, &[i64])] = &[
-                ("champion", &[266, 64, 103, 222, 412, 122, 234, 86, 238, 145, 111, 157, 35, 777, 233]),
+                (
+                    "champion",
+                    &[266, 64, 103, 222, 412, 122, 234, 89, 81, 99, 86, 238, 145, 111, 157, 35, 777, 875, 233],
+                ),
                 ("spell", &[4, 7, 11, 12, 14]),
                 ("splash", &[103027, 103000, 266000, 64000, 222000, 412000]),
+                (crate::art::BANNER_CATEGORY, &[266000, 64000, 103027, 222000, 412000]),
                 (crate::art::CATEGORY, &[1, 2, 3, 4, 5, 6]),
             ];
             for &(cat, ids) in GROUPS {
@@ -374,15 +378,23 @@ impl GameAssetCache {
         for lcu_path in candidates {
             match client.get_bytes(port, Some(password), &lcu_path).await {
                 Ok((status, _, bytes)) if status.is_success() => {
-                    let prepared = match crate::art::ClientArt::from_id(id) {
-                        Some(art) if category == crate::art::CATEGORY => {
-                            // Decode, crop, scale and blur off the async workers, once.
-                            tokio::task::spawn_blocking(move || art.prepare(&bytes))
+                    // Client artwork and draft banners are decoded, cropped and scaled off the
+                    // async workers, once; everything else is cached as served.
+                    let prepared = if category == crate::art::CATEGORY {
+                        match crate::art::ClientArt::from_id(id) {
+                            Some(art) => tokio::task::spawn_blocking(move || art.prepare(&bytes))
                                 .await
                                 .ok()
-                                .flatten()
+                                .flatten(),
+                            None => None,
                         }
-                        _ => detect_image_format(&bytes).map(|(ext, mime)| (bytes, ext, mime)),
+                    } else if category == crate::art::BANNER_CATEGORY {
+                        tokio::task::spawn_blocking(move || crate::art::prepare_banner(&bytes))
+                            .await
+                            .ok()
+                            .flatten()
+                    } else {
+                        detect_image_format(&bytes).map(|(ext, mime)| (bytes, ext, mime))
                     };
                     if let Some((bytes, ext, mime)) = prepared {
                         let path = self.file_path(category, id, ext);
@@ -485,7 +497,7 @@ impl GameAssetCache {
                     }
                 }
             }
-            "splash" => {
+            "splash" | crate::art::BANNER_CATEGORY => {
                 let (champ_id, skin_id) =
                     if id >= 1000 { (id / 1000, id) } else { (id, id * 1000) };
                 let base_id = champ_id * 1000;
@@ -846,7 +858,8 @@ fn keep_lowest_id(keys: &mut HashMap<String, i64>, key: String, id: i64) {
 fn is_valid_asset_id(category: &str, id: i64) -> bool {
     match category {
         "profile" => id >= 0,
-        "champion" | "spell" | "perk" | "style" | "skin" | "splash" => id > 0,
+        "champion" | "spell" | "perk" | "style" | "skin" | "splash"
+        | crate::art::BANNER_CATEGORY => id > 0,
         crate::art::CATEGORY => crate::art::ClientArt::from_id(id).is_some(),
         _ => false,
     }

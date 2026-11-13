@@ -5,6 +5,10 @@ export struct AllyRow {
     champion: string,
     initials: string,
     icon: image,
+    // Splash strip of the chosen skin (prepared `banner` asset); empty until cached.
+    banner: image,
+    // Pick locked in; false while the champion is only hovered.
+    locked: bool,
     spell1-icon: image,
     spell1-name: string,
     spell2-icon: image,
@@ -24,10 +28,12 @@ export struct BanEntry {
     icon: image,
 }
 
+// One enemy cell; `picked` is false while that enemy has not chosen yet.
 export struct EnemyPick {
     champion: string,
     initials: string,
     icon: image,
+    picked: bool,
 }
 
 export struct TowerDot {
@@ -383,6 +389,75 @@ export component SplashBackdrop inherits Rectangle {
     }
 }
 
+// Full-bleed splash behind a screen's header (the player's own skin), shown at the strength
+// the client gives it, veiled on the left for the headline and fading into the page below.
+// The image keeps its own ratio and is shifted up so the band with the champion's face shows.
+export component HeroSplash inherits Rectangle {
+    in property <image> splash;
+    in property <color> surface: Theme.ground;
+    clip: true;
+
+    if root.splash.width > 0: Image {
+        width: parent.width;
+        height: parent.width * root.splash.height / root.splash.width;
+        y: -self.height * 0.16;
+        source: root.splash;
+        image-fit: cover;
+        opacity: Theme.dark ? 0.7 : 0.5;
+    }
+    Rectangle {
+        background: @linear-gradient(90deg, root.surface.with-alpha(0.82) 0%, root.surface.with-alpha(0.35) 50%, root.surface.with-alpha(0.15) 100%);
+    }
+    Rectangle {
+        background: @linear-gradient(180deg, root.surface.with-alpha(0) 0%, root.surface.with-alpha(0) 50%, root.surface 100%);
+    }
+}
+
+// One enemy cell in champion select: an empty socket until that enemy picks, then the portrait
+// arrives (scale and fade) with a red ring that fades out once.
+export component EnemySlot inherits Rectangle {
+    in property <EnemyPick> pick;
+    in property <length> size: 46px;
+    accessible-role: text;
+    accessible-label: root.pick.picked ? root.pick.champion : @tr("Enemy not picked yet");
+
+    if !root.pick.picked: ChampPlate {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: root.size;
+        empty: true;
+        mine: false;
+    }
+    if root.pick.picked: reveal := Rectangle {
+        property <bool> fired: false;
+        init => { self.fired = true; }
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.size;
+        height: root.size;
+        opacity: self.fired ? 1 : 0;
+        transform-scale: self.fired ? 1 : 0.8;
+        animate opacity, transform-scale { duration: Theme.dur-slow; easing: ease-out; }
+        ChampPlate {
+            size: root.size;
+            label: root.pick.initials;
+            icon: root.pick.icon;
+            mine: false;
+        }
+        Rectangle {
+            x: -3px;
+            y: -3px;
+            width: parent.width + 6px;
+            height: parent.height + 6px;
+            border-radius: self.width / 2;
+            border-width: 2px;
+            border-color: Theme.red;
+            opacity: reveal.fired ? 0 : 1;
+            animate opacity { duration: Theme.dur-reveal; easing: ease-out; }
+        }
+    }
+}
+
 export component SectionLabel inherits Text {
     color: Theme.muted;
     font-size: Type.label;
@@ -398,7 +473,9 @@ export component Plate inherits Rectangle {
     in property <bool> active-turn: false;
     in property <image> splash;
     in property <color> splash-tint: Theme.accent;
-    background: active-turn ? Theme.signal : Theme.panel;
+    // Translucent over a hero splash, without a splash of its own.
+    in property <bool> glass: false;
+    background: active-turn ? Theme.signal : (glass ? Theme.panel.with-alpha(Theme.dark ? 0.58 : 0.66) : Theme.panel);
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: active-turn ? Theme.signal : Theme.rule-strong;
@@ -407,7 +484,7 @@ export component Plate inherits Rectangle {
     animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
 
     // Embedded splash art / Hextech crest inside the header banner (hidden during amber alerts).
-    if !root.active-turn: Rectangle {
+    if !root.active-turn && !root.glass: Rectangle {
         width: 100%;
         height: 100%;
         border-radius: parent.border-radius;
@@ -1292,16 +1369,37 @@ export component BanChip inherits Rectangle {
     border-color: mine ? Theme.blue : Theme.red;
     accessible-role: text;
     accessible-label: root.ban.name;
+    // Created when the ban lands: the chip fades in and a red strike draws across the dimmed
+    // portrait once. Rows are updated in place, so chips already shown never replay it.
+    property <bool> landed: false;
+    init => { self.landed = true; }
+    opacity: root.landed ? 1 : 0;
+    animate opacity { duration: Theme.dur-base; easing: ease-out; }
     row := HorizontalLayout {
         padding-left: Space.xs;
         padding-right: Space.sm;
         spacing: Space.sm;
-        ChampPlate {
-            y: (parent.height - self.height) / 2;
-            size: 18px;
-            label: root.ban.initials;
-            icon: root.ban.icon;
-            mine: root.mine;
+        Rectangle {
+            width: 18px;
+            ChampPlate {
+                y: (parent.height - self.height) / 2;
+                size: 18px;
+                label: root.ban.initials;
+                icon: root.ban.icon;
+                mine: root.mine;
+                faded: true;
+            }
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                x: (parent.width - self.width) / 2;
+                width: 24px;
+                height: 2px;
+                border-radius: 1px;
+                background: Theme.red;
+                transform-rotation: -45deg;
+                transform-scale-x: root.landed ? 1 : 0;
+                animate transform-scale-x { duration: Theme.dur-reveal; delay: Theme.dur-fast; easing: ease-out; }
+            }
         }
         Text {
             text: root.ban.name;

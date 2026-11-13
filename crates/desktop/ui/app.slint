@@ -3,7 +3,7 @@ import {
     AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
-    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
+    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
     PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
@@ -151,6 +151,8 @@ component Header inherits Rectangle {
     in property <bool> compact: false;
     in property <image> splash;
     in property <color> splash-tint: Theme.accent;
+    // Over a full-bleed hero splash: the plate turns translucent instead of carrying its own.
+    in property <bool> glass: false;
     property <bool> has-figure: root.clock-seconds >= 0 || root.specimen != "";
     min-height: 92px;
 
@@ -164,6 +166,7 @@ component Header inherits Rectangle {
             active-turn: root.active-turn;
             splash: root.splash;
             splash-tint: root.splash-tint;
+            glass: root.glass;
         }
         if root.has-figure: ClockReadout {
             seconds: root.clock-seconds;
@@ -181,6 +184,7 @@ component Header inherits Rectangle {
             active-turn: root.active-turn;
             splash: root.splash;
             splash-tint: root.splash-tint;
+            glass: root.glass;
         }
         if root.has-figure: ClockReadout {
             seconds: root.clock-seconds;
@@ -200,16 +204,48 @@ component RosterRow inherits Rectangle {
     background: root.ally.picking
         ? Theme.signal-soft
         : (root.ally.is-self ? Theme.panel-raised : Theme.panel);
-    border-width: 1px;
-    border-color: root.ally.picking
-        ? Theme.signal
-        : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
-    animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+    clip: true;
+    animate background { duration: Theme.dur-base; easing: ease-out; }
     accessible-role: text;
     accessible-label: Theme.lane-name(root.ally.lane) + ", "
         + (root.ally.champion != "" ? root.ally.champion : @tr("no pick yet"))
         + (root.ally.is-self ? @tr(", you") : "")
-        + (root.ally.picking ? @tr(", acting now") : "");
+        + (root.ally.picking ? @tr(", acting now") : "")
+        + (root.hovering ? @tr(", hovering") : "");
+    // Kept out of the label: Slint 1.18's code generator mis-moves the struct field when the
+    // label reads `ally.champion` once more.
+    property <bool> hovering: root.ally.champion != "" && !root.ally.locked;
+
+    // Splash strip of the chosen skin on the right, melting into the row on its left so the
+    // text column keeps a flat surface. Half strength while the champion is only hovered.
+    if root.ally.banner.width > 0: Rectangle {
+        x: parent.width * 0.38;
+        width: parent.width * 0.62;
+        height: 100%;
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.ally.banner;
+            image-fit: cover;
+            opacity: root.ally.locked ? (Theme.dark ? 0.85 : 0.7) : 0.4;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        Rectangle {
+            background: @linear-gradient(90deg, root.background 0%, root.background.with-alpha(0.55) 40%, root.background.with-alpha(0) 100%);
+        }
+    }
+
+    // Lock-in: created when the pick locks, a gold glint crosses the row once, then rests
+    // outside it (clipped). An animation never plays on a first value, hence `init`.
+    if root.ally.locked: Rectangle {
+        property <bool> fired: false;
+        init => { self.fired = true; }
+        width: 120px;
+        height: 100%;
+        x: self.fired ? parent.width : -self.width;
+        background: @linear-gradient(90deg, Theme.gold-bright.with-alpha(0) 0%, Theme.gold-bright.with-alpha(0.38) 50%, Theme.gold-bright.with-alpha(0) 100%);
+        animate x { duration: Theme.dur-reveal; easing: ease-in-out; }
+    }
 
     HorizontalLayout {
         padding-left: Space.md;
@@ -366,6 +402,16 @@ component RosterRow inherits Rectangle {
             }
         }
     }
+
+    // Border drawn last, over the splash strip.
+    Rectangle {
+        border-radius: root.border-radius;
+        border-width: 1px;
+        border-color: root.ally.picking
+            ? Theme.signal
+            : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
+        animate border-color { duration: Theme.dur-base; easing: ease-out; }
+    }
 }
 
 component ChampSelectScreen inherits Flickable {
@@ -375,13 +421,12 @@ component ChampSelectScreen inherits Flickable {
     in property <bool> compact: false;
     content-height: body.preferred-height;
 
-    SplashBackdrop {
+    HeroSplash {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: 210px;
+        height: 230px;
         splash: root.cs.splash-icon;
-        tint: Theme.accent;
     }
 
     body := VerticalLayout {
@@ -397,8 +442,7 @@ component ChampSelectScreen inherits Flickable {
             clock-total: root.clock-total;
             active-turn: root.cs.my-turn;
             compact: root.compact;
-            splash: root.cs.splash-icon;
-            splash-tint: Theme.accent;
+            glass: true;
         }
 
         if !root.compact: HorizontalLayout {
@@ -476,16 +520,14 @@ component ChampSelectScreen inherits Flickable {
                             for e in root.cs.enemies: VerticalLayout {
                                 width: 54px;
                                 spacing: Space.xs;
-                                ChampPlate {
-                                    x: (parent.width - self.width) / 2;
+                                EnemySlot {
+                                    height: 46px;
+                                    pick: e;
                                     size: 46px;
-                                    label: e.initials;
-                                    icon: e.icon;
-                                    mine: false;
                                 }
                                 Text {
-                                    text: e.champion;
-                                    color: Theme.text;
+                                    text: e.picked ? e.champion : "—";
+                                    color: e.picked ? Theme.text : Theme.muted;
                                     font-size: Type.label;
                                     font-weight: 600;
                                     horizontal-alignment: center;
@@ -565,17 +607,11 @@ component ChampSelectScreen inherits Flickable {
                     SectionLabel { text: @tr("ENEMY PICKS & BANS"); }
                     HorizontalLayout {
                         spacing: Space.sm;
-                        for e in root.cs.enemies: ChampPlate {
+                        for e in root.cs.enemies: EnemySlot {
+                            width: 40px;
+                            height: 40px;
+                            pick: e;
                             size: 40px;
-                            label: e.initials;
-                            icon: e.icon;
-                            mine: false;
-                        }
-                        if root.cs.enemies-to-come > 0: Text {
-                            text: @tr("+{0} pending", root.cs.enemies-to-come);
-                            color: Theme.muted;
-                            font-size: Type.small;
-                            vertical-alignment: center;
                         }
                     }
                     if root.cs.my-ban-list.length > 0: HorizontalLayout {

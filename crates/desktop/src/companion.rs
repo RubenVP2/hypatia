@@ -1,6 +1,7 @@
 //! Companion views (wait, champion select, live game, end of game) built from the Match
 //! Projection and pushed to Slint only when the part they show actually changed.
 
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -11,7 +12,7 @@ use hypatia_shared::{
     LiveGameSummary, ObjectiveKind, Position, SourceId, SourceStatus, SummarySnapshot,
     SummonerSummary,
 };
-use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::icons::DesktopAssetLoader;
 use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
@@ -48,6 +49,18 @@ fn resolve_splash(
     preferred_id: i64,
     champ_id: i64,
 ) -> Image {
+    resolve_skin_art(app_state, loader, "splash", preferred_id, champ_id)
+}
+
+/// A skin's splash-derived art (`splash`, or the prepared draft `banner`), falling back to the
+/// champion's base skin while the chosen skin is not cached.
+fn resolve_skin_art(
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+    category: &'static str,
+    preferred_id: i64,
+    champ_id: i64,
+) -> Image {
     if !app_state.flags.splash_backdrops() {
         return Image::default();
     }
@@ -58,14 +71,14 @@ fn resolve_splash(
     } else {
         return Image::default();
     };
-    let img = loader.resolve(app_state, "splash", target_id);
+    let img = loader.resolve(app_state, category, target_id);
     if img.size().width > 0 {
         return img;
     }
     if champ_id > 0 {
         let base_id = champ_id * 1000;
-        if base_id != target_id && app_state.assets.cached_image_path("splash", base_id).is_some() {
-            return loader.resolve(app_state, "splash", base_id);
+        if base_id != target_id && app_state.assets.cached_image_path(category, base_id).is_some() {
+            return loader.resolve(app_state, category, base_id);
         }
     }
     Image::default()
@@ -157,10 +170,40 @@ fn tower_coordinates(order_side: bool, lane: Lane, tier: u8) -> (f32, f32) {
     }
 }
 
+/// Row models of the champion select view, kept for the whole session so Slint updates rows in
+/// place. Only a row that did not exist before (a ban landing), or an element that newly
+/// appears inside a row (a lock, a reveal), is created, and the one-shot draft animations play
+/// on creation. A fresh model per update would rebuild every row and replay them all.
+#[derive(Default)]
+struct DraftModels {
+    allies: Rc<VecModel<AllyRow>>,
+    map_allies: Rc<VecModel<MapAlly>>,
+    enemies: Rc<VecModel<EnemyPick>>,
+    my_bans: Rc<VecModel<BanEntry>>,
+    their_bans: Rc<VecModel<BanEntry>>,
+}
+
+/// Brings `model` to `rows`, touching only the rows that differ.
+fn sync_rows<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: Vec<T>) -> ModelRc<T> {
+    let keep = rows.len();
+    for (i, row) in rows.into_iter().enumerate() {
+        match model.row_data(i) {
+            Some(old) if old == row => {}
+            Some(_) => model.set_row_data(i, row),
+            None => model.push(row),
+        }
+    }
+    while model.row_count() > keep {
+        model.remove(model.row_count() - 1);
+    }
+    ModelRc::from(model.clone())
+}
+
 fn build_champ_select_view(
     cs: &ChampSelectSummary,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
+    models: &DraftModels,
     lang: Lang,
 ) -> ChampSelectView {
     let mut allies = Vec::new();
@@ -236,11 +279,24 @@ fn build_champ_select_view(
             ""
         };
 
+        let banner = if has_champ {
+            resolve_skin_art(
+                app_state,
+                loader,
+                art::BANNER_CATEGORY,
+                ally.selected_skin_id,
+                ally.champion_id,
+            )
+        } else {
+            Image::default()
+        };
         allies.push(AllyRow {
             lane,
             champion: SharedString::from(champ_str),
             initials: champ_initials(champ_str),
             icon: champ_icon.clone(),
+            banner,
+            locked: has_champ && ally.pick_locked,
             spell1_icon: loader.resolve(app_state, "spell", ally.spell1_id),
             spell1_name: SharedString::from(spell1_name),
             spell2_icon: loader.resolve(app_state, "spell", ally.spell2_id),
@@ -281,21 +337,26 @@ fn build_champ_select_view(
         });
     }
 
+    // One stable slot per enemy cell, so a reveal fills its own slot instead of shifting rows.
     let mut enemies = Vec::new();
     let mut enemies_to_come = 0;
     for e in &cs.their_team {
-        if e.champion_id > 0 && !e.champion_name.is_empty() {
-            enemies.push(EnemyPick {
-                champion: SharedString::from(e.champion_name.as_str()),
-                initials: champ_initials(&e.champion_name),
-                icon: loader.resolve(app_state, "champion", e.champion_id),
-            });
-        } else {
+        let picked = e.champion_id > 0 && !e.champion_name.is_empty();
+        if !picked {
             enemies_to_come += 1;
+            enemies.push(EnemyPick::default());
+            continue;
         }
+        enemies.push(EnemyPick {
+            champion: SharedString::from(e.champion_name.as_str()),
+            initials: champ_initials(&e.champion_name),
+            icon: loader.resolve(app_state, "champion", e.champion_id),
+            picked,
+        });
     }
     if cs.their_team.is_empty() {
         enemies_to_come = 5;
+        enemies.resize(5, EnemyPick::default());
     }
 
     let title = acting_label.unwrap_or_else(|| {
@@ -329,14 +390,14 @@ fn build_champ_select_view(
         detail: SharedString::from(detail),
         timer: format_mm_ss(cs.time_left_sec as f64),
         my_turn,
-        allies: ModelRc::new(VecModel::from(allies)),
-        map_allies: ModelRc::new(VecModel::from(map_allies)),
-        enemies: ModelRc::new(VecModel::from(enemies)),
+        allies: sync_rows(&models.allies, allies),
+        map_allies: sync_rows(&models.map_allies, map_allies),
+        enemies: sync_rows(&models.enemies, enemies),
         enemies_to_come,
         my_bans: SharedString::from(cs.my_team_bans.join(", ")),
         their_bans: SharedString::from(cs.their_team_bans.join(", ")),
-        my_ban_list: ModelRc::new(VecModel::from(my_ban_list)),
-        their_ban_list: ModelRc::new(VecModel::from(their_ban_list)),
+        my_ban_list: sync_rows(&models.my_bans, my_ban_list),
+        their_ban_list: sync_rows(&models.their_bans, their_ban_list),
         anonymized: cs.is_ranked_solo_anonymized,
         splash_icon: resolve_splash(app_state, loader, splash_skin, splash_champ),
     }
@@ -651,6 +712,7 @@ pub struct Companion {
     clock: Option<PhaseClock>,
     /// `(splash_enabled, icons_revision)` the client artwork was last resolved for.
     art_key: Option<(bool, u64)>,
+    draft: DraftModels,
 }
 
 impl Companion {
@@ -688,6 +750,7 @@ impl Companion {
             mini_win,
             app_state,
             &mut self.loader,
+            &self.draft,
             &snapshot,
             self.shown.as_ref(),
             mini_open,
@@ -748,6 +811,7 @@ fn apply_summary(
     mini_win: &MiniWidget,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
+    draft: &DraftModels,
     snap: &SummarySnapshot,
     previous: Option<&Shown>,
     mini_open: bool,
@@ -1026,7 +1090,7 @@ fn apply_summary(
 
     if let Some(ref cs) = snap.champ_select {
         if prev.is_none_or(|p| p.champ_select.as_ref() != Some(cs)) {
-            let champ = build_champ_select_view(cs, app_state, loader, lang);
+            let champ = build_champ_select_view(cs, app_state, loader, draft, lang);
             // The mini widget only receives data while it is on screen.
             if mini_open {
                 mini_win.set_champ(champ.clone());

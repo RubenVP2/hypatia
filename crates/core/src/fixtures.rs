@@ -142,6 +142,78 @@ fn restart_demo_draft_timer(
     s.insert_event(SourceId::LeagueClient, EventKind::Update, URI.to_string(), session, vault);
 }
 
+/// Steps of the scripted pinned draft, one every [`DEMO_DRAFT_STEP`]: six alternating bans,
+/// then ally locks and enemy reveals in draft order, a short hold, and a fresh draft again.
+const DEMO_DRAFT_STEPS: u32 = 18;
+const DEMO_DRAFT_STEP: Duration = Duration::from_millis(2500);
+
+/// Rewrites the pinned Champ Select session for draft step `step`, so the demo shows bans
+/// landing, allies locking in and enemies revealing. The local player's own action (cell 2,
+/// driven by the mobile remote) is kept as is.
+fn apply_demo_draft_step(
+    store: &RwLock<EventStore>,
+    active: &AtomicBool,
+    vault: &SecretVault,
+    step: u32,
+) {
+    const URI: &str = "/lol-champ-select/v1/session";
+    const MY_BANS: [i64; 3] = [238, 157, 35];
+    const THEIR_BANS: [i64; 3] = [777, 875, 233];
+    const ENEMIES: [(i64, &str); 5] =
+        [(122, "Darius"), (234, "Viego"), (89, "Leona"), (81, "Ezreal"), (99, "Lux")];
+    // Step at which each ally cell (0, 1, 3, 4) locks and each enemy (cells 5-9) reveals.
+    const ALLY_LOCK: [(i64, u32); 4] = [(0, 7), (1, 10), (3, 11), (4, 13)];
+    const ENEMY_REVEAL: [u32; 5] = [8, 9, 12, 14, 15];
+
+    let Some(mut s) = lock_if_active(store, active) else {
+        return;
+    };
+    let Some(mut session) = s.current(SourceId::LeagueClient, URI).map(|v| (*v).clone()) else {
+        return;
+    };
+    let bans = step.min(6) as usize;
+    session["bans"] = json!({
+        "myTeamBans": &MY_BANS[..bans.div_ceil(2)],
+        "theirTeamBans": &THEIR_BANS[..bans / 2],
+    });
+    session["theirTeam"] = json!(ENEMIES
+        .iter()
+        .zip(ENEMY_REVEAL)
+        .enumerate()
+        .map(|(i, (&(id, name), at))| {
+            let revealed = step >= at;
+            json!({
+                "cellId": 5 + i,
+                "championId": if revealed { id } else { 0 },
+                "championName": if revealed { name } else { "" },
+            })
+        })
+        .collect::<Vec<_>>());
+    let own: Vec<serde_json::Value> = session["actions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|turn| turn.as_array())
+        .flatten()
+        .filter(|act| act["actorCellId"] == json!(2))
+        .cloned()
+        .collect();
+    let allies: Vec<serde_json::Value> = ALLY_LOCK
+        .iter()
+        .map(|&(cell, at)| {
+            json!({
+                "id": 100 + cell,
+                "actorCellId": cell,
+                "type": "pick",
+                "completed": step >= at,
+                "isInProgress": false,
+            })
+        })
+        .collect();
+    session["actions"] = json!([own, allies]);
+    s.insert_event(SourceId::LeagueClient, EventKind::Update, URI.to_string(), session, vault);
+}
+
 /// Writes the synthetic baseline (summoner, ranked, lobby, Lobby phase) so the projection is
 /// immediately rich when Demo starts.
 fn seed_demo_baseline(store: &RwLock<EventStore>, active: &AtomicBool, vault: &SecretVault) {
@@ -261,6 +333,8 @@ pub fn spawn_demo_generator(
         let mut pinned_phase = String::new();
         let mut draft_deadline = Instant::now();
         let mut draft_flip = false;
+        let mut draft_step: u32 = 0;
+        let mut draft_step_at = Instant::now();
 
         loop {
             if !active.load(Ordering::Relaxed) {
@@ -292,6 +366,13 @@ pub fn spawn_demo_generator(
                         // `DemoSetPhase` just wrote a 24 s draft countdown.
                         draft_deadline = Instant::now() + Duration::from_secs(24);
                         pinned_phase = override_phase.clone();
+                        draft_step = 0;
+                        draft_step_at = Instant::now();
+                    }
+                    if override_phase == "ChampSelect" && Instant::now() >= draft_step_at {
+                        apply_demo_draft_step(&store, &active, &vault, draft_step);
+                        draft_step = (draft_step + 1) % DEMO_DRAFT_STEPS;
+                        draft_step_at = Instant::now() + DEMO_DRAFT_STEP;
                     }
                     if override_phase == "ChampSelect" && Instant::now() >= draft_deadline {
                         let left_ms = if draft_flip { 29_000 } else { 30_000 };

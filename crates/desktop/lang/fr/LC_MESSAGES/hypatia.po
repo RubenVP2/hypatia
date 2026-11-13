@@ -27,6 +27,14 @@ msgctxt "RosterRow"
 msgid ", acting now"
 msgstr ", à son tour"
 
+msgctxt "RosterRow"
+msgid ", hovering"
+msgstr ", en survol"
+
+msgctxt "EnemySlot"
+msgid "Enemy not picked yet"
+msgstr "Ennemi pas encore choisi"
+
 #: ui/app.slint:238
 msgctxt "RosterRow"
 msgid "Waiting for pick"
@@ -96,11 +104,6 @@ msgstr "Aucun champion banni pour l'instant"
 msgctxt "ChampSelectScreen"
 msgid "ENEMY PICKS & BANS"
 msgstr "CHOIX ET BANNISSEMENTS ENNEMIS"
-
-#: ui/app.slint:532
-msgctxt "ChampSelectScreen"
-msgid "+{0} pending"
-msgstr "+{0} en attente"
 
 #: ui/app.slint:542
 msgctxt "ChampSelectScreen"

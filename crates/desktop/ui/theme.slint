@@ -11,6 +11,8 @@ export global Theme {
     out property <duration> dur-base: motion ? 180ms : 0ms;
     out property <duration> dur-slow: motion ? 240ms : 0ms;
     out property <duration> dur-pulse: motion ? 650ms : 0ms;
+    // One-shot draft moments: a lock-in glint, a ban strike, an enemy reveal.
+    out property <duration> dur-reveal: motion ? 360ms : 0ms;
 
     out property <color> shell: dark ? #070b12 : #e4e1d5;
     out property <color> ground: dark ? #0b111b : #ede9dd;

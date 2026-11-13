@@ -381,6 +381,21 @@ impl EventStore {
         self.events.is_empty()
     }
 
+    /// Forgets everything observed so far: history, per-URI state, phase and counters. Used when
+    /// switching between synthetic Demo data and the real clients so neither leaks into the other.
+    pub fn reset_state(&mut self) {
+        self.events.clear();
+        self.history_bytes = 0;
+        for map in &mut self.by_uri {
+            map.clear();
+        }
+        self.phase = None;
+        self.source_stats = [(0, 0); SourceId::COUNT];
+        self.revision += 1;
+        self.state_revision += 1;
+        self.signal.bump();
+    }
+
     /// Clears the event history (per-URI state is kept).
     pub fn clear_events(&mut self) {
         self.events.clear();
@@ -478,6 +493,21 @@ mod tests {
         }
         assert!(store.len() <= 2, "byte budget must evict old payloads");
         assert_eq!(store.latest_event_id(), 20);
+    }
+
+    #[test]
+    fn reset_state_forgets_payloads_and_phase() {
+        let mut store = EventStore::default();
+        insert(&mut store, "/lol-summoner/v1/current-summoner", json!({ "name": "Demo" }));
+        insert(&mut store, GAMEFLOW_PHASE_URI, json!("InProgress"));
+        let before = store.state_revision();
+
+        store.reset_state();
+
+        assert!(store.current(SourceId::LeagueClient, "/lol-summoner/v1/current-summoner").is_none());
+        assert!(store.phase().is_none());
+        assert!(store.is_empty());
+        assert!(store.state_revision() > before);
     }
 
     #[test]

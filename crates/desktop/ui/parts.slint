@@ -417,6 +417,9 @@ export component Action inherits Rectangle {
         }
     }
     focus := FocusScope {
+        // A FocusScope on top of the TouchArea would otherwise eat the first press to take
+        // focus, so the button only fired on a second click. The TouchArea focuses it instead.
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(event) => {
             if (event.text == " " || event.text == Key.Return) {
@@ -529,6 +532,7 @@ export component RailNavItem inherits Rectangle {
         }
     }
     focus := FocusScope {
+        focus-on-click: false;
         key-pressed(event) => {
             if (event.text == " " || event.text == Key.Return) {
                 root.clicked();

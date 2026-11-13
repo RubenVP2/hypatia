@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::time::Duration;
 
 use hypatia_shared::{EndpointInfo, EndpointOrigin, EventKind, SourceId};
@@ -84,6 +84,97 @@ pub fn seed_demo_catalog(catalog: &Arc<RwLock<CatalogStore>>) {
     cat.add_declared(endpoints);
 }
 
+/// Locks the store for a synthetic write, unless Demo was switched off meanwhile.
+///
+/// The flag is read *under* the lock: `AppState::set_demo_active(false)` clears the flag and
+/// then wipes the store under the same lock, so a synthetic event either lands before that wipe
+/// (and is erased) or is never written. Nothing synthetic can survive Demo stopping.
+fn lock_if_active<'a>(
+    store: &'a RwLock<EventStore>,
+    active: &AtomicBool,
+) -> Option<RwLockWriteGuard<'a, EventStore>> {
+    let guard = store.write().unwrap();
+    active.load(Ordering::SeqCst).then_some(guard)
+}
+
+/// Writes the synthetic baseline (summoner, ranked, lobby, Lobby phase) so the projection is
+/// immediately rich when Demo starts.
+fn seed_demo_baseline(store: &RwLock<EventStore>, active: &AtomicBool, vault: &SecretVault) {
+    let Some(mut s) = lock_if_active(store, active) else {
+        return;
+    };
+    s.insert_event(
+        SourceId::LeagueClient,
+        EventKind::Update,
+        "/lol-summoner/v1/current-summoner".to_string(),
+        json!({
+            "accountId": 100000001,
+            "displayName": "HypatiaObserver",
+            "gameName": "HypatiaObserver",
+            "tagLine": "EUW",
+            "percentCompleteForNextLevel": 65,
+            "profileIconId": 548,
+            "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+            "summonerLevel": 120
+        }),
+        vault,
+    );
+    s.insert_event(
+        SourceId::LeagueClient,
+        EventKind::Update,
+        "/lol-ranked/v1/current-ranked-stats".to_string(),
+        json!({
+            "queueMap": {
+                "RANKED_SOLO_5x5": {
+                    "tier": "EMERALD",
+                    "division": "II",
+                    "leaguePoints": 54,
+                    "wins": 49,
+                    "losses": 43
+                }
+            }
+        }),
+        vault,
+    );
+    s.insert_event(
+        SourceId::LeagueClient,
+        EventKind::Update,
+        "/lol-lobby/v2/lobby".to_string(),
+        json!({
+            "partyId": "party-7878-demo",
+            "queueId": 420,
+            "members": [
+                {
+                    "summonerId": 12345678,
+                    "summonerName": "HypatiaObserver#EUW",
+                    "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+                    "isLeader": true,
+                    "ready": true,
+                    "firstPositionPreference": "MIDDLE",
+                    "secondPositionPreference": "TOP"
+                },
+                {
+                    "summonerId": 87654321,
+                    "summonerName": "KronoTrigger#EUW",
+                    "puuid": "3c4411b2-7a88-4f10-9c11-demo00000002",
+                    "isLeader": false,
+                    "ready": true,
+                    "firstPositionPreference": "JUNGLE",
+                    "secondPositionPreference": "UTILITY"
+                }
+            ]
+        }),
+        vault,
+    );
+    s.insert_event(
+        SourceId::LeagueClient,
+        EventKind::Update,
+        "/lol-gameflow/v1/gameflow-phase".to_string(),
+        json!("Lobby"),
+        vault,
+    );
+}
+
 /// Spawns the synthetic demo event generator. It only produces events while `active` is set,
 /// so leaving Demo mode stops all synthetic traffic.
 pub fn spawn_demo_generator(
@@ -120,88 +211,26 @@ pub fn spawn_demo_generator(
         let mut phase_start = Instant::now();
         let mut tick_counter: u64 = 0;
         let mut game_time_sec: u32 = 1122;
-
-        // Initialize baseline states in store so /api/summary is immediately rich
-        {
-            let mut s = store.write().unwrap();
-            s.insert_event(
-                SourceId::LeagueClient,
-                EventKind::Update,
-                "/lol-summoner/v1/current-summoner".to_string(),
-                json!({
-                    "accountId": 100000001,
-                    "displayName": "HypatiaObserver",
-                    "gameName": "HypatiaObserver",
-                    "tagLine": "EUW",
-                    "percentCompleteForNextLevel": 65,
-                    "profileIconId": 548,
-                    "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
-                    "summonerLevel": 120
-                }),
-                &vault,
-            );
-            s.insert_event(
-                SourceId::LeagueClient,
-                EventKind::Update,
-                "/lol-ranked/v1/current-ranked-stats".to_string(),
-                json!({
-                    "queueMap": {
-                        "RANKED_SOLO_5x5": {
-                            "tier": "EMERALD",
-                            "division": "II",
-                            "leaguePoints": 54,
-                            "wins": 49,
-                            "losses": 43
-                        }
-                    }
-                }),
-                &vault,
-            );
-            s.insert_event(
-                SourceId::LeagueClient,
-                EventKind::Update,
-                "/lol-lobby/v2/lobby".to_string(),
-                json!({
-                    "partyId": "party-7878-demo",
-                    "queueId": 420,
-                    "members": [
-                        {
-                            "summonerId": 12345678,
-                            "summonerName": "HypatiaObserver#EUW",
-                            "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
-                            "isLeader": true,
-                            "ready": true,
-                            "firstPositionPreference": "MIDDLE",
-                            "secondPositionPreference": "TOP"
-                        },
-                        {
-                            "summonerId": 87654321,
-                            "summonerName": "KronoTrigger#EUW",
-                            "puuid": "3c4411b2-7a88-4f10-9c11-demo00000002",
-                            "isLeader": false,
-                            "ready": true,
-                            "firstPositionPreference": "JUNGLE",
-                            "secondPositionPreference": "UTILITY"
-                        }
-                    ]
-                }),
-                &vault,
-            );
-            s.insert_event(
-                SourceId::LeagueClient,
-                EventKind::Update,
-                "/lol-gameflow/v1/gameflow-phase".to_string(),
-                json!("Lobby"),
-                &vault,
-            );
-        }
+        let mut running = false;
 
         loop {
             if !active.load(Ordering::Relaxed) {
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                running = false;
+                tokio::time::sleep(Duration::from_millis(200)).await;
                 continue;
             }
+            if !running {
+                // (Re)starting: begin a fresh cycle from a rich baseline.
+                running = true;
+                phase_idx = 0;
+                phase_start = Instant::now();
+                game_time_sec = 1122;
+                seed_demo_baseline(&store, &active, &vault);
+            }
             ticker.tick().await;
+            if !active.load(Ordering::Relaxed) {
+                continue;
+            }
             tick_counter = tick_counter.wrapping_add(1);
 
             if let Some(ref dr) = demo_remote {
@@ -212,7 +241,9 @@ pub fn spawn_demo_generator(
                 if overridden {
                     if override_phase == "InProgress" {
                         game_time_sec += 1;
-                        let mut s = store.write().unwrap();
+                        let Some(mut s) = lock_if_active(&store, &active) else {
+                            continue;
+                        };
                         s.insert_event(
                             SourceId::LiveGame,
                             EventKind::Poll,
@@ -241,7 +272,9 @@ pub fn spawn_demo_generator(
                 phase_start = Instant::now();
 
                 // Phase transition event
-                let mut s = store.write().unwrap();
+                let Some(mut s) = lock_if_active(&store, &active) else {
+                    continue;
+                };
                 let meta = s.insert_event(
                     SourceId::LeagueClient,
                     EventKind::Update,
@@ -595,7 +628,9 @@ pub fn spawn_demo_generator(
             };
 
             let meta = {
-                let mut s = store.write().unwrap();
+                let Some(mut s) = lock_if_active(&store, &active) else {
+                    continue;
+                };
                 s.insert_event(source, kind, uri.clone(), payload, &vault)
             };
 

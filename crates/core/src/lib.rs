@@ -186,8 +186,17 @@ impl AppState {
     }
 
     /// Activates or deactivates synthetic Demo mode at runtime.
+    ///
+    /// Every transition wipes the observed state so synthetic payloads never linger on screen
+    /// after Demo stops (and real ones never mix into the Demo). Real connectors re-bootstrap
+    /// their state when they reconnect; the generator re-seeds its baseline when it resumes.
     pub fn set_demo_active(&self, active: bool, demo_rate: f32) {
+        if self.is_demo_active() == active {
+            return;
+        }
         self.discovery.set_demo_override(active);
+        *self.demo_remote.write().unwrap() = DemoRemoteState::default();
+        self.store.write().unwrap().reset_state();
         if active {
             self.ensure_demo_generator(demo_rate);
         }

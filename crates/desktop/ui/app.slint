@@ -2390,6 +2390,8 @@ export component MainWindow inherits Window {
                         clicked => { root.remote-panel-open = false; }
                     }
                     FocusScope {
+                        // Keyboard-only: must not swallow the backdrop click.
+                        focus-on-click: false;
                         init => {
                             root.remote-confirm-stop = false;
                             self.focus();
@@ -2551,6 +2553,8 @@ export component MainWindow inherits Window {
                         clicked => { root.settings-open = false; }
                     }
                     FocusScope {
+                        // Keyboard-only: must not swallow the backdrop click.
+                        focus-on-click: false;
                         init => { self.focus(); }
                         key-pressed(event) => {
                             if (event.text == Key.Escape) {

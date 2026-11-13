@@ -741,6 +741,10 @@ impl DemoRemoteState {
 
     pub fn sync_to_store(&self, app_state: &AppState) {
         let mut store = app_state.store.write().unwrap();
+        // Checked under the lock: once Demo is off, no synthetic payload may reach the store.
+        if !app_state.is_demo_active() {
+            return;
+        }
         let vault = &app_state.vault;
 
         store.insert_event(

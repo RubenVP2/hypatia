@@ -5,12 +5,22 @@ export struct AllyRow {
     champion: string,
     initials: string,
     icon: image,
+    spell1-icon: image,
+    spell1-name: string,
+    spell2-icon: image,
+    spell2-name: string,
     player: string,
     rank: string,
     is-self: bool,
     is-premade: bool,
     picking: bool,
     hidden: bool,
+}
+
+export struct BanEntry {
+    name: string,
+    initials: string,
+    icon: image,
 }
 
 export struct EnemyPick {
@@ -27,6 +37,7 @@ export struct TowerDot {
 }
 
 export struct ObjectiveChip {
+    kind: int, // 0 Baron, 1 Elder, 2 Drake, 3 Herald, 4 Grubs
     weight: int,
     label: string,
     mine: bool,
@@ -145,7 +156,7 @@ export struct TelemetryView {
     connections: [TelemetrySocketItem],
 }
 
-// Lane-colored ring with role initial.
+// Lane-colored ring with geometric 2px role emblem.
 export component Roundel inherits Rectangle {
     in property <int> lane;
     in property <length> size: 40px;
@@ -157,11 +168,48 @@ export component Roundel inherits Rectangle {
     background: Theme.ground;
     accessible-role: text;
     accessible-label: Theme.lane-name(root.lane);
-    if root.size >= 24px: Text {
-        text: Theme.lane-letter(root.lane);
+    if root.size >= 16px: Path {
+        property <length> icon-sz: max(10px, root.size * 0.56);
+        x: (root.width - self.icon-sz) / 2;
+        y: (root.height - self.icon-sz) / 2;
+        width: self.icon-sz;
+        height: self.icon-sz;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: Theme.lane-icon-path(root.lane);
+        stroke: root.lane >= 0 ? Theme.lane-color(root.lane) : Theme.text;
+        stroke-width: root.size <= 20px ? 2.4px : 2px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        fill: transparent;
+    }
+}
+
+// Reusable square icon badge with local LCU bitmap and clean monogram fallback.
+export component GameIconBadge inherits Rectangle {
+    in property <image> icon;
+    in property <string> fallback-text: "";
+    in property <color> badge-bg: Theme.panel-raised;
+    in property <color> border: Theme.rule-strong;
+    in property <length> size: 22px;
+    width: size;
+    height: size;
+    border-radius: Theme.radius-sm;
+    clip: true;
+    background: root.badge-bg;
+    border-width: 1px;
+    border-color: root.border;
+    if root.icon.width > 0: Image {
+        width: 100%;
+        height: 100%;
+        source: root.icon;
+        image-fit: cover;
+    }
+    if root.icon.width == 0 && root.fallback-text != "": Text {
+        text: root.fallback-text;
         color: Theme.text;
-        font-family: Type.display-family;
-        font-size: root.size * 0.42;
+        font-family: Type.mono-family;
+        font-size: max(10px, root.size * 0.44);
         font-weight: 800;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -641,14 +689,14 @@ export component FeedRow inherits HorizontalLayout {
     }
 }
 
-// Objectives ramp: weighted dots plus optional labels when room allows.
+// Objectives ramp: weighted icon chips combining emblem + objective label.
 export component ObjectiveRow inherits HorizontalLayout {
     in property <[ObjectiveChip]> chips;
     in property <string> empty-text: "No objectives claimed";
     in property <bool> compact: false;
-    spacing: root.compact ? 7px : 8px;
+    spacing: root.compact ? 6px : 8px;
     alignment: start;
-    height: 32px;
+    height: root.compact ? 22px : 32px;
     if root.chips.length == 0: Text {
         text: root.empty-text;
         color: Theme.muted;
@@ -660,11 +708,26 @@ export component ObjectiveRow inherits HorizontalLayout {
         accessible-label: c.label;
 
         if root.compact: Rectangle {
-            width: 10px + c.weight * 4px;
-            height: 10px + c.weight * 4px;
+            width: 14px + c.weight * 3px;
+            height: 14px + c.weight * 3px;
             y: (parent.height - self.height) / 2;
-            border-radius: self.width / 2;
+            border-radius: Theme.radius-sm;
             background: Theme.team-color(c.mine);
+            Path {
+                property <length> icon-sz: max(10px, parent.height - 5px);
+                x: (parent.width - self.icon-sz) / 2;
+                y: (parent.height - self.icon-sz) / 2;
+                width: self.icon-sz;
+                height: self.icon-sz;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: Theme.objective-icon-path(c.kind);
+                stroke: Theme.on-team;
+                stroke-width: 2px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+                fill: transparent;
+            }
         }
 
         if !root.compact: Rectangle {
@@ -676,17 +739,31 @@ export component ObjectiveRow inherits HorizontalLayout {
             border-color: Theme.team-color(c.mine);
 
             HorizontalLayout {
-                padding-left: 7px;
-                padding-right: 7px;
-                spacing: 5px;
+                padding-left: 5px;
+                padding-right: 8px;
+                spacing: 6px;
                 Rectangle {
-                    width: 8px;
+                    width: 18px;
                     Rectangle {
                         y: (parent.height - self.height) / 2;
-                        width: 8px;
-                        height: 8px;
-                        border-radius: 4px;
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 3px;
                         background: Theme.team-color(c.mine);
+                        Path {
+                            x: 3px;
+                            y: 3px;
+                            width: 12px;
+                            height: 12px;
+                            viewbox-width: 24;
+                            viewbox-height: 24;
+                            commands: Theme.objective-icon-path(c.kind);
+                            stroke: Theme.on-team;
+                            stroke-width: 2px;
+                            stroke-line-cap: round;
+                            stroke-line-join: round;
+                            fill: transparent;
+                        }
                     }
                 }
                 Text {
@@ -701,23 +778,36 @@ export component ObjectiveRow inherits HorizontalLayout {
     }
 }
 
-// Compact ban chip shown in Champion Select.
+// Compact ban chip shown in Champion Select: portrait icon + champion name.
 export component BanChip inherits Rectangle {
-    in property <string> name;
+    in property <BanEntry> ban;
     in property <bool> mine: true;
-    height: 24px;
-    width: txt.preferred-width + 18px;
+    height: 26px;
+    width: row.preferred-width;
     border-radius: Theme.radius-sm;
     background: Theme.panel-raised;
     border-width: 1px;
     border-color: mine ? Theme.blue : Theme.red;
-    txt := Text {
-        text: root.name;
-        color: Theme.text;
-        font-size: 11px;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    accessible-role: text;
+    accessible-label: root.ban.name;
+    row := HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 8px;
+        spacing: 6px;
+        ChampPlate {
+            y: (parent.height - self.height) / 2;
+            size: 18px;
+            label: root.ban.initials;
+            icon: root.ban.icon;
+            mine: root.mine;
+        }
+        Text {
+            text: root.ban.name;
+            color: Theme.text;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
     }
 }
 

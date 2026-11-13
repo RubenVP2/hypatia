@@ -107,6 +107,8 @@ pub struct RemoteStateSnapshot {
     pub alert_title: Option<String>,
     pub alert_body: Option<String>,
     pub summoner_name: String,
+    #[serde(default)]
+    pub profile_icon_id: i64,
     pub lobby: Option<RemoteLobbyState>,
     pub matchmaking: Option<RemoteMatchmakingState>,
     pub champ_select: Option<RemoteChampSelectState>,
@@ -131,6 +133,8 @@ pub struct RemoteLiveObjective {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteLivePlayer {
     pub lane: String,
+    #[serde(default)]
+    pub champion_id: i64,
     pub champion: String,
     pub level: u32,
     pub kda: String,
@@ -148,6 +152,8 @@ pub struct RemoteLiveState {
     pub enemy_kills: u32,
     pub my_towers: u32,
     pub enemy_towers: u32,
+    #[serde(default)]
+    pub active_champion_id: i64,
     pub active_champion: String,
     pub level: u32,
     pub current_gold: i64,
@@ -234,6 +240,8 @@ pub struct RemoteSkinOption {
     pub id: i64,
     pub name: String,
     pub selected: bool,
+    #[serde(default)]
+    pub tile_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -292,6 +300,10 @@ pub struct RemoteChampSelectState {
     pub their_team: Vec<ChampSelectEnemy>,
     pub my_team_bans: Vec<String>,
     pub their_team_bans: Vec<String>,
+    #[serde(default)]
+    pub my_team_ban_ids: Vec<i64>,
+    #[serde(default)]
+    pub their_team_ban_ids: Vec<i64>,
     pub incoming_swaps: Vec<RemoteIncomingSwap>,
     pub champions: Vec<RemoteChampionOption>,
     pub available_skins: Vec<RemoteSkinOption>,
@@ -819,6 +831,7 @@ pub fn builtin_skins_for(champion_id: i64, champion_name: &str, selected_skin_id
                 id,
                 name,
                 selected: id == current,
+                tile_path: format!("/lol-game-data/assets/v1/champion-tiles/{champion_id}/{id}.jpg"),
             }
         })
         .collect()

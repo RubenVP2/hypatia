@@ -343,6 +343,7 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         .route("/", get(handle_index))
         .route("/sw.js", get(handle_sw))
         .route("/fonts/{name}", get(handle_font))
+        .route("/assets/{category}/{id}", get(handle_asset))
         .route("/api/state", get(handle_get_state))
         .route("/api/action", post(handle_post_action))
         .route("/ws", get(handle_ws))
@@ -368,6 +369,11 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
 }
 
 async fn sync_live_lcu_aux(st: &RemoteRouterState) {
+    st.app
+        .assets
+        .ensure_metadata_synced(&st.app.discovery, &st.app.vault, &st.app.riot_client)
+        .await;
+
     let Some(lcu) = st.app.discovery.lcu_args() else {
         return;
     };
@@ -515,6 +521,51 @@ async fn handle_font(
         StatusCode::OK,
         [
             (header::CONTENT_TYPE, "font/ttf"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        bytes,
+    )
+        .into_response()
+}
+
+async fn handle_asset(
+    State(st): State<RemoteRouterState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+    Path((category, id_part)): Path<(String, String)>,
+) -> Response {
+    if !check_host_and_origin(&headers, &st.allowed_hosts, st.port) {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let expected = st.token.read().unwrap().clone();
+    if !check_token(&headers, q.token.as_deref(), &expected) {
+        return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+    }
+
+    let id_str = id_part.split('.').next().unwrap_or("");
+    let Ok(id) = id_str.parse::<i64>() else {
+        return (StatusCode::BAD_REQUEST, "Invalid asset id").into_response();
+    };
+
+    let Some((mime, bytes)) = st
+        .app
+        .assets
+        .get_or_fetch_bytes(
+            &category,
+            id,
+            &st.app.discovery,
+            &st.app.vault,
+            &st.app.riot_client,
+        )
+        .await
+    else {
+        return (StatusCode::NOT_FOUND, "Not Found").into_response();
+    };
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, mime),
             (header::CACHE_CONTROL, "public, max-age=86400"),
         ],
         bytes,
@@ -817,5 +868,64 @@ mod tests {
                 .map(|a| a.len()),
             Some(5)
         );
+    }
+
+    #[tokio::test]
+    async fn test_remote_assets_require_auth_and_serve_cached_bitmaps() {
+        let dir = std::env::temp_dir().join(format!("hypatia_remote_assets_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("champion")).unwrap();
+        let fake_png = b"\x89PNG\r\n\x1a\nTESTCHAMP".to_vec();
+        std::fs::write(dir.join("champion").join("103.png"), &fake_png).unwrap();
+
+        let mut app = AppState::start(true, 2.0);
+        app.assets = Arc::new(crate::assets::GameAssetCache::with_dir(dir.clone()));
+
+        let handle = start_remote_server(app, 0).await.unwrap();
+        let qr = handle.qr_visual().unwrap();
+        let client = reqwest::Client::new();
+
+        // Missing auth -> 401
+        let no_auth = client
+            .get(format!("http://127.0.0.1:{}/assets/champion/103.png", handle.port))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(no_auth.status(), StatusCode::UNAUTHORIZED);
+
+        // Authorized request for cached champion portrait -> 200 PNG
+        let hit = client
+            .get(format!(
+                "http://127.0.0.1:{}/assets/champion/103.png?token={}",
+                handle.port, qr.token
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(hit.status(), StatusCode::OK);
+        assert_eq!(hit.headers().get(reqwest::header::CONTENT_TYPE).unwrap(), "image/png");
+        assert_eq!(hit.bytes().await.unwrap().as_ref(), fake_png.as_slice());
+
+        // Authorized request for unknown/uncached champion -> 404
+        let miss = client
+            .get(format!(
+                "http://127.0.0.1:{}/assets/champion/999999.png?token={}",
+                handle.port, qr.token
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(miss.status(), StatusCode::NOT_FOUND);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_remote_ui_html_has_no_external_cdn_links() {
+        assert!(!REMOTE_UI_HTML.contains("ddragon."));
+        assert!(!REMOTE_UI_HTML.contains("cdragon."));
+        assert!(!REMOTE_UI_HTML.contains("https://"));
+        assert!(!REMOTE_UI_HTML.contains("http://"));
+        assert!(REMOTE_UI_HTML.contains("/assets/"));
     }
 }

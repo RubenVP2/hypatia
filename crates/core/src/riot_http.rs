@@ -33,7 +33,7 @@ impl ReadOnlyRiotClient {
         Self { inner }
     }
 
-    /// Performs a strict GET request to https://127.0.0.1:{port}{path_and_query}.
+    /// Performs a strict binary GET request to https://127.0.0.1:{port}{path_and_query}.
     ///
     /// Validations:
     /// - `path_and_query` MUST start with `/`
@@ -41,13 +41,12 @@ impl ReadOnlyRiotClient {
     /// - `path_and_query` MUST NOT contain `..`
     ///
     /// The target host is hardcoded to `127.0.0.1` by construction.
-    pub async fn get(
+    pub async fn get_bytes(
         &self,
         port: u16,
         auth_token: Option<&str>,
         path_and_query: &str,
-    ) -> Result<(StatusCode, HeaderMap, serde_json::Value)> {
-        // Validate path to prevent directory traversal, protocol smuggling or open redirect
+    ) -> Result<(StatusCode, HeaderMap, Vec<u8>)> {
         if !path_and_query.starts_with('/') {
             bail!("Path must start with '/': '{}'", path_and_query);
         }
@@ -59,7 +58,6 @@ impl ReadOnlyRiotClient {
         }
 
         let url = format!("https://127.0.0.1:{}{}", port, path_and_query);
-
         let mut req = self.inner.get(&url);
 
         if let Some(token) = auth_token {
@@ -84,6 +82,18 @@ impl ReadOnlyRiotClient {
             .bytes()
             .await
             .with_context(|| format!("Failed to read response body from {}", url))?;
+
+        Ok((status, headers, bytes.to_vec()))
+    }
+
+    /// Performs a strict GET request to https://127.0.0.1:{port}{path_and_query} and decodes JSON/text.
+    pub async fn get(
+        &self,
+        port: u16,
+        auth_token: Option<&str>,
+        path_and_query: &str,
+    ) -> Result<(StatusCode, HeaderMap, serde_json::Value)> {
+        let (status, headers, bytes) = self.get_bytes(port, auth_token, path_and_query).await?;
 
         let body: serde_json::Value = if bytes.is_empty() {
             serde_json::Value::Null
@@ -113,16 +123,25 @@ mod tests {
         // Must start with '/'
         assert!(client.get(1234, None, "swagger/v3").await.is_err());
         assert!(client.get(1234, None, "").await.is_err());
+        assert!(client.get_bytes(1234, None, "lol-game-data/assets").await.is_err());
 
         // Must not contain '://'
         assert!(client
             .get(1234, None, "/http://evil.com/api")
             .await
             .is_err());
+        assert!(client
+            .get_bytes(1234, None, "/https://evil.com/icon.png")
+            .await
+            .is_err());
 
         // Must not contain '..'
         assert!(client
             .get(1234, None, "/../../etc/passwd")
+            .await
+            .is_err());
+        assert!(client
+            .get_bytes(1234, None, "/lol-game-data/../secret")
             .await
             .is_err());
     }

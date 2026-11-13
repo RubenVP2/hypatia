@@ -1,16 +1,18 @@
 #![cfg_attr(all(not(test), not(debug_assertions)), windows_subsystem = "windows")]
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use clap::Parser;
+use hypatia_core::assets::GameAssetCache;
 use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
 use hypatia_core::{compute_json_diff, AppState};
 use hypatia_shared::{
-    ChampSelectSummary, EndOfGameSummary, EventKind, Lane, LiveBoard, LiveGameSummary, SourceId,
-    SourceStatus, SummarySnapshot,
+    spell_name_from_id, ChampSelectSummary, EndOfGameSummary, EventKind, Lane, LiveBoard,
+    LiveGameSummary, ObjectiveKind, SourceId, SourceStatus, SummarySnapshot,
 };
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
 use tracing::info;
@@ -99,6 +101,83 @@ fn qr_to_slint_image(qr: &QrCodeVisual) -> Image {
     Image::from_rgba8(buf)
 }
 
+#[derive(Default)]
+struct DesktopAssetLoader {
+    images: HashMap<String, Image>,
+}
+
+impl DesktopAssetLoader {
+    fn resolve(&mut self, app_state: &AppState, category: &'static str, id: i64) -> Image {
+        if let Some(img) = self.load_cached_only(&app_state.assets, category, id) {
+            return img;
+        }
+        if id > 0 || (category == "profile" && id >= 0) {
+            app_state.assets.prefetch_if_missing(
+                category,
+                id,
+                &app_state.discovery,
+                &app_state.vault,
+                &app_state.riot_client,
+            );
+        }
+        Image::default()
+    }
+
+    fn load_cached_only(
+        &mut self,
+        cache: &GameAssetCache,
+        category: &str,
+        id: i64,
+    ) -> Option<Image> {
+        if id < 0 || (category != "profile" && id == 0) {
+            return None;
+        }
+        let key = format!("{category}/{id}");
+        if let Some(img) = self.images.get(&key) {
+            return Some(img.clone());
+        }
+        let path = cache.cached_image_path(category, id)?;
+        let img = Image::load_from_path(&path).ok()?;
+        self.images.insert(key, img.clone());
+        Some(img)
+    }
+}
+
+fn objective_kind_index(kind: ObjectiveKind) -> i32 {
+    match kind {
+        ObjectiveKind::Baron => 0,
+        ObjectiveKind::Elder => 1,
+        ObjectiveKind::Drake => 2,
+        ObjectiveKind::Herald => 3,
+        ObjectiveKind::Grubs => 4,
+    }
+}
+
+fn build_ban_entries(
+    names: &[String],
+    ids: &[i64],
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+) -> Vec<BanEntry> {
+    names
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| !b.trim().is_empty())
+        .map(|(i, b)| {
+            let id = ids
+                .get(i)
+                .copied()
+                .filter(|&cid| cid > 0)
+                .unwrap_or_else(|| app_state.assets.resolve_champion_id(b));
+            BanEntry {
+                name: SharedString::from(b.as_str()),
+                initials: champ_initials(b),
+                icon: loader.resolve(app_state, "champion", id),
+            }
+        })
+        .collect()
+}
+
 fn map_coord_for_lane(lane: i32) -> (f32, f32, i32) {
     match lane {
         0 => (40.0, 145.0, 0),  // Top line, label right
@@ -136,7 +215,11 @@ fn tower_coordinates(order_side: bool, lane: Lane, tier: u8) -> (f32, f32) {
     }
 }
 
-fn build_champ_select_view(cs: &ChampSelectSummary) -> ChampSelectView {
+fn build_champ_select_view(
+    cs: &ChampSelectSummary,
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+) -> ChampSelectView {
     let mut allies = Vec::new();
     let mut map_allies = Vec::new();
     let mut acting_label = None;
@@ -173,11 +256,31 @@ fn build_champ_select_view(cs: &ChampSelectSummary) -> ChampSelectView {
             });
         }
 
+        let champ_icon = if has_champ {
+            loader.resolve(app_state, "champion", ally.champion_id)
+        } else {
+            Image::default()
+        };
+        let spell1_name = if ally.spell1_id > 0 {
+            spell_name_from_id(ally.spell1_id)
+        } else {
+            ""
+        };
+        let spell2_name = if ally.spell2_id > 0 {
+            spell_name_from_id(ally.spell2_id)
+        } else {
+            ""
+        };
+
         allies.push(AllyRow {
             lane,
             champion: SharedString::from(champ_str),
             initials: champ_initials(champ_str),
-            icon: Image::default(),
+            icon: champ_icon,
+            spell1_icon: loader.resolve(app_state, "spell", ally.spell1_id),
+            spell1_name: SharedString::from(spell1_name),
+            spell2_icon: loader.resolve(app_state, "spell", ally.spell2_id),
+            spell2_name: SharedString::from(spell2_name),
             player: SharedString::from(ally.summoner_name.as_str()),
             rank: SharedString::from(ally.rank_label.as_deref().unwrap_or("Unranked")),
             is_self: ally.is_self,
@@ -214,7 +317,7 @@ fn build_champ_select_view(cs: &ChampSelectSummary) -> ChampSelectView {
             enemies.push(EnemyPick {
                 champion: SharedString::from(e.champion_name.as_str()),
                 initials: champ_initials(&e.champion_name),
-                icon: Image::default(),
+                icon: loader.resolve(app_state, "champion", e.champion_id),
             });
         } else {
             enemies_to_come += 1;
@@ -237,18 +340,9 @@ fn build_champ_select_view(cs: &ChampSelectSummary) -> ChampSelectView {
         cs.sub_phase.replace('_', " ")
     );
 
-    let my_ban_list: Vec<SharedString> = cs
-        .my_team_bans
-        .iter()
-        .filter(|b| !b.trim().is_empty())
-        .map(|b| SharedString::from(b.as_str()))
-        .collect();
-    let their_ban_list: Vec<SharedString> = cs
-        .their_team_bans
-        .iter()
-        .filter(|b| !b.trim().is_empty())
-        .map(|b| SharedString::from(b.as_str()))
-        .collect();
+    let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, app_state, loader);
+    let their_ban_list =
+        build_ban_entries(&cs.their_team_bans, &cs.their_team_ban_ids, app_state, loader);
 
     ChampSelectView {
         title: SharedString::from(title),
@@ -266,7 +360,12 @@ fn build_champ_select_view(cs: &ChampSelectSummary) -> ChampSelectView {
     }
 }
 
-fn build_live_view(lg: &LiveGameSummary, board: Option<&LiveBoard>) -> LiveView {
+fn build_live_view(
+    lg: &LiveGameSummary,
+    board: Option<&LiveBoard>,
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+) -> LiveView {
     let default_board = LiveBoard::default();
     let b = board.unwrap_or(&default_board);
 
@@ -275,21 +374,32 @@ fn build_live_view(lg: &LiveGameSummary, board: Option<&LiveBoard>) -> LiveView 
     let mut self_dead = false;
     let mut self_respawn = 0.0;
     let mut self_kda = format!("{} / {} / {}", lg.kills, lg.deaths, lg.assists);
+    let mut self_champion_id = 0;
 
     for p in &lg.players {
         let mine = (p.team == "ORDER") == b.my_team_is_order;
         let lane = lane_index(&p.position);
         let kda_str = format!("{} / {} / {}", p.kills, p.deaths, p.assists);
+        let cid = if p.champion_id > 0 {
+            p.champion_id
+        } else {
+            app_state
+                .assets
+                .resolve_champion_id_with_alias(&p.champion_name, &p.champion_alias)
+        };
         if p.is_self {
             self_dead = p.is_dead;
             self_respawn = p.respawn_timer_sec;
             self_kda = kda_str.clone();
+            if cid > 0 {
+                self_champion_id = cid;
+            }
         }
         let row = PlayerLine {
             lane,
             champion: SharedString::from(p.champion_name.as_str()),
             initials: champ_initials(&p.champion_name),
-            icon: Image::default(),
+            icon: loader.resolve(app_state, "champion", cid),
             level: p.level as i32,
             kda: SharedString::from(kda_str),
             cs: p.creep_score as i32,
@@ -323,6 +433,7 @@ fn build_live_view(lg: &LiveGameSummary, board: Option<&LiveBoard>) -> LiveView 
     for obj in &b.objectives {
         let mine = obj.by_order == b.my_team_is_order;
         let chip = ObjectiveChip {
+            kind: objective_kind_index(obj.kind),
             weight: obj.kind.weight() as i32,
             label: SharedString::from(obj.label.as_str()),
             mine,
@@ -371,10 +482,20 @@ fn build_live_view(lg: &LiveGameSummary, board: Option<&LiveBoard>) -> LiveView 
         )
     };
 
+    let active_cid = if lg.active_champion_id > 0 {
+        lg.active_champion_id
+    } else if self_champion_id > 0 {
+        self_champion_id
+    } else {
+        app_state.assets.resolve_champion_id(&lg.active_champion)
+    };
+
     LiveView {
         title: SharedString::from(title),
         detail: SharedString::from(detail),
         dead: self_dead,
+        active_initials: champ_initials(&lg.active_champion),
+        active_icon: loader.resolve(app_state, "champion", active_cid),
         my_score: b.my_kills() as i32,
         enemy_score: b.enemy_kills() as i32,
         clock: format_mm_ss(lg.game_time_sec),
@@ -388,8 +509,17 @@ fn build_live_view(lg: &LiveGameSummary, board: Option<&LiveBoard>) -> LiveView 
     }
 }
 
-fn build_end_view(eog: &EndOfGameSummary) -> EndView {
+fn build_end_view(
+    eog: &EndOfGameSummary,
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
+    let cid = if eog.champion_id > 0 {
+        eog.champion_id
+    } else {
+        app_state.assets.resolve_champion_id(&eog.champion_name)
+    };
     let stats = vec![
         StatLine {
             label: SharedString::from("Champion"),
@@ -417,11 +547,20 @@ fn build_end_view(eog: &EndOfGameSummary) -> EndView {
         )),
         kda: SharedString::from(format!("{} / {} / {}", eog.kills, eog.deaths, eog.assists)),
         victory,
+        champion_name: SharedString::from(eog.champion_name.as_str()),
+        champion_initials: champ_initials(&eog.champion_name),
+        champion_icon: loader.resolve(app_state, "champion", cid),
         stats: ModelRc::new(VecModel::from(stats)),
     }
 }
 
-fn apply_summary_to_windows(main_win: &MainWindow, mini_win: &MiniWidget, snap: &SummarySnapshot) {
+fn apply_summary_to_windows(
+    main_win: &MainWindow,
+    mini_win: &MiniWidget,
+    app_state: &AppState,
+    loader: &mut DesktopAssetLoader,
+    snap: &SummarySnapshot,
+) {
     let phase_str = snap
         .phase
         .as_ref()
@@ -452,6 +591,14 @@ fn apply_summary_to_windows(main_win: &MainWindow, mini_win: &MiniWidget, snap: 
     main_win.set_rc_port(rc_port);
     main_win.set_game_live(game_live);
     main_win.set_game_port(game_port);
+
+    if (lcu_live || game_live) && !app_state.is_demo_active() {
+        app_state.assets.trigger_metadata_sync(
+            &app_state.discovery,
+            &app_state.vault,
+            &app_state.riot_client,
+        );
+    }
 
     // Determine active view index:
     // 0 League closed, 1 client idle, 2 lobby, 3 queue, 4 match found, 5 champ select, 6 in game, 7 results
@@ -579,10 +726,29 @@ fn apply_summary_to_windows(main_win: &MainWindow, mini_win: &MiniWidget, snap: 
             }
         }
 
+        let summoner_icon = snap
+            .summoner
+            .as_ref()
+            .map(|s| loader.resolve(app_state, "profile", s.profile_icon_id))
+            .unwrap_or_default();
+        let summoner_initials = snap
+            .summoner
+            .as_ref()
+            .map(|s| champ_initials(&s.display_name))
+            .unwrap_or_default();
+        let summoner_header_name = snap
+            .summoner
+            .as_ref()
+            .map(|s| SharedString::from(format!("{}#{}", s.display_name, s.tag_line)))
+            .unwrap_or_default();
+
         main_win.set_wait(WaitView {
             title: SharedString::from(title),
             detail: SharedString::from(detail),
             specimen,
+            summoner_name: summoner_header_name,
+            summoner_initials,
+            summoner_icon,
             notes: ModelRc::new(VecModel::from(notes)),
         });
 
@@ -616,11 +782,11 @@ fn apply_summary_to_windows(main_win: &MainWindow, mini_win: &MiniWidget, snap: 
     }
 
     if let Some(ref cs) = snap.champ_select {
-        main_win.set_champ(build_champ_select_view(cs));
+        main_win.set_champ(build_champ_select_view(cs, app_state, loader));
     }
 
     if let Some(ref lg) = snap.live_game {
-        let lv = build_live_view(lg, snap.board.as_ref());
+        let lv = build_live_view(lg, snap.board.as_ref(), app_state, loader);
         main_win.set_live(lv.clone());
         mini_win.set_in_game(true);
         mini_win.set_live(lv);
@@ -629,7 +795,7 @@ fn apply_summary_to_windows(main_win: &MainWindow, mini_win: &MiniWidget, snap: 
     }
 
     if let Some(ref eog) = snap.end_of_game {
-        main_win.set_end(build_end_view(eog));
+        main_win.set_end(build_end_view(eog, app_state, loader));
     }
 }
 
@@ -1103,6 +1269,7 @@ fn main() {
     }
 
     let telemetry_ui_state = Rc::new(RefCell::new(TelemetryUiState::default()));
+    let desktop_assets = Rc::new(RefCell::new(DesktopAssetLoader::default()));
 
     // Theme callback
     {
@@ -1142,6 +1309,7 @@ fn main() {
         let mini_weak = mini_win.as_weak();
         let app_state = app_state.clone();
         let ui_state = telemetry_ui_state.clone();
+        let assets_loader = desktop_assets.clone();
         let demo_rate = cli.demo_rate;
         main_win.on_toggle_demo(move || {
             if let Some(m) = main_weak.upgrade() {
@@ -1150,7 +1318,13 @@ fn main() {
                 m.set_demo(next);
                 if let Some(w) = mini_weak.upgrade() {
                     let snap = app_state.get_summary();
-                    apply_summary_to_windows(&m, &w, &snap);
+                    apply_summary_to_windows(
+                        &m,
+                        &w,
+                        &app_state,
+                        &mut assets_loader.borrow_mut(),
+                        &snap,
+                    );
                 }
                 let mut st = ui_state.borrow_mut();
                 st.invalidate_telemetry_cache();
@@ -1165,6 +1339,7 @@ fn main() {
         let mini_weak = mini_win.as_weak();
         let app_state = app_state.clone();
         let ui_state = telemetry_ui_state.clone();
+        let assets_loader = desktop_assets.clone();
         main_win.on_select_demo_phase(move |phase| {
             {
                 let mut demo = app_state.demo_remote.write().unwrap();
@@ -1177,7 +1352,13 @@ fn main() {
             }
             if let (Some(m), Some(w)) = (main_weak.upgrade(), mini_weak.upgrade()) {
                 let snap = app_state.get_summary();
-                apply_summary_to_windows(&m, &w, &snap);
+                apply_summary_to_windows(
+                    &m,
+                    &w,
+                    &app_state,
+                    &mut assets_loader.borrow_mut(),
+                    &snap,
+                );
                 let mut st = ui_state.borrow_mut();
                 st.invalidate_telemetry_cache();
                 apply_telemetry_to_window(&m, &app_state, &mut st);
@@ -1417,7 +1598,13 @@ fn main() {
 
     // Initial state render + show window immediately + periodic 250ms UI refresh timer
     let initial_summary = app_state.get_summary();
-    apply_summary_to_windows(&main_win, &mini_win, &initial_summary);
+    apply_summary_to_windows(
+        &main_win,
+        &mini_win,
+        &app_state,
+        &mut desktop_assets.borrow_mut(),
+        &initial_summary,
+    );
     apply_telemetry_to_window(&main_win, &app_state, &mut telemetry_ui_state.borrow_mut());
     main_win.show().expect("Failed to show MainWindow");
 
@@ -1427,11 +1614,18 @@ fn main() {
         let mini_weak = mini_win.as_weak();
         let app_state = app_state.clone();
         let ui_state = telemetry_ui_state.clone();
+        let assets_loader = desktop_assets.clone();
         let remote_handle_poll = remote_handle.clone();
         ui_timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
             if let (Some(m), Some(w)) = (main_weak.upgrade(), mini_weak.upgrade()) {
                 let snap = app_state.get_summary();
-                apply_summary_to_windows(&m, &w, &snap);
+                apply_summary_to_windows(
+                    &m,
+                    &w,
+                    &app_state,
+                    &mut assets_loader.borrow_mut(),
+                    &snap,
+                );
                 apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
                 let clients = remote_handle_poll
                     .lock()
@@ -1451,6 +1645,41 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maps_objective_kinds_to_distinct_icon_indices() {
+        assert_eq!(objective_kind_index(ObjectiveKind::Baron), 0);
+        assert_eq!(objective_kind_index(ObjectiveKind::Elder), 1);
+        assert_eq!(objective_kind_index(ObjectiveKind::Drake), 2);
+        assert_eq!(objective_kind_index(ObjectiveKind::Herald), 3);
+        assert_eq!(objective_kind_index(ObjectiveKind::Grubs), 4);
+    }
+
+    #[test]
+    fn desktop_asset_loader_loads_valid_png_from_disk_cache() {
+        let dir = std::env::temp_dir().join(format!("hypatia_desktop_img_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("champion")).unwrap();
+        // Minimal valid 1x1 RGBA PNG generated cleanly via Image::from_rgba8 or known PNG bytes:
+        // Standard 1x1 transparent PNG (67 bytes):
+        let png_1x1: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+        std::fs::write(dir.join("champion").join("103.png"), png_1x1).unwrap();
+
+        let cache = GameAssetCache::with_dir(dir.clone());
+        let mut loader = DesktopAssetLoader::default();
+        let img = loader.load_cached_only(&cache, "champion", 103).expect("should decode cached 1x1 PNG");
+        assert_eq!(img.size().width, 1);
+        assert_eq!(img.size().height, 1);
+        assert!(loader.load_cached_only(&cache, "champion", 9999).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn bot_and_support_map_labels_stay_separated() {

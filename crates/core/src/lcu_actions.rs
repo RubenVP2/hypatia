@@ -895,6 +895,11 @@ pub fn extract_remote_state(
             }
         })
         .unwrap_or_else(|| "HypatiaObserver#EUW".to_string());
+    let profile_icon_id = summoner_val
+        .as_ref()
+        .and_then(|s| s.get("profileIconId"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
 
     // 1. Lobby state
     let lobby = lobby_val.as_ref().map(|lv| {
@@ -1241,6 +1246,15 @@ pub fn extract_remote_state(
             .map(|arr| arr.iter().filter_map(|x| x.as_i64()).collect());
 
         let mut champions = builtin_champion_catalog();
+        let synced_catalog = app_state.assets.synced_champion_catalog();
+        if !synced_catalog.is_empty() {
+            for extra in synced_catalog {
+                if !champions.iter().any(|c| c.id == extra.id) {
+                    champions.push(extra);
+                }
+            }
+            champions.sort_by(|a, b| a.name.cmp(&b.name));
+        }
         for c in &mut champions {
             if let Some(ref pids) = pickable_ids {
                 if !pids.is_empty() {
@@ -1276,17 +1290,26 @@ pub fn extract_remote_state(
                     .filter_map(|s| {
                         let id = s.get("id")?.as_i64()?;
                         let name = s.get("name")?.as_str()?.to_string();
+                        let tile_path = s
+                            .get("tilePath")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        if !tile_path.is_empty() {
+                            app_state.assets.register_skin_path(id, &tile_path);
+                        }
                         Some(RemoteSkinOption {
                             id,
                             name,
                             selected: id == selected_skin_id,
+                            tile_path,
                         })
                     })
                     .collect::<Vec<_>>()
             })
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| {
-                let cname = champion_name_from_id(champ_for_skins);
+                let cname = app_state.assets.resolve_champion_name(champ_for_skins);
                 builtin_skins_for(champ_for_skins, &cname, selected_skin_id)
             });
 
@@ -1339,6 +1362,37 @@ pub fn extract_remote_state(
 
         let recommended_rune_pages = recommended_pages_for(champ_for_skins, &assigned_position);
 
+        let my_team_bans = base_summary
+            .as_ref()
+            .map(|b| b.my_team_bans.clone())
+            .unwrap_or_default();
+        let their_team_bans = base_summary
+            .as_ref()
+            .map(|b| b.their_team_bans.clone())
+            .unwrap_or_default();
+        let my_team_ban_ids = my_team_bans
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let id = base_summary
+                    .as_ref()
+                    .and_then(|b| b.my_team_ban_ids.get(i).copied())
+                    .unwrap_or(0);
+                if id > 0 { id } else { app_state.assets.resolve_champion_id(n) }
+            })
+            .collect();
+        let their_team_ban_ids = their_team_bans
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let id = base_summary
+                    .as_ref()
+                    .and_then(|b| b.their_team_ban_ids.get(i).copied())
+                    .unwrap_or(0);
+                if id > 0 { id } else { app_state.assets.resolve_champion_id(n) }
+            })
+            .collect();
+
         RemoteChampSelectState {
             sub_phase,
             time_left_sec,
@@ -1354,14 +1408,10 @@ pub fn extract_remote_state(
                 .as_ref()
                 .map(|b| b.their_team.clone())
                 .unwrap_or_default(),
-            my_team_bans: base_summary
-                .as_ref()
-                .map(|b| b.my_team_bans.clone())
-                .unwrap_or_default(),
-            their_team_bans: base_summary
-                .as_ref()
-                .map(|b| b.their_team_bans.clone())
-                .unwrap_or_default(),
+            my_team_bans,
+            their_team_bans,
+            my_team_ban_ids,
+            their_team_ban_ids,
             incoming_swaps,
             champions,
             available_skins,
@@ -1455,8 +1505,16 @@ pub fn extract_remote_state(
                     "UTILITY" | "SUPPORT" => "SUP",
                     _ => "FLEX",
                 };
+                let champion_id = if p.champion_id > 0 {
+                    p.champion_id
+                } else {
+                    app_state
+                        .assets
+                        .resolve_champion_id_with_alias(&p.champion_name, &p.champion_alias)
+                };
                 RemoteLivePlayer {
                     lane: lane.to_string(),
+                    champion_id,
                     champion: p.champion_name.clone(),
                     level: p.level,
                     kda: format!("{}/{}/{}", p.kills, p.deaths, p.assists),
@@ -1517,6 +1575,15 @@ pub fn extract_remote_state(
                 })
                 .collect();
 
+            let active_champion_id = if lg.active_champion_id > 0 {
+                lg.active_champion_id
+            } else {
+                allies
+                    .iter()
+                    .find(|p| p.is_self && p.champion_id > 0)
+                    .map(|p| p.champion_id)
+                    .unwrap_or_else(|| app_state.assets.resolve_champion_id(&lg.active_champion))
+            };
             RemoteLiveState {
                 game_mode: lg.game_mode,
                 clock,
@@ -1524,6 +1591,7 @@ pub fn extract_remote_state(
                 enemy_kills: board.enemy_kills(),
                 my_towers,
                 enemy_towers,
+                active_champion_id,
                 active_champion: lg.active_champion,
                 level: lg.level,
                 current_gold: lg.current_gold,
@@ -1547,6 +1615,7 @@ pub fn extract_remote_state(
         alert_title: alerts.last_title.clone(),
         alert_body: alerts.last_body.clone(),
         summoner_name,
+        profile_icon_id,
         lobby,
         matchmaking,
         champ_select,

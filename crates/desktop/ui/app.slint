@@ -1,9 +1,9 @@
 import { Theme, Type } from "theme.slint";
 import {
-    AllyRow, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
+    AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
-    Roundel, ChampPlate, SectionLabel, Plate, Specimen, Action, RailNavItem, RailSourceRow,
+    Roundel, ChampPlate, GameIconBadge, SectionLabel, Plate, Specimen, Action, RailNavItem, RailSourceRow,
     PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
@@ -19,6 +19,9 @@ export struct WaitView {
     title: string,
     detail: string,
     specimen: string,
+    summoner-name: string,
+    summoner-initials: string,
+    summoner-icon: image,
     notes: [StatLine],
 }
 
@@ -32,8 +35,8 @@ export struct ChampSelectView {
     enemies-to-come: int,
     my-bans: string,
     their-bans: string,
-    my-ban-list: [string],
-    their-ban-list: [string],
+    my-ban-list: [BanEntry],
+    their-ban-list: [BanEntry],
     anonymized: bool,
 }
 
@@ -41,6 +44,8 @@ export struct LiveView {
     title: string,
     detail: string,
     dead: bool,
+    active-initials: string,
+    active-icon: image,
     my-score: int,
     enemy-score: int,
     clock: string,
@@ -58,6 +63,9 @@ export struct EndView {
     detail: string,
     kda: string,
     victory: bool,
+    champion-name: string,
+    champion-initials: string,
+    champion-icon: image,
     stats: [StatLine],
 }
 
@@ -179,35 +187,100 @@ component RosterRow inherits Rectangle {
 
             HorizontalLayout {
                 spacing: 8px;
-                alignment: start;
-                Text {
-                    text: root.ally.champion != "" ? root.ally.champion : "Waiting for pick";
-                    color: root.ally.champion != "" ? Theme.text : Theme.muted;
-                    font-size: Type.name;
-                    font-weight: 800;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-                if root.ally.picking: Rectangle {
-                    y: (parent.height - self.height) / 2;
-                    height: 20px;
-                    width: turn-lbl.preferred-width + 14px;
-                    border-radius: 3px;
-                    background: Theme.signal;
-                    turn-lbl := Text {
-                        text: "ACTING NOW";
-                        color: #0f1116;
-                        font-family: Type.mono-family;
-                        font-size: 11px;
+                alignment: stretch;
+                HorizontalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: root.ally.champion != "" ? root.ally.champion : "Waiting for pick";
+                        color: root.ally.champion != "" ? Theme.text : Theme.muted;
+                        font-size: Type.name;
                         font-weight: 800;
-                        horizontal-alignment: center;
                         vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    if root.ally.picking: Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        height: 20px;
+                        width: turn-lbl.preferred-width + 14px;
+                        border-radius: 3px;
+                        background: Theme.signal;
+                        turn-lbl := Text {
+                            text: "ACTING NOW";
+                            color: #0f1116;
+                            font-family: Type.mono-family;
+                            font-size: 11px;
+                            font-weight: 800;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                if root.ally.spell1-name != "" || root.ally.spell2-name != "": HorizontalLayout {
+                    spacing: 5px;
+                    alignment: end;
+                    if root.ally.spell1-name != "": Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        height: 22px;
+                        width: sp1-row.preferred-width;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.ground;
+                        border-width: 1px;
+                        border-color: Theme.rule;
+                        sp1-row := HorizontalLayout {
+                            padding-left: 3px;
+                            padding-right: 6px;
+                            spacing: 4px;
+                            GameIconBadge {
+                                y: (parent.height - self.height) / 2;
+                                size: 16px;
+                                icon: root.ally.spell1-icon;
+                                fallback-text: "D";
+                            }
+                            Text {
+                                text: root.ally.spell1-name;
+                                color: Theme.text;
+                                font-size: 11px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    if root.ally.spell2-name != "": Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        height: 22px;
+                        width: sp2-row.preferred-width;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.ground;
+                        border-width: 1px;
+                        border-color: Theme.rule;
+                        sp2-row := HorizontalLayout {
+                            padding-left: 3px;
+                            padding-right: 6px;
+                            spacing: 4px;
+                            GameIconBadge {
+                                y: (parent.height - self.height) / 2;
+                                size: 16px;
+                                icon: root.ally.spell2-icon;
+                                fallback-text: "F";
+                            }
+                            Text {
+                                text: root.ally.spell2-name;
+                                color: Theme.text;
+                                font-size: 11px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
             }
 
             Text {
-                text: (root.ally.is-self ? "You · " : "")
+                text: Theme.lane-name(root.ally.lane)
+                    + " · "
+                    + (root.ally.is-self ? "You · " : "")
                     + root.ally.player
                     + (root.ally.is-premade ? " (Premade)" : "")
                     + (!root.ally.hidden && root.ally.rank != "" ? " · " + root.ally.rank : "");
@@ -359,7 +432,7 @@ component ChampSelectScreen inherits Flickable {
                                 font-weight: 700;
                                 vertical-alignment: center;
                             }
-                            for b in root.cs.my-ban-list: BanChip { name: b; mine: true; }
+                            for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; }
                         }
                         if root.cs.their-ban-list.length > 0: HorizontalLayout {
                             spacing: 6px;
@@ -372,7 +445,7 @@ component ChampSelectScreen inherits Flickable {
                                 font-weight: 700;
                                 vertical-alignment: center;
                             }
-                            for b in root.cs.their-ban-list: BanChip { name: b; mine: false; }
+                            for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
                         }
                         if root.cs.my-ban-list.length == 0 && root.cs.their-ban-list.length == 0: Text {
                             text: "No champions banned yet";
@@ -433,17 +506,29 @@ component ChampSelectScreen inherits Flickable {
                             vertical-alignment: center;
                         }
                     }
-                    if root.cs.my-bans != "": Text {
-                        text: "Ally bans: " + root.cs.my-bans;
-                        color: Theme.blue-soft;
-                        font-size: 12px;
-                        wrap: word-wrap;
+                    if root.cs.my-ban-list.length > 0: HorizontalLayout {
+                        spacing: 5px;
+                        alignment: start;
+                        Text {
+                            text: "Blue:";
+                            color: Theme.blue-soft;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; }
                     }
-                    if root.cs.their-bans != "": Text {
-                        text: "Enemy bans: " + root.cs.their-bans;
-                        color: Theme.red-soft;
-                        font-size: 12px;
-                        wrap: word-wrap;
+                    if root.cs.their-ban-list.length > 0: HorizontalLayout {
+                        spacing: 5px;
+                        alignment: start;
+                        Text {
+                            text: "Red:";
+                            color: Theme.red-soft;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
                     }
                 }
             }
@@ -502,6 +587,18 @@ component LiveScreen inherits Flickable {
                 padding: 14px;
                 spacing: 16px;
                 alignment: stretch;
+
+                if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
+                    width: 46px;
+                    ChampPlate {
+                        y: (parent.height - self.height) / 2;
+                        size: 46px;
+                        label: root.live.active-initials;
+                        icon: root.live.active-icon;
+                        mine: true;
+                        faded: root.live.dead;
+                    }
+                }
 
                 VerticalLayout {
                     horizontal-stretch: 1;
@@ -736,23 +833,41 @@ component WaitScreen inherits Flickable {
                                 }
                                 HorizontalLayout {
                                     alignment: end;
-                                    spacing: 6px;
-                                    Rectangle {
-                                        width: 24px;
-                                        Roundel {
-                                            y: (parent.height - self.height) / 2;
-                                            size: 24px;
-                                            lane: m.first-lane;
-                                            visible: m.first-lane >= 0;
+                                    spacing: 10px;
+                                    if m.first-lane >= 0: HorizontalLayout {
+                                        spacing: 5px;
+                                        Rectangle {
+                                            width: 22px;
+                                            Roundel {
+                                                y: (parent.height - self.height) / 2;
+                                                size: 22px;
+                                                lane: m.first-lane;
+                                            }
+                                        }
+                                        Text {
+                                            text: Theme.lane-name(m.first-lane);
+                                            color: Theme.text;
+                                            font-size: Type.small;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
                                         }
                                     }
-                                    Rectangle {
-                                        width: 24px;
-                                        Roundel {
-                                            y: (parent.height - self.height) / 2;
-                                            size: 24px;
-                                            lane: m.second-lane;
-                                            visible: m.second-lane >= 0;
+                                    if m.second-lane >= 0: HorizontalLayout {
+                                        spacing: 5px;
+                                        Rectangle {
+                                            width: 22px;
+                                            Roundel {
+                                                y: (parent.height - self.height) / 2;
+                                                size: 22px;
+                                                lane: m.second-lane;
+                                            }
+                                        }
+                                        Text {
+                                            text: Theme.lane-name(m.second-lane);
+                                            color: Theme.muted;
+                                            font-size: Type.small;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
                                         }
                                     }
                                 }
@@ -760,6 +875,22 @@ component WaitScreen inherits Flickable {
                         }
                     }
                     if !root.show-party: VerticalLayout {
+                        spacing: 8px;
+                        if root.wait.summoner-name != "": HorizontalLayout {
+                            spacing: 10px;
+                            GameIconBadge {
+                                size: 38px;
+                                icon: root.wait.summoner-icon;
+                                fallback-text: root.wait.summoner-initials;
+                            }
+                            Text {
+                                text: root.wait.summoner-name;
+                                color: Theme.text;
+                                font-size: Type.body;
+                                font-weight: 800;
+                                vertical-alignment: center;
+                            }
+                        }
                         for n in root.wait.notes: NoteRow { note: n; }
                     }
                 }
@@ -820,13 +951,71 @@ component WaitScreen inherits Flickable {
                     padding: 14px;
                     spacing: 8px;
                     SectionLabel { text: root.show-party ? "PARTY ROSTER" : "SUMMONER TELEMETRY"; }
+                    if !root.show-party && root.wait.summoner-name != "": HorizontalLayout {
+                        spacing: 10px;
+                        GameIconBadge {
+                            size: 36px;
+                            icon: root.wait.summoner-icon;
+                            fallback-text: root.wait.summoner-initials;
+                        }
+                        Text {
+                            text: root.wait.summoner-name;
+                            color: Theme.text;
+                            font-size: Type.body;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+                    }
                     if root.show-party: VerticalLayout {
                         spacing: 6px;
-                        for m in root.party: NoteRow {
-                            note: {
-                                label: m.name + (m.is-leader ? " · Leader" : ""),
-                                value: Theme.lane-name(m.first-lane) + " / " + Theme.lane-name(m.second-lane)
-                            };
+                        for m in root.party: HorizontalLayout {
+                            height: 36px;
+                            spacing: 8px;
+                            Text {
+                                horizontal-stretch: 1;
+                                text: m.name + (m.is-leader ? " · Leader" : "");
+                                color: Theme.text;
+                                font-size: Type.small;
+                                font-weight: m.is-self ? 800 : 600;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                            if m.first-lane >= 0: HorizontalLayout {
+                                spacing: 4px;
+                                Rectangle {
+                                    width: 18px;
+                                    Roundel {
+                                        y: (parent.height - self.height) / 2;
+                                        size: 18px;
+                                        lane: m.first-lane;
+                                    }
+                                }
+                                Text {
+                                    text: Theme.lane-name(m.first-lane);
+                                    color: Theme.text;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if m.second-lane >= 0: HorizontalLayout {
+                                spacing: 4px;
+                                Rectangle {
+                                    width: 18px;
+                                    Roundel {
+                                        y: (parent.height - self.height) / 2;
+                                        size: 18px;
+                                        lane: m.second-lane;
+                                    }
+                                }
+                                Text {
+                                    text: Theme.lane-name(m.second-lane);
+                                    color: Theme.muted;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                            }
                         }
                     }
                     for n in root.wait.notes: NoteRow { note: n; }
@@ -1621,9 +1810,35 @@ component EndScreen inherits Flickable {
             border-color: Theme.rule;
             VerticalLayout {
                 padding: 18px;
-                spacing: 4px;
+                spacing: 8px;
                 SectionLabel { text: "MATCH TELEMETRY SUMMARY"; }
-                Rectangle { height: 6px; }
+                if root.end.champion-name != "": HorizontalLayout {
+                    spacing: 12px;
+                    height: 48px;
+                    ChampPlate {
+                        y: (parent.height - self.height) / 2;
+                        size: 44px;
+                        label: root.end.champion-initials;
+                        icon: root.end.champion-icon;
+                        mine: true;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: root.end.champion-name;
+                            color: Theme.text;
+                            font-size: Type.name;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: root.end.title + " · " + root.end.kda;
+                            color: root.end.victory ? Theme.signal-text : Theme.muted;
+                            font-size: Type.small;
+                            font-weight: 600;
+                        }
+                    }
+                }
                 for st in root.end.stats: NoteRow { note: st; }
             }
         }
@@ -2310,15 +2525,26 @@ export component MiniWidget inherits Window {
 
         // Player Status Strip
         Rectangle {
-            height: 36px;
+            height: 40px;
             background: root.live.dead ? Theme.danger-soft : Theme.panel;
             border-radius: Theme.radius-sm;
             border-width: 1px;
             border-color: root.live.dead ? Theme.danger : Theme.rule;
             HorizontalLayout {
-                padding-left: 12px;
+                padding-left: 10px;
                 padding-right: 12px;
                 spacing: 8px;
+                if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
+                    width: 24px;
+                    ChampPlate {
+                        y: (parent.height - self.height) / 2;
+                        size: 24px;
+                        label: root.live.active-initials;
+                        icon: root.live.active-icon;
+                        mine: true;
+                        faded: root.live.dead;
+                    }
+                }
                 Text {
                     text: root.live.title;
                     color: root.live.dead ? Theme.danger : Theme.text;

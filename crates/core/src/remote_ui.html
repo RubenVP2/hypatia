@@ -518,18 +518,66 @@ button:disabled {
 }
 
 .roundel-dot {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 2px solid var(--muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 800;
   flex-shrink: 0;
+  background: var(--ground);
 }
+
+/* Game Icon + Text Badges (100% local LCU cache + crisp vector/monogram fallback) */
+.game-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule-strong);
+  background: var(--panel-raised);
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.game-badge.round { border-radius: 50%; }
+.game-badge.blue {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.game-badge.red {
+  border-color: var(--red);
+  background: var(--red-soft);
+  color: var(--red);
+}
+.game-badge.empty {
+  background: var(--panel-raised);
+  border-color: var(--rule);
+  color: var(--muted);
+}
+.game-badge img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.game-badge .game-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.game-badge.is-loaded .game-fallback { display: none; }
+.game-badge.is-fallback img { display: none; }
 
 /* Persistent Compact Team Draft Strip in Champ Select */
 .team-strip {
@@ -539,7 +587,7 @@ button:disabled {
   padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 
 .team-slots-5 {
@@ -553,6 +601,10 @@ button:disabled {
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
   padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   text-align: center;
   min-width: 0;
 }
@@ -563,6 +615,9 @@ button:disabled {
 }
 
 .slot-mini-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
@@ -570,22 +625,45 @@ button:disabled {
 }
 
 .slot-mini-champ {
+  width: 100%;
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
 }
 
-.bans-line {
+.ban-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ban-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 5px;
   font-size: 11px;
   color: var(--muted);
 }
+.ban-side-lbl {
+  font-weight: 700;
+  min-width: 34px;
+}
+.ban-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px 2px 3px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  border: 1px solid var(--rule-strong);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ban-chip.blue { border-color: var(--blue); }
+.ban-chip.red { border-color: var(--red); }
 
 /* Segmented Tabs (no numeric prefixes) */
 .tabs {
@@ -638,8 +716,11 @@ button:disabled {
 }
 
 .filter-pill {
-  height: 28px;
+  height: 30px;
   padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 700;
   background: var(--ground);
@@ -656,7 +737,7 @@ button:disabled {
 
 .champ-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
   gap: 7px;
   max-height: 300px;
   overflow-y: auto;
@@ -670,11 +751,21 @@ button:disabled {
 }
 
 .champ-card {
-  padding: 9px 7px;
+  padding: 7px 8px;
   text-align: left;
   background: var(--ground);
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.champ-card-meta {
+  min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -694,6 +785,9 @@ button:disabled {
 }
 
 .champ-card-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted);
@@ -734,8 +828,11 @@ button:disabled {
   background: var(--ground);
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
-  padding: 10px;
+  padding: 9px 10px;
   text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .spell-box.active {
@@ -751,23 +848,65 @@ button:disabled {
 
 .perk-row.cols-flex {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 6px;
 }
 
 .perk-chip {
-  min-height: 36px;
+  min-height: 38px;
   height: auto;
-  padding: 5px 6px;
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
   font-size: 11px;
   font-weight: 700;
   line-height: 1.15;
-  text-align: center;
+  text-align: left;
   background: var(--ground);
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
   color: var(--text);
 }
+
+.perk-chip-lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.obj-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.obj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  border: 1px solid var(--rule-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+.obj-chip.blue { border-color: var(--blue); }
+.obj-chip.red { border-color: var(--red); }
+.obj-emblem {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--on-team);
+  flex-shrink: 0;
+}
+.obj-emblem.blue { background: var(--blue); }
+.obj-emblem.red { background: var(--red); }
 
 .perk-chip.active {
   background: var(--signal);
@@ -899,6 +1038,7 @@ button:disabled {
   <header class="topbar">
     <div class="brand">
       <span id="conn-dot" class="brand-mark" aria-hidden="true"></span>
+      <span id="summoner-avatar"></span>
       <div>
         <h1 class="brand-title">HYPATIA</h1>
         <div id="summoner-line" class="brand-sub">Connecting...</div>
@@ -1023,6 +1163,7 @@ button:disabled {
       { row: "slot2", id: 8210 }
     ],
     customName: "Hypatia Pit-Wall Page",
+    lastAvatarKey: "",
     alertsArmed: localStorage.getItem("hypatia_alerts") === "1",
     lastAlertSeq: 0,
     audioCtx: null,
@@ -1067,8 +1208,90 @@ button:disabled {
 
   function laneInfo(raw) {
     const u = String(raw || "").toUpperCase();
-    return LANE_META.find(l => l.key === u || l.label.toUpperCase() === u)
-      || { key: u, label: u || "Flex", code: "?", color: "var(--muted)" };
+    const alias = u === "JGL" ? "JUNGLE"
+      : (u === "MID" ? "MIDDLE"
+      : (u === "BOT" ? "BOTTOM"
+      : (u === "SUP" || u === "SUPPORT" ? "UTILITY"
+      : (u === "FLEX" || u === "NONE" ? "FILL" : u))));
+    return LANE_META.find(l => l.key === alias || l.label.toUpperCase() === alias)
+      || { key: alias || "FILL", label: u || "Flex", code: "F", color: "var(--muted)" };
+  }
+
+  function laneSvg(raw, size = 14, stroke = "currentColor") {
+    const key = laneInfo(raw).key;
+    const d = key === "TOP"
+      ? "M5 18V5h13M11 11h8v8h-8z"
+      : (key === "JUNGLE"
+        ? "M12 3v17M6 9l5 8M18 9l-5 8M4 15l4 5M20 15l-4 5"
+        : (key === "MIDDLE"
+          ? "M5 19L19 5M5 9V5h4M15 19h4v-4"
+          : (key === "BOTTOM"
+            ? "M6 19h13V6M5 5h7v7H5z"
+            : (key === "UTILITY"
+              ? "M4 7h16l-4 7H8zM12 14v6M8 20h8"
+              : "M12 3l9 9-9 9-9-9zM12 9v6M9 12h6"))));
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+  }
+
+  function objectiveSvg(label, size = 12) {
+    const s = String(label || "").toLowerCase();
+    let d = "M4 8l8-4 8 4-4 6-4 6-4-6zM8 10l4 3 4-3"; // Drake default
+    if (s.includes("baron")) d = "M4 19h16l1-12-5 5-4-8-4 8-5-5z";
+    else if (s.includes("elder")) d = "M12 3l8 6-4 11H8L4 9zM12 8v8M9 12h6";
+    else if (s.includes("herald")) d = "M4 16l4-9h8l4 9zM9 16v3M15 16v3M12 10l2 3-2 2-2-2z";
+    else if (s.includes("grub")) d = "M7 6l3 3-3 3-3-3zM17 6l3 3-3 3-3-3zM12 13l3 3-3 3-3-3z";
+    else if (s.includes("tower") || s.includes("turret") || s.includes("inhib")) d = "M7 20h10M9 20V8l3-4 3 4v12M8 8h8";
+    else if (s.includes("->") || s.includes("→") || s.includes("kill")) d = "M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5";
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+  }
+
+  function initials(name) {
+    const t = String(name || "").trim();
+    if (!t || t.startsWith("Selecting") || t.startsWith("Pending")) return "--";
+    const words = t.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return t.slice(0, 2).toUpperCase();
+  }
+
+  function assetUrl(category, id) {
+    const n = Number(id);
+    if (!Number.isFinite(n)) return "";
+    if (category !== "profile" && n <= 0) return "";
+    if (category === "profile" && n < 0) return "";
+    const tok = URL_TOKEN ? "?token=" + encodeURIComponent(URL_TOKEN) : "";
+    return `/assets/${category}/${Math.trunc(n)}.png${tok}`;
+  }
+
+  function gameBadge(category, id, fallbackHtml, opts = {}) {
+    const size = opts.size || 28;
+    const cls = opts.className || "";
+    const fontSz = Math.max(10, Math.round(size * 0.4));
+    const url = assetUrl(category, id);
+    const cacheKey = `${category}/${Math.trunc(Number(id) || 0)}`;
+    const missedUntil = window.__hm && window.__hm[cacheKey];
+    if (opts.empty || !url || (missedUntil && Date.now() < missedUntil)) {
+      return `<span class="game-badge is-fallback ${opts.empty ? "empty" : ""} ${cls}" style="width:${size}px;height:${size}px;font-size:${fontSz}px"><span class="game-fallback">${fallbackHtml}</span></span>`;
+    }
+    return `<span class="game-badge ${cls}" style="width:${size}px;height:${size}px;font-size:${fontSz}px"><img src="${esc(url)}" data-ak="${esc(cacheKey)}" alt="" loading="lazy" onload="this.parentElement.classList.add('is-loaded')" onerror="this.parentElement.classList.add('is-fallback');(window.__hm=window.__hm||{})[this.dataset.ak]=Date.now()+30000;"><span class="game-fallback">${fallbackHtml}</span></span>`;
+  }
+
+  function champBadge(id, name, size = 28, mine = true) {
+    const hasChamp = Number(id) > 0 || (name && !String(name).startsWith("Selecting") && name !== "Pending");
+    return gameBadge("champion", id, esc(initials(name)), {
+      size,
+      empty: !hasChamp,
+      className: hasChamp ? (mine ? "blue" : "red") : ""
+    });
+  }
+
+  function spellFallbackGlyph(id, name) {
+    const map = { 1: "CL", 3: "EX", 4: "FL", 6: "GH", 7: "HE", 11: "SM", 12: "TP", 13: "MN", 14: "IG", 21: "BA", 32: "MK" };
+    return esc(map[Number(id)] || initials(name));
+  }
+
+  function shardFallbackGlyph(id) {
+    const map = { 5008: "+9", 5005: "AS", 5007: "AH", 5010: "MS", 5001: "HP", 5011: "HP+", 5013: "TEN" };
+    return esc(map[Number(id)] || "*");
   }
 
   function initAudio() {
@@ -1267,11 +1490,11 @@ button:disabled {
         <div class="meta">Tap Primary or Secondary slot below, then choose a role.</div>
         <div class="row-2">
           <button class="lane-card ${ui.selectingFirstRole ? "primary" : ""}" data-action="focus-slot" data-slot="1">
-            <span class="roundel-dot" style="border-color:${laneInfo(ui.lobbyFirst).color}">${esc(laneInfo(ui.lobbyFirst).code)}</span>
+            <span class="roundel-dot" style="border-color:${laneInfo(ui.lobbyFirst).color};color:${laneInfo(ui.lobbyFirst).color}">${laneSvg(ui.lobbyFirst, 14)}</span>
             <span>Primary: ${esc(laneInfo(ui.lobbyFirst).label)}</span>
           </button>
           <button class="lane-card ${!ui.selectingFirstRole ? "secondary" : ""}" data-action="focus-slot" data-slot="2">
-            <span class="roundel-dot" style="border-color:${laneInfo(ui.lobbySecond).color}">${esc(laneInfo(ui.lobbySecond).code)}</span>
+            <span class="roundel-dot" style="border-color:${laneInfo(ui.lobbySecond).color};color:${laneInfo(ui.lobbySecond).color}">${laneSvg(ui.lobbySecond, 14)}</span>
             <span>Secondary: ${esc(laneInfo(ui.lobbySecond).label)}</span>
           </button>
         </div>
@@ -1279,7 +1502,7 @@ button:disabled {
           ${LANE_META.map(m => {
             const cls = m.key === ui.lobbyFirst ? "primary" : (m.key === ui.lobbySecond ? "secondary" : "");
             return `<button class="lane-card ${cls}" data-action="pick-lane" data-lane="${esc(m.key)}">
-              <span class="roundel-dot" style="border-color:${m.color}">${esc(m.code)}</span>
+              <span class="roundel-dot" style="border-color:${m.color};color:${m.color}">${laneSvg(m.key, 14)}</span>
               <span>${esc(m.label)}</span>
             </button>`;
           }).join("")}
@@ -1292,7 +1515,11 @@ button:disabled {
             <div class="row-card">
               <div>
                 <div style="font-weight:800">${esc(m.summoner_name)}${m.is_leader ? " (Leader)" : ""}</div>
-                <div class="meta">${esc(laneInfo(m.first_position).label)} / ${esc(laneInfo(m.second_position).label)}</div>
+                <div class="meta" style="display:flex;align-items:center;gap:6px;margin-top:2px">
+                  <span style="display:inline-flex;align-items:center;gap:3px;color:${laneInfo(m.first_position).color}">${laneSvg(m.first_position, 12)}<span>${esc(laneInfo(m.first_position).label)}</span></span>
+                  <span>/</span>
+                  <span style="display:inline-flex;align-items:center;gap:3px;color:${laneInfo(m.second_position).color}">${laneSvg(m.second_position, 12)}<span>${esc(laneInfo(m.second_position).label)}</span></span>
+                </div>
               </div>
               <span class="meta mono">${m.ready ? "READY" : "WAIT"}</span>
             </div>`).join("")}
@@ -1346,21 +1573,30 @@ button:disabled {
     const isTurn = Boolean(act && act.is_my_turn && !act.completed);
     const actWord = act && act.action_type === "ban" ? "Ban" : "Pick";
 
-    // Persistent compact team strip
+    // Persistent compact team strip with role emblems, portraits, names, and ban chips
+    const myBans = cs.my_team_bans || [];
+    const myBanIds = cs.my_team_ban_ids || [];
+    const theirBans = cs.their_team_bans || [];
+    const theirBanIds = cs.their_team_ban_ids || [];
+    const banChips = (names, ids, mine) => names.length
+      ? names.map((n, i) => `<span class="ban-chip ${mine ? "blue" : "red"}">${champBadge(ids[i] || 0, n, 18, mine)}<span>${esc(n)}</span></span>`).join("")
+      : `<span>None</span>`;
+
     const teamStrip = `
       <div class="team-strip" aria-label="Team draft summary">
         <div class="team-slots-5">
           ${(cs.my_team || []).map(a => {
             const role = laneInfo(a.assigned_position);
             return `<div class="slot-mini ${a.is_self ? "self" : ""}">
-              <div class="slot-mini-role">${esc(role.label.toUpperCase())}</div>
+              <div class="slot-mini-role" style="color:${role.color}">${laneSvg(role.key, 12)}<span>${esc(role.code)}</span></div>
+              ${champBadge(a.champion_id, a.champion_name, 26, true)}
               <div class="slot-mini-champ">${esc(a.champion_name || "Pending")}</div>
             </div>`;
           }).join("")}
         </div>
-        <div class="bans-line">
-          <span>Blue bans: ${(cs.my_team_bans || []).length ? esc(cs.my_team_bans.join(", ")) : "None"}</span>
-          <span>Red bans: ${(cs.their_team_bans || []).length ? esc(cs.their_team_bans.join(", ")) : "None"}</span>
+        <div class="ban-groups">
+          <div class="ban-row"><span class="ban-side-lbl" style="color:var(--blue)">Blue:</span>${banChips(myBans, myBanIds, true)}</div>
+          <div class="ban-row"><span class="ban-side-lbl" style="color:var(--red)">Red:</span>${banChips(theirBans, theirBanIds, false)}</div>
         </div>
       </div>
     `;
@@ -1392,15 +1628,18 @@ button:disabled {
           <div class="filter-pills">
             ${["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"].map(rk => `
               <button class="filter-pill ${ui.champRole === rk ? "active" : ""}" data-action="champ-role" data-role="${rk}">
-                ${rk === "ALL" ? "All" : esc(laneInfo(rk).label)}
+                ${rk === "ALL" ? "All" : `${laneSvg(rk, 12, ui.champRole === rk ? "currentColor" : laneInfo(rk).color)}<span>${esc(laneInfo(rk).label)}</span>`}
               </button>
             `).join("")}
           </div>
           <div class="champ-grid">
             ${filtered.map(c => `
               <button class="champ-card ${c.id === selectedId ? "selected" : ""}" data-action="hover-champ" data-id="${c.id}" ${act ? "" : "disabled"}>
-                <div class="champ-card-name">${esc(c.name)}</div>
-                <div class="champ-card-role">${esc((c.roles || []).map(r => laneInfo(r).code).join("/") || "FLEX")}</div>
+                ${champBadge(c.id, c.name, 34, true)}
+                <div class="champ-card-meta">
+                  <div class="champ-card-name">${esc(c.name)}</div>
+                  <div class="champ-card-role">${(c.roles || []).length ? (c.roles || []).slice(0, 2).map(r => `<span style="display:inline-flex;align-items:center;gap:2px">${laneSvg(r, 11, laneInfo(r).color)}<span>${esc(laneInfo(r).label)}</span></span>`).join(" ") : "Flex"}</div>
+                </div>
               </button>
             `).join("")}
           </div>
@@ -1414,7 +1653,10 @@ button:disabled {
           <div class="list-col">
             ${skins.length ? skins.map(sk => `
               <button class="row-card ${sk.selected ? "selected" : ""}" data-action="set-skin" data-id="${sk.id}">
-                <span style="font-weight:700">${esc(sk.name)}</span>
+                <span style="display:inline-flex;align-items:center;gap:10px;min-width:0">
+                  ${gameBadge("skin", sk.id, esc(initials(sk.name)), { size: 36, className: "blue" })}
+                  <span style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${esc(sk.name)}</span>
+                </span>
                 <span class="meta mono">${sk.selected ? "EQUIPPED" : "Select"}</span>
               </button>
             `).join("") : `<div class="meta">Select a champion to browse available skins.</div>`}
@@ -1423,8 +1665,8 @@ button:disabled {
       `;
     } else if (ui.csTab === "loadout") {
       const spells = cs.available_spells || [];
-      const s1 = spells.find(sp => sp.id === cs.spell1_id) || { name: "Flash", cooldown: "300s" };
-      const s2 = spells.find(sp => sp.id === cs.spell2_id) || { name: "Ignite", cooldown: "180s" };
+      const s1 = spells.find(sp => sp.id === cs.spell1_id) || { id: cs.spell1_id || 4, name: "Flash", cooldown: "300s" };
+      const s2 = spells.find(sp => sp.id === cs.spell2_id) || { id: cs.spell2_id || 14, name: "Ignite", cooldown: "180s" };
       const pages = [...(cs.rune_pages || []), ...(cs.recommended_rune_pages || [])];
       const pTree = (cs.rune_trees || []).find(t => t.id === ui.customPrimary);
       const sTree = (cs.rune_trees || []).find(t => t.id === ui.customSub);
@@ -1442,21 +1684,30 @@ button:disabled {
           </div>
           <div class="spell-pair">
             <button class="spell-box ${ui.spellSlot === 1 ? "active" : ""}" data-action="focus-spell-slot" data-slot="1">
-              <div class="meta mono">SLOT D</div>
-              <div style="font-weight:800">${esc(s1.name)}</div>
-              <div class="meta">${esc(s1.cooldown)}</div>
+              ${gameBadge("spell", s1.id, spellFallbackGlyph(s1.id, s1.name), { size: 32 })}
+              <div>
+                <div class="meta mono">SLOT D</div>
+                <div style="font-weight:800">${esc(s1.name)}</div>
+                <div class="meta">${esc(s1.cooldown)}</div>
+              </div>
             </button>
             <div style="display:flex;align-items:center" class="meta">to</div>
             <button class="spell-box ${ui.spellSlot === 2 ? "active" : ""}" data-action="focus-spell-slot" data-slot="2">
-              <div class="meta mono">SLOT F</div>
-              <div style="font-weight:800">${esc(s2.name)}</div>
-              <div class="meta">${esc(s2.cooldown)}</div>
+              ${gameBadge("spell", s2.id, spellFallbackGlyph(s2.id, s2.name), { size: 32 })}
+              <div>
+                <div class="meta mono">SLOT F</div>
+                <div style="font-weight:800">${esc(s2.name)}</div>
+                <div class="meta">${esc(s2.cooldown)}</div>
+              </div>
             </button>
           </div>
           <div class="perk-row cols-flex">
             ${spells.map(sp => {
               const active = (ui.spellSlot === 1 ? cs.spell1_id : cs.spell2_id) === sp.id;
-              return `<button class="perk-chip ${active ? "active" : ""}" data-action="pick-spell" data-id="${sp.id}">${esc(sp.name)}</button>`;
+              return `<button class="perk-chip ${active ? "active" : ""}" data-action="pick-spell" data-id="${sp.id}">
+                ${gameBadge("spell", sp.id, spellFallbackGlyph(sp.id, sp.name), { size: 22 })}
+                <span class="perk-chip-lbl">${esc(sp.name)}</span>
+              </button>`;
             }).join("")}
           </div>
         </section>
@@ -1472,44 +1723,67 @@ button:disabled {
 
           ${ui.runeSubView === "saved" ? `
             <div class="list-col">
-              ${pages.map(pg => `
-                <button class="row-card ${pg.current ? "selected" : ""}" data-action="select-rune-page" data-id="${pg.id}" data-is-preset="${pg.is_preset ? "1" : "0"}" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc((pg.selected_perk_ids || []).join(","))}">
-                  <div>
-                    <div style="font-weight:800">${esc(pg.name)}</div>
-                    <div class="meta">${esc(pg.primary_style_name)} + ${esc(pg.sub_style_name)} · ${esc(pg.keystone_name)}</div>
+              ${pages.map(pg => {
+                const keystoneId = (pg.selected_perk_ids || [])[0] || 0;
+                return `<button class="row-card ${pg.current ? "selected" : ""}" data-action="select-rune-page" data-id="${pg.id}" data-is-preset="${pg.is_preset ? "1" : "0"}" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc((pg.selected_perk_ids || []).join(","))}">
+                  <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                    <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0">
+                      ${gameBadge("perk", keystoneId, esc(initials(pg.keystone_name)), { size: 28, className: "round" })}
+                      ${gameBadge("style", pg.primary_style_id, esc(initials(pg.primary_style_name)), { size: 22, className: "round" })}
+                      ${gameBadge("style", pg.sub_style_id, esc(initials(pg.sub_style_name)), { size: 18, className: "round" })}
+                    </span>
+                    <div style="min-width:0">
+                      <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pg.name)}</div>
+                      <div class="meta">${esc(pg.primary_style_name)} + ${esc(pg.sub_style_name)} · ${esc(pg.keystone_name)}</div>
+                    </div>
                   </div>
                   <span class="meta mono">${pg.current ? "ACTIVE" : (pg.is_preset ? "PRESET" : "EQUIP")}</span>
-                </button>
-              `).join("")}
+                </button>`;
+              }).join("")}
             </div>
           ` : `
             <div class="list-col">
               <input id="custom-rune-name" class="search-input" type="text" value="${esc(ui.customName)}" placeholder="Rune page name">
               <div class="meta mono">Primary Path</div>
               <div class="perk-row cols-flex">
-                ${(cs.rune_trees || []).map(t => `<button class="perk-chip ${t.id === ui.customPrimary ? "active" : ""}" data-action="rune-pri" data-id="${t.id}">${esc(t.name)}</button>`).join("")}
+                ${(cs.rune_trees || []).map(t => `<button class="perk-chip ${t.id === ui.customPrimary ? "active" : ""}" data-action="rune-pri" data-id="${t.id}">
+                  ${gameBadge("style", t.id, esc(initials(t.name)), { size: 20, className: "round" })}
+                  <span class="perk-chip-lbl">${esc(t.name)}</span>
+                </button>`).join("")}
               </div>
               ${pTree ? `
                 <div class="meta mono">Keystone</div>
                 <div class="perk-row ${pTree.keystones.length === 3 ? "" : "cols-flex"}">
-                  ${pTree.keystones.map(k => `<button class="perk-chip ${ui.customPerks[0] === k.id ? "active" : ""}" data-action="rune-p" data-slot="0" data-id="${k.id}">${esc(k.name)}</button>`).join("")}
+                  ${pTree.keystones.map(k => `<button class="perk-chip ${ui.customPerks[0] === k.id ? "active" : ""}" data-action="rune-p" data-slot="0" data-id="${k.id}">
+                    ${gameBadge("perk", k.id, esc(initials(k.name)), { size: 24, className: "round" })}
+                    <span class="perk-chip-lbl">${esc(k.name)}</span>
+                  </button>`).join("")}
                 </div>
                 ${[pTree.slot1, pTree.slot2, pTree.slot3].map((row, idx) => `
                   <div class="perk-row">
-                    ${row.map(o => `<button class="perk-chip ${ui.customPerks[idx + 1] === o.id ? "active" : ""}" data-action="rune-p" data-slot="${idx + 1}" data-id="${o.id}">${esc(o.name)}</button>`).join("")}
+                    ${row.map(o => `<button class="perk-chip ${ui.customPerks[idx + 1] === o.id ? "active" : ""}" data-action="rune-p" data-slot="${idx + 1}" data-id="${o.id}">
+                      ${gameBadge("perk", o.id, esc(initials(o.name)), { size: 20, className: "round" })}
+                      <span class="perk-chip-lbl">${esc(o.name)}</span>
+                    </button>`).join("")}
                   </div>
                 `).join("")}
               ` : ""}
               <div class="divider"></div>
               <div class="meta mono">Secondary Path (choose 2 from distinct rows)</div>
               <div class="perk-row cols-flex">
-                ${(cs.rune_trees || []).filter(t => t.id !== ui.customPrimary).map(t => `<button class="perk-chip ${t.id === ui.customSub ? "sub-active" : ""}" data-action="rune-sub-tree" data-id="${t.id}">${esc(t.name)}</button>`).join("")}
+                ${(cs.rune_trees || []).filter(t => t.id !== ui.customPrimary).map(t => `<button class="perk-chip ${t.id === ui.customSub ? "sub-active" : ""}" data-action="rune-sub-tree" data-id="${t.id}">
+                  ${gameBadge("style", t.id, esc(initials(t.name)), { size: 20, className: "round" })}
+                  <span class="perk-chip-lbl">${esc(t.name)}</span>
+                </button>`).join("")}
               </div>
               ${sTree ? ["slot1", "slot2", "slot3"].map(rowKey => `
                 <div class="perk-row">
                   ${(sTree[rowKey] || []).map(o => {
                     const chosen = ui.customSubMeta.some(m => m.id === o.id);
-                    return `<button class="perk-chip ${chosen ? "sub-active" : ""}" data-action="rune-sub-perk" data-row="${rowKey}" data-id="${o.id}">${esc(o.name)}</button>`;
+                    return `<button class="perk-chip ${chosen ? "sub-active" : ""}" data-action="rune-sub-perk" data-row="${rowKey}" data-id="${o.id}">
+                      ${gameBadge("perk", o.id, esc(initials(o.name)), { size: 20, className: "round" })}
+                      <span class="perk-chip-lbl">${esc(o.name)}</span>
+                    </button>`;
                   }).join("")}
                 </div>
               `).join("") : ""}
@@ -1517,7 +1791,10 @@ button:disabled {
               <div class="meta mono">Stat Shards (3 slots)</div>
               ${STAT_SHARD_ROWS.map(sr => `
                 <div class="perk-row">
-                  ${sr.options.map(op => `<button class="perk-chip ${ui.customPerks[sr.slot] === op.id ? "active" : ""}" data-action="rune-shard" data-slot="${sr.slot}" data-id="${op.id}">${esc(op.name)}</button>`).join("")}
+                  ${sr.options.map(op => `<button class="perk-chip ${ui.customPerks[sr.slot] === op.id ? "active" : ""}" data-action="rune-shard" data-slot="${sr.slot}" data-id="${op.id}">
+                    ${gameBadge("perk", op.id, shardFallbackGlyph(op.id), { size: 20, className: "round" })}
+                    <span class="perk-chip-lbl">${esc(op.name)}</span>
+                  </button>`).join("")}
                 </div>
               `).join("")}
               <button class="btn-primary" data-action="save-custom-runes">Save & Equip All 9 Perks</button>
@@ -1528,6 +1805,8 @@ button:disabled {
     } else {
       // Tab: Team (Position Swaps, Pick Swaps, Champion Trades, Enemies)
       const incoming = cs.incoming_swaps || [];
+      const spells = cs.available_spells || [];
+      const spellLabel = id => (spells.find(sp => sp.id === id) || {}).name || "";
       tabBody = `
         ${incoming.length ? `<section class="card card-spotlight">
           <h3 class="h3">Incoming Requests</h3>
@@ -1548,11 +1827,21 @@ button:disabled {
           <div class="list-col">
             ${(cs.my_team || []).map(a => {
               const role = laneInfo(a.assigned_position);
+              const sp1 = spellLabel(a.spell1_id);
+              const sp2 = spellLabel(a.spell2_id);
               return `<div class="row-card" style="flex-direction:column;align-items:stretch">
                 <div class="heading-row">
-                  <div>
-                    <div style="font-weight:800">${esc(a.champion_name || "Pending")} ${a.is_self ? "(You)" : ""}</div>
-                    <div class="meta">${esc(role.label)} · ${esc(a.summoner_name)}</div>
+                  <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                    ${champBadge(a.champion_id, a.champion_name, 38, true)}
+                    <div style="min-width:0">
+                      <div style="font-weight:800">${esc(a.champion_name || "Pending")} ${a.is_self ? "(You)" : ""}</div>
+                      <div class="meta" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+                        <span style="display:inline-flex;align-items:center;gap:3px;color:${role.color}">${laneSvg(role.key, 12)}<span>${esc(role.label)}</span></span>
+                        <span>· ${esc(a.summoner_name)}</span>
+                        ${sp1 ? `<span style="display:inline-flex;align-items:center;gap:3px">${gameBadge("spell", a.spell1_id, spellFallbackGlyph(a.spell1_id, sp1), { size: 16 })}<span>${esc(sp1)}</span></span>` : ""}
+                        ${sp2 ? `<span style="display:inline-flex;align-items:center;gap:3px">${gameBadge("spell", a.spell2_id, spellFallbackGlyph(a.spell2_id, sp2), { size: 16 })}<span>${esc(sp2)}</span></span>` : ""}
+                      </div>
+                    </div>
                   </div>
                   ${a.acting_label ? `<span class="pill-btn signal">${esc(a.acting_label)}</span>` : ""}
                 </div>
@@ -1580,8 +1869,8 @@ button:disabled {
 
         <section class="card">
           <h3 class="h3">Enemy Team</h3>
-          <div class="perk-row">
-            ${(cs.their_team || []).map(e => `<span class="pill-btn">${esc(e.champion_name || "Pending")}</span>`).join("")}
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${(cs.their_team || []).map(e => `<span class="ban-chip red">${champBadge(e.champion_id, e.champion_name, 22, false)}<span>${esc(e.champion_name || "Pending")}</span></span>`).join("")}
           </div>
         </section>
       `;
@@ -1635,13 +1924,28 @@ button:disabled {
         </div>
         <div class="divider"></div>
         <div class="heading-row">
-          <div>
-            <div style="font-weight:800;font-size:18px">${esc(lg.active_champion)} · Lvl ${lg.level}</div>
-            <div class="meta">${lg.cs} CS · ${lg.current_gold} Gold</div>
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            ${champBadge(lg.active_champion_id, lg.active_champion, 42, true)}
+            <div>
+              <div style="font-weight:800;font-size:18px">${esc(lg.active_champion)} · Lvl ${lg.level}</div>
+              <div class="meta">${lg.cs} CS · ${lg.current_gold} Gold</div>
+            </div>
           </div>
           <span class="pill-btn signal mono" style="font-size:12px">${esc(lg.kda)}</span>
         </div>
       </section>
+
+      ${(lg.objectives || []).length ? `<section class="card">
+        <h3 class="h3">Objectives</h3>
+        <div class="obj-strip">
+          ${(lg.objectives || []).map(o => `
+            <span class="obj-chip ${o.mine ? "blue" : "red"}">
+              <span class="obj-emblem ${o.mine ? "blue" : "red"}">${objectiveSvg(o.label, 12)}</span>
+              <span>${esc(o.label)}</span>
+            </span>
+          `).join("")}
+        </div>
+      </section>` : ""}
 
       ${(lg.feed || []).length ? `<section class="card">
         <h3 class="h3">Recent Match Events</h3>
@@ -1649,6 +1953,7 @@ button:disabled {
           ${lg.feed.map(f => `
             <div class="feed-item">
               <span class="meta mono" style="width:42px;flex-shrink:0">${esc(f.time)}</span>
+              <span style="display:inline-flex;color:${f.side === 0 ? "var(--red)" : (f.side === 1 ? "var(--blue)" : "var(--muted)")};flex-shrink:0">${objectiveSvg(f.text, 14)}</span>
               <span style="color:${f.side === 0 ? "var(--red)" : "var(--text)"};font-weight:600">${esc(f.text)}</span>
             </div>
           `).join("")}
@@ -1662,15 +1967,23 @@ button:disabled {
 
       <section class="card">
         <div class="list-col">
-          ${list.map(p => `
-            <div class="player-live-row ${p.is_self ? "self" : ""}">
-              <div>
-                <div style="font-weight:800">${esc(p.champion)} ${p.is_self ? "(You)" : ""}</div>
-                <div class="meta">${esc(p.lane)} · ${p.dead ? `<span style="color:var(--red);font-weight:700">Respawn ${p.respawn_sec}s</span>` : `Lvl ${p.level} · ${p.cs} CS`}</div>
+          ${list.map(p => {
+            const role = laneInfo(p.lane);
+            const mine = ui.liveTab === "allies";
+            return `<div class="player-live-row ${p.is_self ? "self" : ""}">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                ${champBadge(p.champion_id, p.champion, 34, mine)}
+                <div style="min-width:0">
+                  <div style="font-weight:800">${esc(p.champion)} ${p.is_self ? "(You)" : ""}</div>
+                  <div class="meta" style="display:flex;align-items:center;gap:5px">
+                    <span style="display:inline-flex;align-items:center;gap:3px;color:${role.color}">${laneSvg(role.key, 12)}<span>${esc(role.label)}</span></span>
+                    <span>· ${p.dead ? `<span style="color:var(--red);font-weight:700">Respawn ${p.respawn_sec}s</span>` : `Lvl ${p.level} · ${p.cs} CS`}</span>
+                  </div>
+                </div>
               </div>
               <span class="mono" style="font-weight:700">${esc(p.kda)}</span>
-            </div>
-          `).join("")}
+            </div>`;
+          }).join("")}
         </div>
       </section>
     `;
@@ -1699,6 +2012,14 @@ button:disabled {
 
     document.getElementById("summoner-line").textContent =
       (s.summoner_name || "Hypatia") + " · " + (s.phase || "None");
+    const avatarKey = `${s.profile_icon_id || 0}:${s.summoner_name || ""}`;
+    if (ui.lastAvatarKey !== avatarKey) {
+      ui.lastAvatarKey = avatarKey;
+      const avEl = document.getElementById("summoner-avatar");
+      if (avEl) {
+        avEl.innerHTML = gameBadge("profile", s.profile_icon_id || 0, esc(initials(s.summoner_name || "HY")), { size: 28 });
+      }
+    }
 
     const demoBtn = document.getElementById("demo-toggle-btn");
     const demoStrip = document.getElementById("demo-strip");

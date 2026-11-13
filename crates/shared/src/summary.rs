@@ -12,6 +12,8 @@ pub struct SummonerSummary {
     pub summoner_level: u32,
     pub xp_percent: u32,
     pub puuid: String,
+    #[serde(default)]
+    pub profile_icon_id: i64,
     pub rank_tier: Option<String>,
     pub rank_division: Option<String>,
     pub rank_lp: Option<i32>,
@@ -56,6 +58,10 @@ pub struct ChampSelectAlly {
     #[serde(default)]
     pub champion_id: i64,
     pub champion_name: String,
+    #[serde(default)]
+    pub spell1_id: i64,
+    #[serde(default)]
+    pub spell2_id: i64,
     pub summoner_name: String,
     pub puuid: String,
     pub rank_label: Option<String>,
@@ -73,6 +79,10 @@ pub struct ChampSelectSummary {
     pub my_team: Vec<ChampSelectAlly>,
     pub my_team_bans: Vec<String>,
     pub their_team_bans: Vec<String>,
+    #[serde(default)]
+    pub my_team_ban_ids: Vec<i64>,
+    #[serde(default)]
+    pub their_team_ban_ids: Vec<i64>,
     /// Enemy picks in cell order; identities are never available here.
     #[serde(default)]
     pub their_team: Vec<ChampSelectEnemy>,
@@ -103,7 +113,11 @@ pub struct LiveGameEventSummary {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LiveGamePlayerSummary {
     pub riot_id: String,
+    #[serde(default)]
+    pub champion_id: i64,
     pub champion_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub champion_alias: String,
     pub team: String,
     pub position: String,
     pub level: u32,
@@ -123,6 +137,8 @@ pub struct LiveGameSummary {
     pub game_mode: String,
     pub map_name: String,
     pub game_time_sec: f64,
+    #[serde(default)]
+    pub active_champion_id: i64,
     pub active_champion: String,
     pub level: u32,
     pub current_gold: i64,
@@ -139,6 +155,8 @@ pub struct LiveGameSummary {
 pub struct EndOfGameSummary {
     pub result: String,
     pub game_length_sec: u32,
+    #[serde(default)]
+    pub champion_id: i64,
     pub champion_name: String,
     pub kills: u32,
     pub deaths: u32,
@@ -199,6 +217,145 @@ pub fn champion_name_from_id(champ_id: i64) -> String {
     }
 }
 
+fn fold_latin_ascii(ch: char) -> char {
+    match ch {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' => 'a',
+        'ç' | 'Ç' => 'c',
+        'è' | 'é' | 'ê' | 'ë' | 'È' | 'É' | 'Ê' | 'Ë' => 'e',
+        'ì' | 'í' | 'î' | 'ï' | 'Ì' | 'Í' | 'Î' | 'Ï' => 'i',
+        'ñ' | 'Ñ' => 'n',
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' => 'o',
+        'ù' | 'ú' | 'û' | 'ü' | 'Ù' | 'Ú' | 'Û' | 'Ü' => 'u',
+        'ý' | 'ÿ' | 'Ý' | 'Ÿ' => 'y',
+        other => other,
+    }
+}
+
+/// Normalizes a champion name or internal alias key (`"Kai'Sa"`, `"LeeSin"`, `"Maître Yi"`, `"K'Santé"`)
+/// into lowercase ASCII alphanumeric form for reliable ID lookup across locales.
+pub fn normalize_champion_key(name: &str) -> String {
+    name.chars()
+        .map(fold_latin_ascii)
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// Strips Riot Live Client `rawChampionName` localization prefixes (`game_character_displayname_MasterYi`).
+pub fn extract_raw_champion_alias(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    for prefix in ["game_character_displayname_", "character_"] {
+        if lower.starts_with(prefix) {
+            return trimmed[prefix.len()..].to_string();
+        }
+    }
+    String::new()
+}
+
+/// Resolves a built-in Riot champion ID from its display name or internal key (0 if unknown).
+pub fn champion_id_from_name(name: &str) -> i64 {
+    let key = normalize_champion_key(name);
+    if key.is_empty() || key == "selecting" || key == "none" || key == "unknown" {
+        return 0;
+    }
+    if let Some(found) = crate::remote::builtin_champion_catalog()
+        .into_iter()
+        .find(|c| normalize_champion_key(&c.name) == key)
+    {
+        return found.id;
+    }
+    match key.as_str() {
+        "ambessa" => 799,
+        "anivia" => 34,
+        "annie" => 1,
+        "aphelios" => 523,
+        "aurelionsol" => 136,
+        "aurora" => 893,
+        "belveth" => 200,
+        "cassiopeia" => 69,
+        "chogath" => 31,
+        "corki" => 42,
+        "drmundo" | "mundo" => 36,
+        "elise" => 60,
+        "evelynn" => 28,
+        "fiddlesticks" => 9,
+        "fizz" => 105,
+        "gangplank" => 41,
+        "gnar" => 150,
+        "hecarim" => 120,
+        "heimerdinger" => 74,
+        "illaoi" => 420,
+        "ivern" => 427,
+        "kalista" => 429,
+        "karthus" => 30,
+        "kassadin" => 38,
+        "katarina" => 55,
+        "kayle" => 10,
+        "kennen" => 85,
+        "kindred" => 203,
+        "kled" => 240,
+        "kogmaw" => 96,
+        "ksante" => 897,
+        "lissandra" => 127,
+        "malzahar" => 90,
+        "maokai" => 57,
+        "maitreyi" | "masteryi" => 11,
+        "mel" => 800,
+        "milio" => 902,
+        "monkeyking" | "wukong" => 62,
+        "naafiri" => 950,
+        "nasus" => 75,
+        "nidalee" => 76,
+        "nilah" => 895,
+        "nocturne" => 56,
+        "nunu" | "nunuetwillump" | "nunuwillump" => 20,
+        "olaf" => 2,
+        "poppy" => 78,
+        "qiyana" => 246,
+        "quinn" => 133,
+        "rammus" => 33,
+        "reksai" => 421,
+        "rell" => 526,
+        "renata" | "renataglasc" => 888,
+        "rengar" => 107,
+        "rumble" => 68,
+        "ryze" => 13,
+        "shyvana" => 102,
+        "singed" => 27,
+        "sion" => 14,
+        "skarner" => 72,
+        "sona" => 37,
+        "swain" => 50,
+        "tahmkench" => 223,
+        "taliyah" => 163,
+        "talon" => 91,
+        "taric" => 44,
+        "teemo" => 17,
+        "trundle" => 48,
+        "tryndamere" => 23,
+        "twitch" => 29,
+        "udyr" => 77,
+        "urgot" => 6,
+        "varus" => 110,
+        "veigar" => 45,
+        "velkoz" => 161,
+        "vex" => 711,
+        "viktor" => 112,
+        "vladimir" => 8,
+        "warwick" => 19,
+        "xayah" => 498,
+        "xerath" => 101,
+        "xinzhao" => 5,
+        "yorick" => 83,
+        "yunara" => 804,
+        "zaahen" => 805,
+        "zilean" => 26,
+        "zyra" => 143,
+        _ => 0,
+    }
+}
+
 pub fn extract_summoner_summary(
     summoner_val: Option<&Value>,
     ranked_val: Option<&Value>,
@@ -234,6 +391,10 @@ pub fn extract_summoner_summary(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let profile_icon_id = sum
+        .get("profileIconId")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
 
     let mut rank_tier = None;
     let mut rank_division = None;
@@ -295,6 +456,7 @@ pub fn extract_summoner_summary(
         summoner_level,
         xp_percent,
         puuid,
+        profile_icon_id,
         rank_tier,
         rank_division,
         rank_lp,
@@ -460,7 +622,7 @@ pub fn extract_champ_select_summary(
                 })
                 .to_uppercase();
 
-            let champ_id = member
+            let raw_champ_id = member
                 .get("championId")
                 .or_else(|| member.get("championPickIntent"))
                 .and_then(|v| v.as_i64())
@@ -469,7 +631,20 @@ pub fn extract_champ_select_summary(
                 .get("championName")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| champion_name_from_id(champ_id));
+                .unwrap_or_else(|| champion_name_from_id(raw_champ_id));
+            let champ_id = if raw_champ_id > 0 {
+                raw_champ_id
+            } else {
+                champion_id_from_name(&champion_name)
+            };
+            let spell1_id = member
+                .get("spell1Id")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let spell2_id = member
+                .get("spell2Id")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
 
             let raw_puuid = member
                 .get("puuid")
@@ -518,6 +693,8 @@ pub fn extract_champ_select_summary(
                 assigned_position,
                 champion_id: champ_id,
                 champion_name,
+                spell1_id,
+                spell2_id,
                 summoner_name,
                 puuid: raw_puuid.to_string(),
                 rank_label,
@@ -535,8 +712,10 @@ pub fn extract_champ_select_summary(
         my_team.push(ChampSelectAlly {
             cell_id: 0,
             assigned_position: "MIDDLE".to_string(),
-            champion_id: 0,
+            champion_id: champion_id_from_name(default_pick),
             champion_name: default_pick.to_string(),
+            spell1_id: 4,
+            spell2_id: 14,
             summoner_name: "HypatiaObserver#EUW".to_string(),
             puuid: "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001".to_string(),
             rank_label: Some("EMERALD II (54 LP)".to_string()),
@@ -546,28 +725,8 @@ pub fn extract_champ_select_summary(
         });
     }
 
-    let mut my_team_bans = Vec::new();
-    let mut their_team_bans = Vec::new();
-    if let Some(bans) = cs.get("bans") {
-        if let Some(arr) = bans.get("myTeamBans").and_then(|v| v.as_array()) {
-            for b in arr {
-                if let Some(id) = b.as_i64() {
-                    my_team_bans.push(champion_name_from_id(id));
-                } else if let Some(s) = b.as_str() {
-                    my_team_bans.push(s.to_string());
-                }
-            }
-        }
-        if let Some(arr) = bans.get("theirTeamBans").and_then(|v| v.as_array()) {
-            for b in arr {
-                if let Some(id) = b.as_i64() {
-                    their_team_bans.push(champion_name_from_id(id));
-                } else if let Some(s) = b.as_str() {
-                    their_team_bans.push(s.to_string());
-                }
-            }
-        }
-    }
+    let (my_team_bans, my_team_ban_ids) = extract_ban_list(cs.get("bans"), "myTeamBans");
+    let (their_team_bans, their_team_ban_ids) = extract_ban_list(cs.get("bans"), "theirTeamBans");
 
     let mut their_team = Vec::new();
     if let Some(arr) = cs.get("theirTeam").and_then(|v| v.as_array()) {
@@ -608,7 +767,27 @@ pub fn extract_champ_select_summary(
         my_team,
         my_team_bans,
         their_team_bans,
+        my_team_ban_ids,
+        their_team_ban_ids,
     })
+}
+
+fn extract_ban_list(bans: Option<&Value>, key: &str) -> (Vec<String>, Vec<i64>) {
+    let mut names = Vec::new();
+    let mut ids = Vec::new();
+    let Some(arr) = bans.and_then(|b| b.get(key)).and_then(|v| v.as_array()) else {
+        return (names, ids);
+    };
+    for entry in arr {
+        if let Some(id) = entry.as_i64() {
+            names.push(champion_name_from_id(id));
+            ids.push(id);
+        } else if let Some(s) = entry.as_str() {
+            ids.push(champion_id_from_name(s));
+            names.push(s.to_string());
+        }
+    }
+    (names, ids)
 }
 
 pub fn extract_live_game_summary(
@@ -646,6 +825,10 @@ pub fn extract_live_game_summary(
         .and_then(|a| a.get("riotIdGameName"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
+    let active_summoner_name = active
+        .and_then(|a| a.get("summonerName"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     let mut players = Vec::new();
     let mut matched_self: Option<LiveGamePlayerSummary> = None;
@@ -664,14 +847,26 @@ pub fn extract_live_game_summary(
                 .get("riotIdGameName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
+            let p_summoner_name = p
+                .get("summonerName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let is_self = (!active_riot_id.is_empty() && p_riot_id == active_riot_id)
-                || (!active_game_name.is_empty() && p_game_name == active_game_name);
+                || (!active_game_name.is_empty() && p_game_name == active_game_name)
+                || (!active_summoner_name.is_empty()
+                    && !p_summoner_name.is_empty()
+                    && p_summoner_name == active_summoner_name);
 
             let champ = p
                 .get("championName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Unknown")
                 .to_string();
+            let champion_alias = p
+                .get("rawChampionName")
+                .and_then(|v| v.as_str())
+                .map(extract_raw_champion_alias)
+                .unwrap_or_default();
             let team = p
                 .get("team")
                 .and_then(|v| v.as_str())
@@ -703,11 +898,27 @@ pub fn extract_live_game_summary(
 
             let is_dead = p.get("isDead").and_then(|v| v.as_bool()).unwrap_or(false);
             let respawn_timer_sec = p.get("respawnTimer").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let champion_id = p
+                .get("championId")
+                .and_then(|v| v.as_i64())
+                .filter(|&id| id > 0)
+                .unwrap_or_else(|| {
+                    let from_name = champion_id_from_name(&champ);
+                    if from_name > 0 {
+                        from_name
+                    } else if !champion_alias.is_empty() {
+                        champion_id_from_name(&champion_alias)
+                    } else {
+                        0
+                    }
+                });
             let summary = LiveGamePlayerSummary {
                 is_dead,
                 respawn_timer_sec,
                 riot_id: p_riot_id.to_string(),
+                champion_id,
                 champion_name: champ,
+                champion_alias,
                 team,
                 position,
                 level: p_level,
@@ -821,10 +1032,17 @@ pub fn extract_live_game_summary(
         }
     }
 
+    let active_champion_id = matched_self
+        .as_ref()
+        .map(|m| m.champion_id)
+        .filter(|&id| id > 0)
+        .unwrap_or_else(|| champion_id_from_name(&active_champion));
+
     Some(LiveGameSummary {
         game_mode,
         map_name,
         game_time_sec,
+        active_champion_id,
         active_champion,
         level,
         current_gold,
@@ -854,6 +1072,11 @@ pub fn extract_eog_summary(eog_val: Option<&Value>) -> Option<EndOfGameSummary> 
         .and_then(|v| v.as_str())
         .unwrap_or("Ahri")
         .to_string();
+    let champion_id = local
+        .and_then(|l| l.get("championId"))
+        .and_then(|v| v.as_i64())
+        .filter(|&id| id > 0)
+        .unwrap_or_else(|| champion_id_from_name(&champion_name));
     let stats = local.and_then(|l| l.get("stats"));
     let kills = stats
         .and_then(|s| s.get("CHAMPIONS_KILLED"))
@@ -879,6 +1102,7 @@ pub fn extract_eog_summary(eog_val: Option<&Value>) -> Option<EndOfGameSummary> 
     Some(EndOfGameSummary {
         result,
         game_length_sec,
+        champion_id,
         champion_name,
         kills,
         deaths,
@@ -886,4 +1110,80 @@ pub fn extract_eog_summary(eog_val: Option<&Value>) -> Option<EndOfGameSummary> 
         total_gold,
         damage_to_champions,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn resolves_champion_ids_from_names_and_aliases() {
+        assert_eq!(champion_id_from_name("Ahri"), 103);
+        assert_eq!(champion_id_from_name("Kai'Sa"), 145);
+        assert_eq!(champion_id_from_name("KaiSa"), 145);
+        assert_eq!(champion_id_from_name("Lee Sin"), 64);
+        assert_eq!(champion_id_from_name("LeeSin"), 64);
+        assert_eq!(champion_id_from_name("Wukong"), 62);
+        assert_eq!(champion_id_from_name("Maître Yi"), 11);
+        assert_eq!(champion_id_from_name("K'Santé"), 897);
+        assert_eq!(champion_id_from_name("Nunu et Willump"), 20);
+        assert_eq!(extract_raw_champion_alias("game_character_displayname_MasterYi"), "MasterYi");
+        assert_eq!(champion_id_from_name("Selecting..."), 0);
+    }
+
+    #[test]
+    fn extracts_icons_spells_and_bans_into_summaries() {
+        let sum = extract_summoner_summary(
+            Some(&json!({"gameName": "Ezo", "tagLine": "EUW", "profileIconId": 548})),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(sum.profile_icon_id, 548);
+
+        let cs = extract_champ_select_summary(
+            Some(&json!({
+                "localPlayerCellId": 0,
+                "myTeam": [{"cellId": 0, "championId": 103, "spell1Id": 4, "spell2Id": 14, "assignedPosition": "MIDDLE"}],
+                "bans": {"myTeamBans": [238], "theirTeamBans": ["Yasuo"]}
+            })),
+            None,
+        )
+        .unwrap();
+        assert_eq!(cs.my_team[0].spell1_id, 4);
+        assert_eq!(cs.my_team[0].spell2_id, 14);
+        assert_eq!(cs.my_team_ban_ids, vec![238]);
+        assert_eq!(cs.their_team_ban_ids, vec![157]);
+
+        let live = extract_live_game_summary(
+            Some(&json!({
+                "gameData": {"gameMode": "CLASSIC", "mapName": "SR", "gameTime": 100.0},
+                "activePlayer": {"riotId": "Ezo#EUW", "level": 6},
+                "allPlayers": [
+                    {
+                        "riotId": "Ezo#EUW",
+                        "championName": "Kai'Sa",
+                        "rawChampionName": "game_character_displayname_Kaisa",
+                        "team": "ORDER",
+                        "position": "BOTTOM"
+                    },
+                    {
+                        "riotId": "Ally#EUW",
+                        "championName": "Maître Yi",
+                        "rawChampionName": "game_character_displayname_MasterYi",
+                        "team": "ORDER",
+                        "position": "JUNGLE"
+                    }
+                ]
+            })),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(live.active_champion_id, 145);
+        assert_eq!(live.players[0].champion_id, 145);
+        assert_eq!(live.players[1].champion_id, 11);
+        assert_eq!(live.players[1].champion_alias, "MasterYi");
+    }
 }

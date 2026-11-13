@@ -352,7 +352,9 @@ mod tests {
     fn player(id: &str, champ: &str, team: &str, pos: &str, kills: u32, is_self: bool) -> LiveGamePlayerSummary {
         LiveGamePlayerSummary {
             riot_id: id.to_string(),
+            champion_id: crate::summary::champion_id_from_name(champ),
             champion_name: champ.to_string(),
+            champion_alias: String::new(),
             team: team.to_string(),
             position: pos.to_string(),
             level: 10,
@@ -371,6 +373,7 @@ mod tests {
             game_mode: "CLASSIC".into(),
             map_name: "Summoner's Rift".into(),
             game_time_sec: 900.0,
+            active_champion_id: crate::summary::champion_id_from_name("Ahri"),
             active_champion: "Ahri".into(),
             level: 10,
             current_gold: 0,

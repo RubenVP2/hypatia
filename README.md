@@ -3,7 +3,7 @@
 > **Local League of Legends companion — Pit-Wall Chronometer desktop app, second-monitor mini widget, toggleable Telemetry Observatory, and opt-in Mobile Remote accessibility controller.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.2.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Slint](https://img.shields.io/badge/UI-Slint%201.18-purple.svg)](https://slint.dev)
 

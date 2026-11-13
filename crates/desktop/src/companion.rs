@@ -16,7 +16,7 @@ use crate::icons::DesktopAssetLoader;
 use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
 use crate::{
     AllyRow, BanEntry, ChampSelectView, EndView, EnemyPick, FeedLine, LiveView, MainWindow,
-    MapAlly, MiniWidget, ObjectiveChip, PartyRow, PlayerLine, StatLine, TowerDot, WaitView,
+    MapAlly, MiniWidget, ObjectiveChip, PartyRow, PlayerLine, Screen, StatLine, TowerDot, WaitView,
 };
 
 fn objective_kind_index(kind: ObjectiveKind) -> i32 {
@@ -474,7 +474,7 @@ struct RenderContext {
 /// What the companion windows currently display.
 struct Shown {
     snapshot: Arc<SummarySnapshot>,
-    view: i32,
+    view: Screen,
     context: RenderContext,
 }
 
@@ -515,19 +515,19 @@ impl PhaseClock {
 }
 
 /// Which clock, if any, the active view shows.
-fn phase_clock(snap: &SummarySnapshot, view: i32) -> Option<PhaseClock> {
+fn phase_clock(snap: &SummarySnapshot, view: Screen) -> Option<PhaseClock> {
     match view {
-        3 => snap.matchmaking.as_ref().map(|m| PhaseClock::up(m.time_in_queue_sec)),
-        4 => snap
+        Screen::Queue => snap.matchmaking.as_ref().map(|m| PhaseClock::up(m.time_in_queue_sec)),
+        Screen::ReadyCheck => snap
             .matchmaking
             .as_ref()
             .and_then(|m| m.ready_check_timer_sec)
             .map(|left| PhaseClock::down(f64::from(left), 10.max(left))),
-        5 => snap.champ_select.as_ref().map(|cs| {
+        Screen::ChampSelect => snap.champ_select.as_ref().map(|cs| {
             let total = if cs.total_time_sec > 0 { cs.total_time_sec } else { cs.time_left_sec };
             PhaseClock::down(cs.time_left_sec as f64, total as i32)
         }),
-        6 => snap.live_game.as_ref().map(|lg| PhaseClock::up(lg.game_time_sec)),
+        Screen::InGame => snap.live_game.as_ref().map(|lg| PhaseClock::up(lg.game_time_sec)),
         _ => None,
     }
 }
@@ -589,7 +589,7 @@ impl Companion {
     }
 }
 
-/// Pushes `snap` to the windows and returns the active view index. Sections equal to what
+/// Pushes `snap` to the windows and returns the active screen. Sections equal to what
 /// `previous` already displays are left untouched.
 fn apply_summary(
     main_win: &MainWindow,
@@ -599,7 +599,7 @@ fn apply_summary(
     snap: &SummarySnapshot,
     previous: Option<&Shown>,
     mini_open: bool,
-) -> i32 {
+) -> Screen {
     let lang = app_state.lang();
     let prev = previous.map(|shown| &*shown.snapshot);
     let phase_str = snap
@@ -639,22 +639,15 @@ fn apply_summary(
             .trigger_metadata_sync(&app_state.discovery, &app_state.riot_client);
     }
 
-    // Determine active view index:
-    // 0 League closed, 1 client idle, 2 lobby, 3 queue, 4 match found, 5 champ select, 6 in game, 7 results
     let view = match phase_str {
-        "Lobby" => 2,
-        "Matchmaking" => 3,
-        "ReadyCheck" => 4,
-        "ChampSelect" => 5,
-        "InProgress" => 6,
-        "EndOfGame" | "PreEndOfGame" => 7,
-        _ => {
-            if lcu_live || snap.summoner.is_some() {
-                1
-            } else {
-                0
-            }
-        }
+        "Lobby" => Screen::Lobby,
+        "Matchmaking" => Screen::Queue,
+        "ReadyCheck" => Screen::ReadyCheck,
+        "ChampSelect" => Screen::ChampSelect,
+        "InProgress" => Screen::InGame,
+        "EndOfGame" | "PreEndOfGame" => Screen::Results,
+        _ if lcu_live || snap.summoner.is_some() => Screen::Idle,
+        _ => Screen::Offline,
     };
     main_win.set_view(view);
     mini_win.set_view(view);
@@ -679,7 +672,8 @@ fn apply_summary(
         || prev.is_none_or(|p| {
             p.summoner != snap.summoner || p.lobby != snap.lobby || p.matchmaking != snap.matchmaking
         });
-    if view <= 4 && wait_changed {
+    let waiting = !matches!(view, Screen::ChampSelect | Screen::InGame | Screen::Results);
+    if waiting && wait_changed {
         let summoner_label = snap
             .summoner
             .as_ref()
@@ -702,7 +696,7 @@ fn apply_summary(
             .unwrap_or_else(|| lang.pick("Unranked", "Non classé").to_string());
 
         let (title, detail, specimen) = match view {
-            0 => (
+            Screen::Offline => (
                 lang.pick(
                     "Waiting for League of Legends",
                     "En attente de League of Legends",
@@ -715,7 +709,7 @@ fn apply_summary(
                 .to_string(),
                 SharedString::default(),
             ),
-            1 => (
+            Screen::Idle => (
                 if lang.is_fr() {
                     format!("Connecté en tant que {summoner_label}")
                 } else {
@@ -728,7 +722,7 @@ fn apply_summary(
                 .to_string(),
                 SharedString::default(),
             ),
-            2 => {
+            Screen::Lobby => {
                 let qn = snap
                     .lobby
                     .as_ref()
@@ -749,7 +743,7 @@ fn apply_summary(
                     SharedString::default(),
                 )
             }
-            3 => {
+            Screen::Queue => {
                 let (elapsed, est) = snap
                     .matchmaking
                     .as_ref()

@@ -4,7 +4,7 @@ import {
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
     Roundel, ChampPlate, GameIconBadge, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
-    PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow,
+    PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
@@ -14,6 +14,20 @@ import "fonts/BarlowCondensed-ExtraBold.ttf";
 import "fonts/OverpassMono.ttf";
 
 export { Theme }
+
+// Which companion screen the client's gameflow phase maps to. Set from Rust.
+export enum Screen {
+    // League is not running.
+    offline,
+    // The client is open but not in a lobby.
+    idle,
+    lobby,
+    queue,
+    ready-check,
+    champ-select,
+    in-game,
+    results,
+}
 
 // Mirrors `hypatia_core::settings::Settings`: one switch per background activity.
 export struct PerfSettings {
@@ -348,9 +362,10 @@ component ChampSelectScreen inherits Flickable {
             spacing: Space.xl;
             alignment: stretch;
 
-            // Left: 5 allied draft rows
+            // Left: 5 allied draft rows, packed at the top rather than spread to the map's height.
             VerticalLayout {
                 horizontal-stretch: 1;
+                alignment: start;
                 spacing: Space.sm;
                 HorizontalLayout {
                     spacing: Space.sm;
@@ -381,19 +396,14 @@ component ChampSelectScreen inherits Flickable {
                 width: 340px;
                 spacing: Space.md;
 
-                Rectangle {
+                Card {
                     height: 268px;
-                    background: Theme.panel;
-                    border-radius: Theme.radius;
-                    border-width: 1px;
-                    border-color: Theme.rule;
-                    VerticalLayout {
+                    HorizontalLayout {
                         padding: Space.md;
                         alignment: center;
                         LineMap {
                             width: 248px;
                             height: 248px;
-                            x: (parent.width - self.width) / 2;
                             allies: root.cs.map-allies;
                             show-jungle: true;
                             line-width: 8px;
@@ -403,11 +413,7 @@ component ChampSelectScreen inherits Flickable {
                     }
                 }
 
-                Rectangle {
-                    background: Theme.panel;
-                    border-radius: Theme.radius;
-                    border-width: 1px;
-                    border-color: Theme.rule;
+                Card {
                     VerticalLayout {
                         padding: Space.md;
                         spacing: Space.md;
@@ -447,11 +453,7 @@ component ChampSelectScreen inherits Flickable {
                     }
                 }
 
-                Rectangle {
-                    background: Theme.panel;
-                    border-radius: Theme.radius;
-                    border-width: 1px;
-                    border-color: Theme.rule;
+                Card {
                     VerticalLayout {
                         padding: Space.md;
                         spacing: Space.sm;
@@ -498,12 +500,8 @@ component ChampSelectScreen inherits Flickable {
             SectionLabel { text: Theme.fr ? "DRAFT DES ALLIÉS" : "ALLIES DRAFT"; }
             for ally in root.cs.allies: RosterRow { ally: ally; }
 
-            Rectangle {
+            Card {
                 height: 240px;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 LineMap {
                     width: 220px;
                     height: 220px;
@@ -517,11 +515,7 @@ component ChampSelectScreen inherits Flickable {
                 }
             }
 
-            Rectangle {
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
+            Card {
                 VerticalLayout {
                     padding: Space.md;
                     spacing: Space.sm;
@@ -729,13 +723,9 @@ component LiveScreen inherits Flickable {
             spacing: Space.lg;
             alignment: stretch;
 
-            Rectangle {
+            Card {
                 width: 248px;
                 height: 248px;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 LineMap {
                     x: 10px;
                     y: 10px;
@@ -749,12 +739,8 @@ component LiveScreen inherits Flickable {
                 }
             }
 
-            Rectangle {
+            Card {
                 horizontal-stretch: 1;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 VerticalLayout {
                     padding: Space.md;
                     spacing: Space.md;
@@ -783,7 +769,7 @@ component LiveScreen inherits Flickable {
                         }
                         ObjectiveRow { horizontal-stretch: 1; chips: root.live.enemy-objectives; }
                     }
-                    Rectangle { height: 1px; background: Theme.rule; }
+                    Divider { }
                     VerticalLayout {
                         spacing: Space.xxs;
                         for line in root.live.feed: FeedRow { line: line; }
@@ -792,18 +778,14 @@ component LiveScreen inherits Flickable {
             }
         }
 
-        if root.compact: Rectangle {
-            background: Theme.panel;
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: Theme.rule;
+        if root.compact: Card {
             VerticalLayout {
                 padding: Space.md;
                 spacing: Space.sm;
                 SectionLabel { text: Theme.fr ? "OBJECTIFS ET FIL EN DIRECT" : "OBJECTIVES & FEED"; }
                 ObjectiveRow { chips: root.live.my-objectives; empty-text: Theme.fr ? "Aucun objectif bleu" : "No blue objectives"; }
                 ObjectiveRow { chips: root.live.enemy-objectives; empty-text: Theme.fr ? "Aucun objectif rouge" : "No red objectives"; }
-                Rectangle { height: 1px; background: Theme.rule; }
+                Divider { }
                 for line in root.live.feed: FeedRow { line: line; }
             }
         }
@@ -847,15 +829,12 @@ component WaitScreen inherits Flickable {
             alignment: stretch;
 
             // Left: Party roster or summoner telemetry ledger
-            Rectangle {
+            Card {
                 horizontal-stretch: 3;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 VerticalLayout {
                     padding: Space.lg;
                     spacing: Space.md;
+                    alignment: start;
                     SectionLabel {
                         text: root.show-party
                             ? (Theme.fr ? "MEMBRES DU GROUPE" : "PARTY ROSTER")
@@ -946,15 +925,12 @@ component WaitScreen inherits Flickable {
             }
 
             // Right: Quick actions & companion readiness
-            Rectangle {
+            Card {
                 horizontal-stretch: 2;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 VerticalLayout {
                     padding: Space.lg;
                     spacing: Space.md;
+                    alignment: start;
                     SectionLabel { text: Theme.fr ? "POUR COMMENCER" : "GET STARTED"; }
                     if root.show-party: VerticalLayout {
                         for n in root.wait.notes: NoteRow { note: n; }
@@ -990,11 +966,7 @@ component WaitScreen inherits Flickable {
 
         if root.compact: VerticalLayout {
             spacing: Space.md;
-            Rectangle {
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
+            Card {
                 VerticalLayout {
                     padding: Space.md;
                     spacing: Space.sm;
@@ -1131,6 +1103,8 @@ component TelemetryEventRow inherits Rectangle {
     border-color: selected ? Theme.text : Theme.rule;
     accessible-role: button;
     accessible-label: ev.source + " " + ev.kind + " " + ev.uri;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
 
     HorizontalLayout {
         padding-left: Space.sm;
@@ -1271,6 +1245,7 @@ component TelemetryInspector inherits Rectangle {
                 height: 100%;
                 content-height: payload-input.preferred-height + 24px;
                 payload-input := TextInput {
+                    accessible-label: Theme.fr ? "Données de l'événement" : "Event payload";
                     x: 10px;
                     y: 10px;
                     width: parent.width - 20px;
@@ -1329,6 +1304,9 @@ component TelemetryEndpointRow inherits Rectangle {
     background: touch.has-hover ? Theme.panel-raised : Theme.ground;
     border-width: 1px;
     border-color: touch.has-hover ? Theme.rule-strong : Theme.rule;
+    accessible-role: button;
+    accessible-label: (Theme.fr ? "Tester GET " : "Use GET ") + ep.method + " " + ep.path;
+    accessible-action-default => { root.clicked(); }
 
     HorizontalLayout {
         padding-left: Space.sm;
@@ -1724,6 +1702,7 @@ component TelemetryPanel inherits Rectangle {
                             width: parent.width - 16px;
                             height: 100%;
                             text <=> root.call-path;
+                            accessible-label: Theme.fr ? "Chemin de l'appel GET" : "GET request path";
                             color: Theme.text;
                             font-family: Type.mono-family;
                             font-size: Type.label;
@@ -1762,6 +1741,7 @@ component TelemetryPanel inherits Rectangle {
                         width: parent.width - 20px;
                         height: 100%;
                         text <=> root.endpoint-filter;
+                        accessible-label: Theme.fr ? "Filtrer les API" : "Filter APIs";
                         color: Theme.text;
                         font-size: Type.small;
                         vertical-alignment: center;
@@ -1808,6 +1788,7 @@ component TelemetryPanel inherits Rectangle {
                         vertical-stretch: 1;
                         content-height: call-resp.preferred-height + 8px;
                         call-resp := TextInput {
+                            accessible-label: Theme.fr ? "Réponse de l'appel" : "Call response";
                             width: parent.width;
                             read-only: true;
                             single-line: false;
@@ -1846,11 +1827,7 @@ component EndScreen inherits Flickable {
             compact: root.compact;
         }
 
-        Rectangle {
-            background: Theme.panel;
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: Theme.rule;
+        Card {
             VerticalLayout {
                 padding: Space.lg;
                 spacing: Space.sm;
@@ -1898,8 +1875,7 @@ export component MainWindow inherits Window {
     min-height: 680px;
     background: Theme.ground;
 
-    // 0 League closed, 1 client idle, 2 lobby, 3 queue, 4 match found, 5 champ select, 6 in game, 7 results
-    in property <int> view: 0;
+    in property <Screen> view: Screen.offline;
     in property <bool> demo: false;
     in property <string> demo-phase: "";
     in property <string> queue-label;
@@ -1958,12 +1934,13 @@ export component MainWindow inherits Window {
     callback execute-get-call(int, string);
     callback set-endpoint-filter(string);
 
-    function current-stop() -> int {
-        if (root.view == 2) { return 0; }
-        if (root.view == 3 || root.view == 4) { return 1; }
-        if (root.view == 5) { return 2; }
-        if (root.view == 6) { return 3; }
-        if (root.view == 7) { return 4; }
+    // PhaseLine stop for the current screen: 0 lobby .. 4 results, -1 before the lobby.
+    pure function current-stop() -> int {
+        if (root.view == Screen.lobby) { return 0; }
+        if (root.view == Screen.queue || root.view == Screen.ready-check) { return 1; }
+        if (root.view == Screen.champ-select) { return 2; }
+        if (root.view == Screen.in-game) { return 3; }
+        if (root.view == Screen.results) { return 4; }
         return -1;
     }
 
@@ -2036,7 +2013,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Rectangle { height: 1px; background: Theme.rule; }
+                Divider { }
 
                 SectionLabel { text: Theme.fr ? "ESPACE DE TRAVAIL" : "WORKSPACE"; }
 
@@ -2093,7 +2070,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Rectangle { height: 1px; background: Theme.rule; }
+                Divider { }
 
                 SectionLabel { text: "SIMULATION"; }
 
@@ -2112,13 +2089,13 @@ export component MainWindow inherits Window {
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Salon" : "Lobby";
-                            selected: root.view == 2;
+                            selected: root.view == Screen.lobby;
                             clicked => { root.select-demo-phase("Lobby"); }
                         }
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "File" : "Queue";
-                            selected: root.view == 3;
+                            selected: root.view == Screen.queue;
                             clicked => { root.select-demo-phase("Matchmaking"); }
                         }
                     }
@@ -2127,13 +2104,13 @@ export component MainWindow inherits Window {
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Prêt" : "Ready";
-                            selected: root.view == 4;
+                            selected: root.view == Screen.ready-check;
                             clicked => { root.select-demo-phase("ReadyCheck"); }
                         }
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Champ." : "Champ";
-                            selected: root.view == 5;
+                            selected: root.view == Screen.champ-select;
                             clicked => { root.select-demo-phase("ChampSelect"); }
                         }
                     }
@@ -2142,13 +2119,13 @@ export component MainWindow inherits Window {
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "En jeu" : "Live";
-                            selected: root.view == 6;
+                            selected: root.view == Screen.in-game;
                             clicked => { root.select-demo-phase("InProgress"); }
                         }
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Bilan" : "End";
-                            selected: root.view == 7;
+                            selected: root.view == Screen.results;
                             clicked => { root.select-demo-phase("EndOfGame"); }
                         }
                     }
@@ -2156,7 +2133,7 @@ export component MainWindow inherits Window {
 
                 Rectangle { vertical-stretch: 1; }
 
-                Rectangle { height: 1px; background: Theme.rule; }
+                Divider { }
 
                 SectionLabel { text: Theme.fr ? "SOURCES RIOT" : "RIOT SOURCES"; }
                 VerticalLayout {
@@ -2178,7 +2155,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Rectangle { height: 1px; background: Theme.rule; }
+                Divider { }
 
                 // Language switcher (EN / FR)
                 HorizontalLayout {
@@ -2315,13 +2292,13 @@ export component MainWindow inherits Window {
                         min-width: 340px;
                         property <bool> is-compact: self.width < 680px;
 
-                        if root.view <= 4: WaitScreen {
+                        if root.view != Screen.champ-select && root.view != Screen.in-game && root.view != Screen.results: WaitScreen {
                             width: 100%;
                             height: 100%;
                             wait: root.wait;
                             party: root.party;
-                            show-party: root.view == 2 && root.party.length > 0;
-                            is-ready-check: root.view == 4;
+                            show-party: root.view == Screen.lobby && root.party.length > 0;
+                            is-ready-check: root.view == Screen.ready-check;
                             compact: stage.is-compact;
                             telemetry-enabled: root.telemetry-enabled;
                             remote-panel-open: root.remote-panel-open;
@@ -2333,7 +2310,7 @@ export component MainWindow inherits Window {
                             toggle-remote-panel => { root.toggle-remote-panel(); }
                             toggle-demo => { root.toggle-demo(); }
                         }
-                        if root.view == 5: ChampSelectScreen {
+                        if root.view == Screen.champ-select: ChampSelectScreen {
                             width: 100%;
                             height: 100%;
                             cs: root.champ;
@@ -2341,14 +2318,14 @@ export component MainWindow inherits Window {
                             clock-total: root.clock-total;
                             compact: stage.is-compact;
                         }
-                        if root.view == 6: LiveScreen {
+                        if root.view == Screen.in-game: LiveScreen {
                             width: 100%;
                             height: 100%;
                             live: root.live;
                             clock-seconds: root.clock-seconds;
                             compact: stage.is-compact;
                         }
-                        if root.view == 7: EndScreen {
+                        if root.view == Screen.results: EndScreen {
                             width: 100%;
                             height: 100%;
                             end: root.end;
@@ -2456,7 +2433,7 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            Rectangle { height: 1px; background: Theme.rule; }
+                            Divider { }
 
                             HorizontalLayout {
                                 spacing: Space.lg;
@@ -2509,6 +2486,7 @@ export component MainWindow inherits Window {
                                                 read-only: true;
                                                 single-line: true;
                                                 text: root.remote-url;
+                                                accessible-label: Theme.fr ? "URL d'association" : "Pairing URL";
                                                 color: Theme.text;
                                                 font-family: Type.mono-family;
                                                 font-size: Type.label;
@@ -2616,7 +2594,7 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.rule; }
+                                Divider { }
                                 SectionLabel { text: Theme.fr ? "COMPAGNON" : "COMPANION"; }
 
                                 SettingRow {
@@ -2668,7 +2646,7 @@ export component MainWindow inherits Window {
                                     toggled => { root.toggle-setting("reduce_motion"); }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.rule; }
+                                Divider { }
                                 SectionLabel {
                                     text: Theme.fr
                                         ? "OBSERVATOIRE (ACTIF UNIQUEMENT QUAND IL EST OUVERT)"
@@ -2805,8 +2783,8 @@ export component MiniWidget inherits Window {
     always-on-top: true;
     background: Theme.ground;
 
-    // Same view index as the main window: 4 match found, 5 champion select, 6 in game.
-    in property <int> view: 0;
+    // Same screen as the main window; only ready-check and champ-select change the widget.
+    in property <Screen> view: Screen.offline;
     in property <bool> in-game: false;
     in property <WaitView> wait;
     in property <ChampSelectView> champ;
@@ -2814,7 +2792,7 @@ export component MiniWidget inherits Window {
     in property <int> clock-seconds: -1;
     in property <int> clock-total: 0;
     in property <bool> clock-down: true;
-    property <bool> drafting: !root.in-game && root.view == 5;
+    property <bool> drafting: !root.in-game && root.view == Screen.champ-select;
 
     // Between games: what the client is doing, with the queue or ready-check clock.
     if !root.in-game && !root.drafting: VerticalLayout {
@@ -2826,7 +2804,7 @@ export component MiniWidget inherits Window {
             detail: root.wait.title != "" ? "" : (Theme.fr
                 ? "La sélection des champions et la partie s'afficheront ici automatiquement."
                 : "Champion select and your game show up here automatically.");
-            active-turn: root.view == 4;
+            active-turn: root.view == Screen.ready-check;
         }
         if root.clock-seconds >= 0: ClockReadout {
             seconds: root.clock-seconds;
@@ -2971,11 +2949,7 @@ export component MiniWidget inherits Window {
         }
 
         // Who is up, who is dead and for how long
-        Rectangle {
-            background: Theme.panel;
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: Theme.rule;
+        Card {
             VerticalLayout {
                 padding: Space.sm;
                 spacing: Space.sm;
@@ -2984,7 +2958,7 @@ export component MiniWidget inherits Window {
                     alignment: space-around;
                     for p in root.live.my-players: MiniPlayerCell { p: p; mine: true; }
                 }
-                Rectangle { height: 1px; background: Theme.rule; }
+                Divider { }
                 HorizontalLayout {
                     spacing: Space.xs;
                     alignment: space-around;
@@ -2997,12 +2971,8 @@ export component MiniWidget inherits Window {
         HorizontalLayout {
             spacing: Space.sm;
             height: 140px;
-            Rectangle {
+            Card {
                 width: 140px;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 LineMap {
                     width: 124px;
                     height: 124px;
@@ -3015,12 +2985,8 @@ export component MiniWidget inherits Window {
                     halo: Theme.panel;
                 }
             }
-            Rectangle {
+            Card {
                 horizontal-stretch: 1;
-                background: Theme.panel;
-                border-radius: Theme.radius;
-                border-width: 1px;
-                border-color: Theme.rule;
                 VerticalLayout {
                     padding: Space.sm;
                     spacing: Space.xs;
@@ -3034,12 +3000,8 @@ export component MiniWidget inherits Window {
         }
 
         // Recent events, scrollable
-        Rectangle {
+        Card {
             vertical-stretch: 1;
-            background: Theme.panel;
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: Theme.rule;
             clip: true;
 
             VerticalLayout {

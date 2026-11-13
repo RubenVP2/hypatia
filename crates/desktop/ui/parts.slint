@@ -336,54 +336,65 @@ export component RankedCrest inherits Rectangle {
     }
 }
 
-// Cached champion splash backdrop (or atmospheric Hextech gradient when no splash is cached yet).
+// Cached champion splash backdrop (or atmospheric Hextech crest when no splash is cached yet).
 export component SplashBackdrop inherits Rectangle {
     in property <image> splash;
     in property <color> tint: Theme.accent;
+    in property <color> surface: Theme.ground;
+    in property <bool> card-mode: false;
     clip: true;
     background: transparent;
 
     if Theme.style >= 1 && root.splash.width > 0: Image {
-        width: 100%;
-        height: 100%;
+        x: root.card-mode ? parent.width * 0.22 : 0px;
+        y: 0px;
+        width: root.card-mode ? parent.width * 0.78 : parent.width;
+        height: parent.height;
         source: root.splash;
         image-fit: cover;
-        opacity: Theme.style >= 3
-            ? (Theme.dark ? 0.46 : 0.26)
-            : (Theme.style == 2 ? (Theme.dark ? 0.34 : 0.20) : (Theme.dark ? 0.20 : 0.12));
+        opacity: root.card-mode
+            ? (Theme.style >= 3 ? (Theme.dark ? 0.62 : 0.36) : (Theme.style == 2 ? (Theme.dark ? 0.48 : 0.28) : (Theme.dark ? 0.32 : 0.18)))
+            : (Theme.style >= 3 ? (Theme.dark ? 0.42 : 0.24) : (Theme.style == 2 ? (Theme.dark ? 0.30 : 0.18) : (Theme.dark ? 0.18 : 0.10)));
     }
 
     if Theme.style >= 1 && root.splash.width == 0: Rectangle {
         width: 100%;
         height: 100%;
-        background: @linear-gradient(125deg, root.tint 0%, Theme.ground 68%);
-        opacity: Theme.style >= 3 ? (Theme.dark ? 0.24 : 0.14) : (Theme.dark ? 0.14 : 0.08);
+        background: @linear-gradient(110deg, root.surface 0%, root.tint 100%);
+        opacity: root.card-mode
+            ? (Theme.style >= 3 ? (Theme.dark ? 0.22 : 0.12) : (Theme.style == 2 ? (Theme.dark ? 0.16 : 0.09) : (Theme.dark ? 0.10 : 0.06)))
+            : (Theme.style >= 3 ? (Theme.dark ? 0.18 : 0.10) : (Theme.dark ? 0.10 : 0.05));
     }
 
-    if Theme.style >= 2 && root.splash.width == 0: Path {
-        x: parent.width * 0.62;
-        y: -parent.height * 0.1;
-        width: parent.height * 1.2;
-        height: parent.height * 1.2;
+    if Theme.style >= 1 && root.splash.width == 0: Path {
+        x: parent.width - parent.height * 1.15;
+        y: -parent.height * 0.15;
+        width: parent.height * 1.3;
+        height: parent.height * 1.3;
         viewbox-width: 24;
         viewbox-height: 24;
-        commands: "M 12 2 L 21 7 L 21 17 L 12 22 L 3 17 L 3 7 Z M 12 6 L 17.5 9.2 V 14.8 L 12 18 L 6.5 14.8 V 9.2 Z";
-        stroke: Theme.gold-bright;
-        stroke-width: 0.8px;
+        commands: "M 12 2 L 21 7 L 21 17 L 12 22 L 3 17 L 3 7 Z M 12 5.5 L 18 9 V 15 L 12 18.5 L 6 15 V 9 Z M 12 9 L 15 12 L 12 15 L 9 12 Z";
+        stroke: Theme.style >= 2 ? Theme.gold-bright : root.tint;
+        stroke-width: 0.9px;
         fill: transparent;
-        opacity: Theme.style >= 3 ? 0.14 : 0.08;
+        opacity: Theme.style >= 3 ? 0.24 : (Theme.style == 2 ? 0.18 : 0.12);
     }
 
-    // Readability veil fading smoothly into Theme.ground.
-    if Theme.style >= 1: Rectangle {
+    // Readability veil fading smoothly from left text area toward the right art showcase.
+    if Theme.style >= 1 && root.card-mode: Rectangle {
         width: 100%;
         height: 100%;
-        background: @linear-gradient(180deg, transparent 0%, Theme.ground 96%);
+        background: @linear-gradient(90deg, root.surface 0%, root.surface 28%, transparent 88%);
     }
-    if Theme.style >= 1: Rectangle {
+    if Theme.style >= 1 && !root.card-mode: Rectangle {
         width: 100%;
         height: 100%;
-        background: @linear-gradient(90deg, Theme.ground 0%, transparent 55%, Theme.ground 100%);
+        background: @linear-gradient(180deg, transparent 0%, root.surface 96%);
+    }
+    if Theme.style >= 1 && !root.card-mode: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(90deg, root.surface 0%, transparent 55%, root.surface 100%);
         opacity: Theme.style >= 3 ? 0.52 : 0.72;
     }
 }
@@ -401,6 +412,8 @@ export component Plate inherits Rectangle {
     in property <string> title;
     in property <string> detail;
     in property <bool> active-turn: false;
+    in property <image> splash;
+    in property <color> splash-tint: Theme.accent;
     background: active-turn ? Theme.signal : Theme.panel;
     border-radius: Theme.radius;
     border-width: 1px;
@@ -408,6 +421,22 @@ export component Plate inherits Rectangle {
     accessible-role: text;
     accessible-label: root.title + ". " + root.detail;
     animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+
+    // Embedded splash art / Hextech crest inside the header banner (hidden during amber alerts).
+    if Theme.style >= 1 && !root.active-turn: Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: parent.border-radius;
+        clip: true;
+        SplashBackdrop {
+            width: 100%;
+            height: 100%;
+            splash: root.splash;
+            tint: root.splash-tint;
+            surface: Theme.panel;
+            card-mode: true;
+        }
+    }
 
     // Left metallic bar on Hextech/Riot variants when calm (keeps amber strictly for active-turn).
     if Theme.style >= 2 && !root.active-turn: Rectangle {

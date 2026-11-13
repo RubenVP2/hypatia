@@ -149,6 +149,8 @@ component Header inherits Rectangle {
     in property <bool> clock-down: true;
     in property <bool> active-turn: false;
     in property <bool> compact: false;
+    in property <image> splash;
+    in property <color> splash-tint: Theme.accent;
     property <bool> has-figure: root.clock-seconds >= 0 || root.specimen != "";
     min-height: 92px;
 
@@ -160,6 +162,8 @@ component Header inherits Rectangle {
             title: root.title;
             detail: root.detail;
             active-turn: root.active-turn;
+            splash: root.splash;
+            splash-tint: root.splash-tint;
         }
         if root.has-figure: ClockReadout {
             seconds: root.clock-seconds;
@@ -175,6 +179,8 @@ component Header inherits Rectangle {
             title: root.title;
             detail: root.detail;
             active-turn: root.active-turn;
+            splash: root.splash;
+            splash-tint: root.splash-tint;
         }
         if root.has-figure: ClockReadout {
             seconds: root.clock-seconds;
@@ -391,6 +397,8 @@ component ChampSelectScreen inherits Flickable {
             clock-total: root.clock-total;
             active-turn: root.cs.my-turn;
             compact: root.compact;
+            splash: root.cs.splash-icon;
+            splash-tint: Theme.accent;
         }
 
         if !root.compact: HorizontalLayout {
@@ -660,6 +668,29 @@ component LiveScreen inherits Flickable {
             border-width: 1px;
             border-color: root.live.dead ? Theme.danger : (Theme.style >= 3 ? Theme.gold : Theme.rule);
 
+            if Theme.style >= 1 && !root.live.dead: Rectangle {
+                width: 100%;
+                height: 100%;
+                border-radius: parent.border-radius;
+                clip: true;
+                SplashBackdrop {
+                    width: 100%;
+                    height: 100%;
+                    splash: root.live.splash-icon;
+                    tint: Theme.blue;
+                    surface: Theme.panel;
+                    card-mode: true;
+                }
+            }
+
+            if Theme.style >= 2 && !root.live.dead: Rectangle {
+                x: 0px;
+                y: 6px;
+                width: 3px;
+                height: max(0px, parent.height - 12px);
+                background: Theme.gold-bright;
+            }
+
             HorizontalLayout {
                 padding: Space.md;
                 spacing: Space.lg;
@@ -882,6 +913,7 @@ component WaitScreen inherits Flickable {
             clock-down: root.clock-down;
             active-turn: root.is-ready-check;
             compact: root.compact;
+            splash-tint: root.is-ready-check ? Theme.signal : Theme.accent;
         }
 
         if !root.compact: HorizontalLayout {
@@ -1911,6 +1943,8 @@ component EndScreen inherits Flickable {
             detail: root.end.detail;
             specimen: root.end.kda;
             compact: root.compact;
+            splash: root.end.splash-icon;
+            splash-tint: root.end.victory ? Theme.live-green : Theme.red;
         }
 
         Card {
@@ -2939,6 +2973,7 @@ export component MiniWidget inherits Window {
             title: root.champ.title;
             detail: root.champ.detail;
             active-turn: root.champ.my-turn;
+            splash: root.champ.splash-icon;
         }
         ClockReadout {
             seconds: root.clock-seconds;

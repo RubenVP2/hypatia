@@ -40,6 +40,7 @@ pub struct GameAssetCache {
     perk_paths: RwLock<HashMap<i64, String>>,
     style_paths: RwLock<HashMap<i64, String>>,
     skin_paths: RwLock<HashMap<i64, String>>,
+    splash_paths: RwLock<HashMap<i64, String>>,
 }
 
 impl GameAssetCache {
@@ -74,6 +75,7 @@ impl GameAssetCache {
             perk_paths: RwLock::new(HashMap::new()),
             style_paths: RwLock::new(HashMap::new()),
             skin_paths: RwLock::new(HashMap::new()),
+            splash_paths: RwLock::new(HashMap::new()),
         };
         cache.load_cached_metadata_from_disk();
         cache
@@ -317,6 +319,7 @@ impl GameAssetCache {
             ("summoner-spells.json", "/lol-game-data/assets/v1/summoner-spells.json"),
             ("perks.json", "/lol-game-data/assets/v1/perks.json"),
             ("perkstyles.json", "/lol-game-data/assets/v1/perkstyles.json"),
+            ("skins.json", "/lol-game-data/assets/v1/skins.json"),
         ];
 
         let mut champ_summary_ok = false;
@@ -472,6 +475,16 @@ impl GameAssetCache {
                 let (champ_id, skin_id) =
                     if id >= 1000 { (id / 1000, id) } else { (id, id * 1000) };
                 let base_id = champ_id * 1000;
+                {
+                    let splashes = self.splash_paths.read().unwrap();
+                    for sid in [skin_id, base_id] {
+                        if let Some(p) = splashes.get(&sid) {
+                            if !out.contains(p) {
+                                out.push(p.clone());
+                            }
+                        }
+                    }
+                }
                 for sid in [skin_id, base_id] {
                     for path in [
                         format!("/lol-game-data/assets/v1/champion-splashes/{champ_id}/{sid}.jpg"),
@@ -502,6 +515,7 @@ impl GameAssetCache {
             "summoner-spells.json",
             "perks.json",
             "perkstyles.json",
+            "skins.json",
         ] {
             let p = meta_dir.join(file_name);
             if let Ok(bytes) = std::fs::read(&p) {
@@ -599,6 +613,40 @@ impl GameAssetCache {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
                             map.insert(id, clean);
                         }
+                    }
+                }
+            }
+            "skins.json" => {
+                let entries: Vec<&Value> = if let Some(obj) = json.as_object() {
+                    obj.values().collect()
+                } else if let Some(arr) = json.as_array() {
+                    arr.iter().collect()
+                } else {
+                    return;
+                };
+                let mut skins = self.skin_paths.write().unwrap();
+                let mut splashes = self.splash_paths.write().unwrap();
+                for entry in entries {
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else { continue; };
+                    if let Some(clean) = entry
+                        .get("tilePath")
+                        .and_then(|v| v.as_str())
+                        .and_then(sanitize_lcu_asset_path)
+                    {
+                        skins.insert(id, clean);
+                    }
+                    if let Some(clean) = entry
+                        .get("splashPath")
+                        .and_then(|v| v.as_str())
+                        .and_then(sanitize_lcu_asset_path)
+                        .or_else(|| {
+                            entry
+                                .get("uncenteredSplashPath")
+                                .and_then(|v| v.as_str())
+                                .and_then(sanitize_lcu_asset_path)
+                        })
+                    {
+                        splashes.insert(id, clean);
                     }
                 }
             }
@@ -985,6 +1033,21 @@ mod tests {
                 "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103000.jpg",
                 "/lol-game-data/assets/v1/champion-tiles/103/103000.jpg",
             ]
+        );
+
+        cache.ingest_metadata(
+            "skins.json",
+            &json!({
+                "103027": {
+                    "id": 103027,
+                    "splashPath": "/lol-game-data/assets/ASSETS/Characters/Ahri/Skins/Skin27/Images/ahri_splash_centered_27.jpg",
+                    "tilePath": "/lol-game-data/assets/ASSETS/Characters/Ahri/Skins/Skin27/Images/ahri_splash_tile_27.jpg"
+                }
+            }),
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("splash", 103027).first().map(String::as_str),
+            Some("/lol-game-data/assets/ASSETS/Characters/Ahri/Skins/Skin27/Images/ahri_splash_centered_27.jpg")
         );
 
         let png_bytes = b"\x89PNG\r\n\x1a\nFAKEPNGDATA".to_vec();

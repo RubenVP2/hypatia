@@ -3,7 +3,7 @@
 > **Hypatia · LoL companion — a local, read-only desktop app with a second-monitor mini widget, an optional Observatory for what the Riot clients expose, and an opt-in Mobile Remote for one-handed control.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.4.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.5.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Slint](https://img.shields.io/badge/UI-Slint%201.18-purple.svg)](https://slint.dev)
 

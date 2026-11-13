@@ -1,4 +1,4 @@
-import { Theme, Type } from "theme.slint";
+import { Theme, Type, Space } from "theme.slint";
 
 export struct AllyRow {
     lane: int,
@@ -232,6 +232,7 @@ export component ChampPlate inherits Rectangle {
     border-width: empty ? 1px : 0px;
     border-color: Theme.rule-strong;
     opacity: faded ? 0.45 : 1.0;
+    animate opacity { duration: Theme.dur-slow; easing: ease-out; }
     if !root.empty && root.icon.width == 0: Text {
         text: root.label;
         color: Theme.on-team;
@@ -256,35 +257,52 @@ export component SectionLabel inherits Text {
     letter-spacing: 0.9px;
 }
 
-// High-contrast focal callout plate: headline leads, optional detail below.
+// Phase headline plate. A quiet panel by default; it turns amber only when the player must act
+// (their pick or ban, a ready check) and announces that moment with a ring that fades twice.
 export component Plate inherits Rectangle {
     in property <string> title;
     in property <string> detail;
     in property <bool> active-turn: false;
-    background: active-turn ? Theme.signal : Theme.plate;
+    background: active-turn ? Theme.signal : Theme.panel;
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: active-turn ? Theme.signal : Theme.rule-strong;
     accessible-role: text;
     accessible-label: root.title + ". " + root.detail;
+    animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+
+    // Created when the turn starts: its opacity runs 1 -> 0 twice, then it stays invisible.
+    if root.active-turn: Rectangle {
+        x: -5px;
+        y: -5px;
+        width: parent.width + 10px;
+        height: parent.height + 10px;
+        border-radius: parent.border-radius + 4px;
+        border-width: 2px;
+        border-color: Theme.signal;
+        opacity: root.active-turn ? 0 : 1;
+        animate opacity { duration: Theme.dur-pulse; iteration-count: 2; easing: ease-out; }
+    }
+
     VerticalLayout {
-        padding-left: 18px;
-        padding-right: 20px;
-        padding-top: 12px;
-        padding-bottom: 12px;
-        spacing: 3px;
+        padding-left: Space.lg;
+        padding-right: Space.xl;
+        padding-top: Space.md;
+        padding-bottom: Space.md;
+        spacing: Space.xs;
         Text {
             text: root.title;
-            color: root.active-turn ? #0f1116 : Theme.on-plate;
+            color: root.active-turn ? Theme.on-signal : Theme.text;
             font-family: Type.display-family;
-            font-size: 26px;
+            font-size: Type.headline;
             font-weight: 800;
             letter-spacing: 0.3px;
             wrap: word-wrap;
+            animate color { duration: Theme.dur-base; }
         }
         if root.detail != "": Text {
             text: root.detail;
-            color: root.active-turn ? #222631 : Theme.on-plate-muted;
+            color: root.active-turn ? Theme.on-signal-muted : Theme.muted;
             font-size: Type.body;
             font-weight: 600;
             wrap: word-wrap;
@@ -292,7 +310,7 @@ export component Plate inherits Rectangle {
     }
 }
 
-// Condensed pit-wall timing display figure.
+// Condensed display figure: the one large number on a screen.
 export component Specimen inherits Text {
     font-family: Type.display-family;
     font-size: Type.specimen;
@@ -303,38 +321,89 @@ export component Specimen inherits Text {
     vertical-alignment: center;
 }
 
-// Instrument button with clear hover, selected, and keyboard focus rings.
+// A running phase clock. Counting down, it turns amber at 10 s and red at 5 s while a 3px bar
+// beneath it drains with the time left. Counting up (queue, game time) it stays calm.
+export component ClockReadout inherits Rectangle {
+    in property <int> seconds: -1;
+    in property <int> total: 0;
+    in property <bool> down: true;
+    // Shown when no clock runs.
+    in property <string> fallback: "";
+    in property <length> size: Type.specimen;
+    in property <bool> align-left: false;
+    property <int> urgency: Theme.clock-urgency(root.seconds, root.down);
+    property <color> ink: Theme.urgency-color(root.urgency);
+    property <bool> has-bar: root.down && root.total > 0 && root.seconds >= 0;
+    property <length> bar-room: root.has-bar ? 9px : 0px;
+    min-width: figure.preferred-width + 12px;
+    min-height: figure.preferred-height + root.bar-room;
+    accessible-role: text;
+    accessible-label: root.seconds >= 0
+        ? (Theme.fr ? "Temps : " : "Time: ") + Theme.clock-text(root.seconds)
+        : root.fallback;
+
+    figure := Text {
+        x: root.align-left ? 0px : parent.width - self.width;
+        y: (parent.height - self.height - root.bar-room) / 2;
+        text: root.seconds >= 0 ? Theme.clock-text(root.seconds) : root.fallback;
+        font-family: Type.display-family;
+        font-size: root.size;
+        font-weight: 800;
+        letter-spacing: -1px;
+        color: root.seconds >= 0 ? root.ink : Theme.text;
+        animate color { duration: Theme.dur-slow; easing: ease-out; }
+    }
+
+    if root.has-bar: Rectangle {
+        x: figure.x;
+        y: figure.y + figure.height + 6px;
+        width: figure.width;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.rule;
+        clip: true;
+        Rectangle {
+            x: root.align-left ? 0px : parent.width - self.width;
+            height: 100%;
+            width: parent.width * Math.clamp(root.seconds / Math.max(1, root.total), 0, 1);
+            background: root.ink;
+            animate width { duration: Theme.dur-tick; easing: linear; }
+        }
+    }
+}
+
+// Instrument button. `selected` is a quiet toggle state (raised fill, ink border); `primary`
+// marks the one main action of a panel (ivory fill). Neither is amber: amber means urgency.
 export component Action inherits Rectangle {
     in property <string> text;
     in property <bool> selected: false;
+    in property <bool> primary: false;
     in property <bool> enabled: true;
-    in property <bool> primary-signal: false;
     callback clicked();
     height: 30px;
     min-width: label.preferred-width + 20px;
     border-radius: Theme.radius-sm;
-    background: selected
-        ? (primary-signal ? Theme.signal : Theme.plate)
-        : (touch.has-hover && enabled ? Theme.panel-raised : Theme.panel);
+    background: primary
+        ? Theme.plate
+        : (selected || (touch.has-hover && enabled) ? Theme.panel-raised : Theme.panel);
     border-width: 1px;
-    border-color: selected
-        ? (primary-signal ? Theme.signal : Theme.plate)
-        : (touch.has-hover && enabled ? Theme.rule-strong : Theme.rule);
+    border-color: primary
+        ? Theme.plate
+        : selected
+            ? Theme.text
+            : (touch.has-hover && enabled ? Theme.rule-strong : Theme.rule);
     opacity: enabled ? 1.0 : 0.45;
     accessible-role: button;
     accessible-label: root.text;
     accessible-checked: root.selected;
     accessible-action-default => { if (root.enabled) { root.clicked(); } }
-    animate background { duration: 110ms; easing: ease-out; }
-    animate border-color { duration: 110ms; easing: ease-out; }
+    animate background, border-color { duration: Theme.dur-fast; easing: ease-out; }
 
     label := Text {
         text: root.text;
-        color: root.selected
-            ? (root.primary-signal ? #0f1116 : Theme.on-plate)
-            : Theme.text;
+        color: root.primary ? Theme.on-plate : Theme.text;
         font-size: Type.small;
-        font-weight: 600;
+        font-weight: root.selected || root.primary ? 800 : 600;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -379,21 +448,19 @@ export component RailNavItem inherits Rectangle {
 
     height: 36px;
     border-radius: Theme.radius-sm;
-    background: active
-        ? Theme.signal-soft
-        : (touch.has-hover ? Theme.panel-raised : transparent);
+    background: active || touch.has-hover ? Theme.panel-raised : transparent;
     border-width: 1px;
-    border-color: active ? Theme.signal : transparent;
+    border-color: active ? Theme.rule-strong : transparent;
     accessible-role: button;
     accessible-label: root.label;
     accessible-checked: root.active;
     accessible-action-default => { root.clicked(); }
-    animate background { duration: 110ms; easing: ease-out; }
+    animate background, border-color { duration: Theme.dur-fast; easing: ease-out; }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 9px;
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
         alignment: stretch;
 
         Rectangle {
@@ -406,7 +473,7 @@ export component RailNavItem inherits Rectangle {
                 viewbox-width: 24;
                 viewbox-height: 24;
                 commands: root.icon-path;
-                stroke: root.active ? Theme.signal : Theme.muted;
+                stroke: root.active ? Theme.text : Theme.muted;
                 stroke-width: 2px;
                 stroke-line-cap: round;
                 stroke-line-join: round;
@@ -429,7 +496,7 @@ export component RailNavItem inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 width: 7px;
                 height: 7px;
-                border-radius: 3.5px;
+                border-radius: self.width / 2;
                 background: Theme.live-green;
             }
         }
@@ -438,15 +505,15 @@ export component RailNavItem inherits Rectangle {
             width: badge-txt.preferred-width + 12px;
             height: 20px;
             y: (parent.height - self.height) / 2;
-            border-radius: 3px;
-            background: root.active ? Theme.signal : Theme.panel-raised;
+            border-radius: Theme.radius-sm;
+            background: root.active ? Theme.plate : Theme.panel-raised;
             border-width: 1px;
-            border-color: root.active ? Theme.signal : Theme.rule;
+            border-color: root.active ? Theme.plate : Theme.rule;
             badge-txt := Text {
                 text: root.badge;
-                color: root.active ? #0f1116 : Theme.text;
+                color: root.active ? Theme.on-plate : Theme.text;
                 font-family: Type.mono-family;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 700;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -487,7 +554,7 @@ export component RailSourceRow inherits HorizontalLayout {
     in property <string> port;
     in property <bool> live: false;
     height: 22px;
-    spacing: 8px;
+    spacing: Space.sm;
     alignment: stretch;
 
     Rectangle {
@@ -496,14 +563,14 @@ export component RailSourceRow inherits HorizontalLayout {
             y: (parent.height - self.height) / 2;
             width: 7px;
             height: 7px;
-            border-radius: 3.5px;
+            border-radius: self.width / 2;
             background: root.live ? Theme.live-green : Theme.rule-strong;
         }
     }
     Text {
         text: root.label;
         color: root.live ? Theme.text : Theme.muted;
-        font-size: 11px;
+        font-size: Type.label;
         font-weight: 600;
         vertical-alignment: center;
     }
@@ -511,7 +578,7 @@ export component RailSourceRow inherits HorizontalLayout {
         text: root.port;
         color: Theme.muted;
         font-family: Type.mono-family;
-        font-size: 11px;
+        font-size: Type.label;
         horizontal-alignment: right;
         vertical-alignment: center;
     }
@@ -534,7 +601,7 @@ export component PhaseLine inherits Rectangle {
         alignment: start;
         spacing: 0px;
         for stop[i] in root.stops: HorizontalLayout {
-            spacing: 7px;
+            spacing: Space.sm;
             alignment: start;
             if i > 0: Rectangle {
                 width: 22px;
@@ -543,6 +610,7 @@ export component PhaseLine inherits Rectangle {
                     height: 2px;
                     width: 100%;
                     background: i <= root.current ? Theme.signal : Theme.rule-strong;
+                    animate background { duration: Theme.dur-slow; easing: ease-out; }
                 }
             }
             Rectangle {
@@ -551,19 +619,20 @@ export component PhaseLine inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     width: 12px;
                     height: 12px;
-                    border-radius: 6px;
+                    border-radius: self.width / 2;
                     border-width: 2.5px;
                     border-color: i == root.current
                         ? Theme.signal
                         : (i < root.current ? Theme.text : Theme.rule-strong);
                     background: i == root.current ? Theme.signal : Theme.ground;
+                    animate background, border-color { duration: Theme.dur-slow; easing: ease-out; }
                 }
             }
             Text {
                 text: stop;
                 vertical-alignment: center;
                 font-family: Type.display-family;
-                font-size: 14px;
+                font-size: Type.body;
                 font-weight: i == root.current ? 800 : 700;
                 letter-spacing: 0.6px;
                 color: i == root.current
@@ -637,7 +706,7 @@ export component LineMap inherits Rectangle {
         width: a.is-self ? root.station * 1.5 : root.station * 1.25;
         height: self.width;
         border-radius: self.width / 2;
-        background: a.is-self ? Theme.signal : Theme.blue;
+        background: a.is-self ? Theme.plate : Theme.blue;
         border-width: 3px;
         border-color: root.halo;
 
@@ -653,7 +722,7 @@ export component LineMap inherits Rectangle {
                     ? parent.height + 5px
                     : (parent.height - self.height) / 2;
             text: a.label;
-            color: a.is-self ? Theme.signal-text : Theme.text;
+            color: Theme.text;
             font-size: Type.small;
             font-weight: 800;
             horizontal-alignment: a.label-pos == 1 ? right : ((a.label-pos == 2 || a.label-pos == 3) ? center : left);
@@ -664,14 +733,14 @@ export component LineMap inherits Rectangle {
 // Match event feed entry with tabular clock timestamp and lane roundel.
 export component FeedRow inherits HorizontalLayout {
     in property <FeedLine> line;
-    spacing: 8px;
+    spacing: Space.sm;
     height: 30px;
     Text {
         width: 44px;
         text: root.line.time;
         color: Theme.muted;
         font-family: Type.mono-family;
-        font-size: 11px;
+        font-size: Type.label;
         vertical-alignment: center;
     }
     Rectangle {
@@ -743,16 +812,16 @@ export component ObjectiveRow inherits HorizontalLayout {
             border-color: Theme.team-color(c.mine);
 
             HorizontalLayout {
-                padding-left: 5px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: Space.xs;
+                padding-right: Space.sm;
+                spacing: Space.sm;
                 Rectangle {
                     width: 18px;
                     Rectangle {
                         y: (parent.height - self.height) / 2;
                         width: 18px;
                         height: 18px;
-                        border-radius: 3px;
+                        border-radius: Theme.radius-sm;
                         background: Theme.team-color(c.mine);
                         Path {
                             x: 3px;
@@ -773,7 +842,7 @@ export component ObjectiveRow inherits HorizontalLayout {
                 Text {
                     text: c.label;
                     color: Theme.text;
-                    font-size: 11px;
+                    font-size: Type.label;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
@@ -795,9 +864,9 @@ export component BanChip inherits Rectangle {
     accessible-role: text;
     accessible-label: root.ban.name;
     row := HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 8px;
-        spacing: 6px;
+        padding-left: Space.xs;
+        padding-right: Space.sm;
+        spacing: Space.sm;
         ChampPlate {
             y: (parent.height - self.height) / 2;
             size: 18px;
@@ -808,7 +877,7 @@ export component BanChip inherits Rectangle {
         Text {
             text: root.ban.name;
             color: Theme.text;
-            font-size: 11px;
+            font-size: Type.label;
             font-weight: 600;
             vertical-alignment: center;
         }
@@ -821,13 +890,17 @@ export component PlayerRow inherits Rectangle {
     in property <bool> mine: true;
     height: 50px;
     border-radius: Theme.radius;
-    background: p.is-self ? Theme.signal-soft : Theme.panel;
+    background: p.is-self ? Theme.panel-raised : Theme.panel;
     border-width: 1px;
-    border-color: p.is-self ? Theme.signal : Theme.rule;
+    border-color: p.is-self ? Theme.rule-strong : Theme.rule;
+    accessible-role: text;
+    accessible-label: root.p.champion + (root.p.is-self ? (Theme.fr ? ", vous" : ", you") : "")
+        + ", " + root.p.kda
+        + (root.p.dead ? (Theme.fr ? ", mort, réapparition dans " : ", dead, respawn in ") + root.p.respawn : "");
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 12px;
-        spacing: 10px;
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.md;
         alignment: stretch;
         Rectangle {
             width: 28px;
@@ -872,6 +945,52 @@ export component PlayerRow inherits Rectangle {
             horizontal-alignment: right;
             vertical-alignment: center;
             min-width: 68px;
+        }
+    }
+}
+
+// One user-toggleable feature: what it does, what it costs, and its ON / OFF switch.
+export component SettingRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <bool> checked: false;
+    callback toggled();
+    min-height: 50px;
+
+    HorizontalLayout {
+        padding-top: Space.sm;
+        padding-bottom: Space.sm;
+        spacing: Space.md;
+        alignment: stretch;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: Space.xxs;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Type.body;
+                font-weight: 800;
+            }
+            Text {
+                text: root.detail;
+                color: Theme.muted;
+                font-size: Type.small;
+                wrap: word-wrap;
+            }
+        }
+
+        Rectangle {
+            width: 58px;
+            Action {
+                y: (parent.height - self.height) / 2;
+                width: 100%;
+                text: root.checked ? "ON" : "OFF";
+                selected: root.checked;
+                accessible-label: root.title;
+                clicked => { root.toggled(); }
+            }
         }
     }
 }

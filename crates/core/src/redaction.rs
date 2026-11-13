@@ -1,24 +1,74 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, LazyLock, RwLock};
+use std::io;
+use std::sync::{Arc, RwLock};
+
 use hypatia_shared::SecretRef;
-use regex::Regex;
+use serde_json::Value;
 
-static SENSITIVE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(token|password|passwd|secret|authorization|auth|jwt|cookie|session|credential|signature|refresh|access_?token|id_?token|entitlements?_?token)").unwrap()
-});
+/// Key fragments marking a JSON string value as a credential (matched ASCII case-insensitively).
+const SENSITIVE_KEY_FRAGMENTS: &[&str] = &[
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "auth",
+    "jwt",
+    "cookie",
+    "session",
+    "credential",
+    "signature",
+    "refresh",
+];
 
-static JWT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^eyJ[\w-]+\.[\w-]+\.[\w-]+$").unwrap()
-});
+/// Game/entity identifiers that must never be redacted even though they look sensitive.
+const EXEMPT_KEYS: &[&str] = &[
+    "puuid",
+    "summonerid",
+    "summoner_id",
+    "accountid",
+    "account_id",
+    "gameid",
+    "game_id",
+    "championid",
+    "champion_id",
+    "spellid",
+    "spell_id",
+    "iconid",
+    "icon_id",
+    "profileiconid",
+    "profile_icon_id",
+    "skinid",
+    "skin_id",
+    "itemid",
+    "item_id",
+    "teamid",
+    "team_id",
+    "partyid",
+    "party_id",
+    "lobbyid",
+    "lobby_id",
+    "cellid",
+    "cell_id",
+    "queueid",
+    "queue_id",
+    "mapid",
+    "map_id",
+    "platformid",
+    "platform_id",
+];
 
-/// Thread-safe storage for redacted secrets with LRU/bounded eviction.
+/// Thread-safe bounded storage for redacted secrets (oldest entries evicted first).
+///
+/// Storing the same secret twice yields the same identifier, so credentials re-read on every
+/// discovery scan neither churn their `SecretRef` nor push real secrets out of the vault.
 #[derive(Clone)]
 pub struct SecretVault {
     inner: Arc<RwLock<VaultInner>>,
 }
 
 struct VaultInner {
-    entries: HashMap<u64, String>,
+    entries: HashMap<u64, Arc<str>>,
+    ids: HashMap<Arc<str>, u64>,
     order: VecDeque<u64>,
     next_id: u64,
     max_entries: usize,
@@ -33,269 +83,273 @@ impl Default for SecretVault {
 impl SecretVault {
     pub const DEFAULT_MAX_ENTRIES: usize = 2000;
 
-    /// Creates a new vault with default capacity (2000 entries).
     pub fn new() -> Self {
         Self::with_capacity(Self::DEFAULT_MAX_ENTRIES)
     }
 
-    /// Creates a new vault with a specific capacity.
     pub fn with_capacity(max_entries: usize) -> Self {
         Self {
             inner: Arc::new(RwLock::new(VaultInner {
-                entries: HashMap::with_capacity(max_entries.min(256)),
-                order: VecDeque::with_capacity(max_entries.min(256)),
+                entries: HashMap::new(),
+                ids: HashMap::new(),
+                order: VecDeque::new(),
                 next_id: 1,
                 max_entries,
             })),
         }
     }
 
-    /// Stores a secret string and returns a `SecretRef` containing its identifier, length, and hint.
+    /// Stores a secret and returns a `SecretRef` carrying its identifier, length and hint.
     pub fn store(&self, secret: String, hint: String) -> SecretRef {
+        let len = secret.len() as u32;
         let mut inner = self.inner.write().unwrap();
-        let id = inner.next_id;
-        inner.next_id = inner.next_id.wrapping_add(1);
-        if inner.next_id == 0 {
-            inner.next_id = 1;
+        if let Some(&id) = inner.ids.get(secret.as_str()) {
+            return SecretRef { id, len, hint };
         }
 
-        let len = secret.len() as u32;
+        let id = inner.next_id;
+        inner.next_id = inner.next_id.checked_add(1).unwrap_or(1);
 
         if inner.max_entries > 0 && inner.order.len() >= inner.max_entries {
-            if let Some(oldest_id) = inner.order.pop_front() {
-                inner.entries.remove(&oldest_id);
+            if let Some(oldest) = inner.order.pop_front() {
+                if let Some(evicted) = inner.entries.remove(&oldest) {
+                    inner.ids.remove(&evicted);
+                }
             }
         }
 
+        let secret: Arc<str> = secret.into();
         inner.order.push_back(id);
+        inner.ids.insert(Arc::clone(&secret), id);
         inner.entries.insert(id, secret);
-
         SecretRef { id, len, hint }
     }
 
-    /// Retrieves the original secret for a given identifier, if it is still stored in the vault.
+    /// Returns the original secret for `id` if it is still in the vault.
     pub fn reveal(&self, id: u64) -> Option<String> {
-        let inner = self.inner.read().unwrap();
-        inner.entries.get(&id).cloned()
+        self.inner.read().unwrap().entries.get(&id).map(|s| s.to_string())
     }
 
-    /// Returns the number of currently stored secrets.
     pub fn len(&self) -> usize {
-        let inner = self.inner.read().unwrap();
-        inner.entries.len()
+        self.inner.read().unwrap().entries.len()
     }
 
-    /// Returns true if the vault contains no secrets.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
 
+fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    haystack
+        .as_bytes()
+        .windows(needle.len())
+        .any(|w| w.eq_ignore_ascii_case(needle.as_bytes()))
+}
+
 /// Checks whether a key is an exempt game/entity identifier that must NEVER be redacted.
 pub fn is_exempt_key(key: &str) -> bool {
-    let lower = key.to_ascii_lowercase();
-    matches!(
-        lower.as_str(),
-        "puuid"
-            | "summonerid"
-            | "summoner_id"
-            | "accountid"
-            | "account_id"
-            | "gameid"
-            | "game_id"
-            | "championid"
-            | "champion_id"
-            | "spellid"
-            | "spell_id"
-            | "iconid"
-            | "icon_id"
-            | "profileiconid"
-            | "profile_icon_id"
-            | "skinid"
-            | "skin_id"
-            | "itemid"
-            | "item_id"
-            | "teamid"
-            | "team_id"
-            | "partyid"
-            | "party_id"
-            | "lobbyid"
-            | "lobby_id"
-            | "cellid"
-            | "cell_id"
-            | "queueid"
-            | "queue_id"
-            | "mapid"
-            | "map_id"
-            | "platformid"
-            | "platform_id"
-    )
+    EXEMPT_KEYS.iter().any(|k| k.eq_ignore_ascii_case(key))
 }
 
-/// Checks whether a key matches sensitive patterns.
+/// Checks whether a key names a credential.
 pub fn is_sensitive_key(key: &str) -> bool {
-    if is_exempt_key(key) {
+    !is_exempt_key(key)
+        && SENSITIVE_KEY_FRAGMENTS
+            .iter()
+            .any(|f| contains_ignore_ascii_case(key, f))
+}
+
+/// True for a compact JWS: three non-empty base64url segments, the first starting with `eyJ`.
+fn is_jwt(s: &str) -> bool {
+    if !s.starts_with("eyJ") {
         return false;
     }
-    SENSITIVE_KEY_RE.is_match(key)
+    let mut segments = 0;
+    for segment in s.split('.') {
+        segments += 1;
+        if segment.is_empty()
+            || !segment
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return false;
+        }
+    }
+    segments == 3
 }
 
-/// Determines the most appropriate hint for a secret.
-fn determine_hint(key: Option<&str>, is_jwt: bool) -> String {
+fn determine_hint(key: Option<&str>, is_jwt: bool) -> &'static str {
     if is_jwt {
-        return "jwt".to_string();
+        return "jwt";
     }
-    if let Some(k) = key {
-        let lower = k.to_ascii_lowercase();
-        if lower.contains("password") || lower.contains("passwd") {
-            return "password".to_string();
-        }
-        if lower.contains("jwt") {
-            return "jwt".to_string();
-        }
-        if lower.contains("cookie") {
-            return "cookie".to_string();
-        }
-        if lower.contains("session") {
-            return "session".to_string();
-        }
-        if lower.contains("credential") {
-            return "credential".to_string();
-        }
-        if lower.contains("auth") {
-            return "auth".to_string();
-        }
-        if lower.contains("token") {
-            return "token".to_string();
-        }
-        if lower.contains("signature") {
-            return "signature".to_string();
-        }
-        if lower.contains("refresh") {
-            return "refresh".to_string();
-        }
-        if lower.contains("secret") {
-            return "secret".to_string();
-        }
-    }
-    "secret".to_string()
+    const HINTS: &[(&str, &str)] = &[
+        ("password", "password"),
+        ("passwd", "password"),
+        ("jwt", "jwt"),
+        ("cookie", "cookie"),
+        ("session", "session"),
+        ("credential", "credential"),
+        ("auth", "auth"),
+        ("token", "token"),
+        ("signature", "signature"),
+        ("refresh", "refresh"),
+    ];
+    key.and_then(|k| {
+        HINTS
+            .iter()
+            .find(|(fragment, _)| contains_ignore_ascii_case(k, fragment))
+            .map(|(_, hint)| *hint)
+    })
+    .unwrap_or("secret")
 }
 
-/// Redacts sensitive keys and values in-place within a JSON value.
-///
-/// Replaces sensitive strings with:
-/// `{"$secret": {"id": id, "len": len, "hint": hint}}`
+/// Redacts sensitive strings in-place, replacing each with
+/// `{"$secret": {"id": id, "len": len, "hint": hint}}`.
 ///
 /// Returns `true` if at least one secret was redacted.
-pub fn redact_value(val: &mut serde_json::Value, vault: &SecretVault) -> bool {
-    redact_recursive(val, None, vault)
+pub fn redact_value(val: &mut Value, vault: &SecretVault) -> bool {
+    redact_recursive(val, None, false, vault)
 }
 
 fn redact_recursive(
-    val: &mut serde_json::Value,
+    val: &mut Value,
     parent_key: Option<&str>,
+    parent_sensitive: bool,
     vault: &SecretVault,
 ) -> bool {
     match val {
-        serde_json::Value::Object(map) => {
-            // If already a redacted secret, don't redact again
+        Value::Object(map) => {
+            // Already a redacted secret marker.
             if map.len() == 1 && map.contains_key("$secret") {
                 return false;
             }
-
             let mut redacted = false;
             for (key, child) in map.iter_mut() {
-                if is_exempt_key(key) {
+                if matches!(child, Value::Null | Value::Bool(_) | Value::Number(_))
+                    || is_exempt_key(key)
+                {
                     continue;
                 }
-                if redact_recursive(child, Some(key), vault) {
-                    redacted = true;
-                }
+                redacted |= redact_recursive(child, Some(key), is_sensitive_key(key), vault);
             }
             redacted
         }
-        serde_json::Value::Array(arr) => {
+        Value::Array(arr) => {
             let mut redacted = false;
             for child in arr.iter_mut() {
-                if redact_recursive(child, parent_key, vault) {
-                    redacted = true;
-                }
+                redacted |= redact_recursive(child, parent_key, parent_sensitive, vault);
             }
             redacted
         }
-        serde_json::Value::String(s) => {
-            let is_jwt = JWT_RE.is_match(s);
-            let is_parent_sensitive = parent_key.map(is_sensitive_key).unwrap_or(false);
-
-            if is_jwt || is_parent_sensitive {
-                if s.is_empty() {
-                    return false;
-                }
-                let hint = determine_hint(parent_key, is_jwt);
-                let secret_ref = vault.store(s.clone(), hint);
-                *val = serde_json::json!({
-                    "$secret": {
-                        "id": secret_ref.id,
-                        "len": secret_ref.len,
-                        "hint": secret_ref.hint,
-                    }
-                });
-                true
-            } else {
-                false
+        Value::String(s) => {
+            if s.is_empty() {
+                return false;
             }
+            let jwt = is_jwt(s);
+            if !jwt && !parent_sensitive {
+                return false;
+            }
+            let hint = determine_hint(parent_key, jwt);
+            let secret = vault.store(std::mem::take(s), hint.to_string());
+            *val = serde_json::json!({
+                "$secret": { "id": secret.id, "len": secret.len, "hint": secret.hint }
+            });
+            true
         }
         _ => false,
     }
 }
 
-/// Generates a single-line summary (<= max_len characters) of a JSON value.
-pub fn generate_preview(val: &serde_json::Value, max_len: usize) -> String {
-    let raw = match val {
-        serde_json::Value::String(s) => s.clone(),
-        other => serde_json::to_string(other).unwrap_or_else(|_| "{}".to_string()),
-    };
-
-    let single_line = raw.replace('\n', " ").replace('\r', "");
-    let trimmed = single_line.trim();
-
-    let char_count = trimmed.chars().count();
-    if char_count <= max_len {
-        trimmed.to_string()
-    } else if max_len == 0 {
-        String::new()
-    } else if max_len == 1 {
-        "…".to_string()
-    } else {
-        let mut preview: String = trimmed.chars().take(max_len - 1).collect();
-        preview.push('…');
-        preview
+/// Serialized size of `val` in bytes, computed without allocating the serialization.
+pub fn json_len(val: &Value) -> u32 {
+    struct Counter(usize);
+    impl io::Write for Counter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0 += buf.len();
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
     }
+    let mut counter = Counter(0);
+    let _ = serde_json::to_writer(&mut counter, val);
+    counter.0.min(u32::MAX as usize) as u32
 }
 
-/// Recursively clones a JSON value and replaces any `{"$secret": {"id": ...}}` marker
-/// with its plaintext secret from the `SecretVault` if available.
-pub fn reveal_value(val: &serde_json::Value, vault: &SecretVault) -> serde_json::Value {
+/// Generates a single-line summary (<= `max_len` characters) of a JSON value.
+///
+/// Serialization stops as soon as enough bytes are available, so previewing a large payload
+/// costs the same as previewing a small one.
+pub fn generate_preview(val: &Value, max_len: usize) -> String {
+    /// Collects at most `limit` bytes then aborts the serializer.
+    struct Bounded {
+        buf: Vec<u8>,
+        limit: usize,
+    }
+    impl io::Write for Bounded {
+        fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+            let room = self.limit - self.buf.len();
+            if room == 0 {
+                return Err(io::ErrorKind::WriteZero.into());
+            }
+            let take = room.min(data.len());
+            self.buf.extend_from_slice(&data[..take]);
+            Ok(take)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let raw = match val {
+        Value::String(s) => s.clone(),
+        other => {
+            // Worst case 4 bytes per char, plus slack so trimming cannot starve the preview.
+            let mut out = Bounded {
+                buf: Vec::new(),
+                limit: max_len * 4 + 64,
+            };
+            let _ = serde_json::to_writer(&mut out, other);
+            String::from_utf8_lossy(&out.buf).into_owned()
+        }
+    };
+
+    let mut chars = raw
+        .trim()
+        .chars()
+        .filter(|c| *c != '\r')
+        .map(|c| if c == '\n' { ' ' } else { c });
+    let mut preview: String = chars.by_ref().take(max_len).collect();
+    if chars.next().is_some() && max_len > 0 {
+        preview.pop();
+        preview.push('…');
+    }
+    preview
+}
+
+/// Clones a JSON value, replacing every `{"$secret": {"id": ...}}` marker with its plaintext
+/// secret when the vault still holds it.
+pub fn reveal_value(val: &Value, vault: &SecretVault) -> Value {
     match val {
-        serde_json::Value::Object(map) => {
+        Value::Object(map) => {
             if map.len() == 1 {
-                if let Some(secret_meta) = map.get("$secret").and_then(|v| v.as_object()) {
-                    if let Some(id) = secret_meta.get("id").and_then(|v| v.as_u64()) {
-                        if let Some(secret) = vault.reveal(id) {
-                            return serde_json::Value::String(secret);
-                        }
-                    }
+                let revealed = map
+                    .get("$secret")
+                    .and_then(|meta| meta.get("id"))
+                    .and_then(Value::as_u64)
+                    .and_then(|id| vault.reveal(id));
+                if let Some(secret) = revealed {
+                    return Value::String(secret);
                 }
             }
-            let mut out = serde_json::Map::with_capacity(map.len());
-            for (k, v) in map {
-                out.insert(k.clone(), reveal_value(v, vault));
-            }
-            serde_json::Value::Object(out)
+            Value::Object(
+                map.iter()
+                    .map(|(k, v)| (k.clone(), reveal_value(v, vault)))
+                    .collect(),
+            )
         }
-        serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(|v| reveal_value(v, vault)).collect())
-        }
+        Value::Array(arr) => Value::Array(arr.iter().map(|v| reveal_value(v, vault)).collect()),
         other => other.clone(),
     }
 }

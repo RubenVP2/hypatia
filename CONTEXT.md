@@ -28,3 +28,12 @@ The opt-in LAN companion serving an authenticated local web controller where a p
 
 ### Telemetry Observatory
 The inspection surface capturing live local endpoint traffic, discovered endpoint schemas, payload diffs across updates, and redacted credential indicators without interrupting match projection.
+- **Invariant**: The event history, the complete WAMP stream, the endpoint catalog import and system footprint scans exist only while the observatory is open; closed, it retains and costs nothing.
+
+### Change Signal
+The single process-wide notification bumped whenever something a view could display has changed (a projected Riot payload, discovery, an icon landing in the cache, the language, a paired phone).
+- **Invariant**: Desktop views and the Mobile Remote broadcaster wait on this signal instead of polling; an unchanged signal revision means nothing needs to be projected, serialized or painted.
+
+### Settings
+The persisted set of user switches, one per background activity (live game polling, game icons, Riot Client connection, Mobile Remote autostart, eco mode, and the Telemetry-only scans).
+- **Invariant**: A switched-off activity performs no I/O and no periodic work; switches apply immediately without restarting.

@@ -1,35 +1,52 @@
 pub mod assets;
-pub mod batcher;
 pub mod catalog;
 pub mod connectors;
+pub mod diff;
 pub mod discovery;
 pub mod fixtures;
 pub mod lcu_actions;
 pub mod redaction;
 pub mod remote;
 pub mod riot_http;
+pub mod settings;
+pub mod signal;
 pub mod store;
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
 use hypatia_shared::{
-    project_match, Lang, MatchInputs, ServerMsg, Snapshot, SourceId, SummarySnapshot,
+    project_match, EventKind, Lang, MatchInputs, Snapshot, SourceId, SummarySnapshot,
 };
-use tokio::sync::{broadcast, watch};
+use serde_json::Value;
 use tracing::info;
 
 use crate::assets::{load_persisted_or_detect_lang, GameAssetCache};
-use crate::batcher::spawn_batcher;
 use crate::catalog::CatalogStore;
-use crate::connectors::{spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector_full};
+use crate::connectors::{
+    spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector, ConnectorContext,
+};
+pub use crate::diff::compute_json_diff_localized;
 use crate::discovery::DiscoveryManager;
-use crate::fixtures::spawn_demo_generator_with_remote;
+use crate::fixtures::spawn_demo_generator;
 use crate::lcu_actions::DemoRemoteState;
 use crate::redaction::SecretVault;
 use crate::riot_http::ReadOnlyRiotClient;
+use crate::settings::{Flags, Settings};
+use crate::signal::ChangeSignal;
 use crate::store::EventStore;
+
+/// Inputs the Match Projection depends on; equal keys guarantee an identical projection.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ProjectionKey {
+    state: u64,
+    discovery: u64,
+    champions: u64,
+    lang: Lang,
+}
+
+/// Last projection together with the inputs it was computed from.
+type ProjectionCache = Mutex<Option<(ProjectionKey, Arc<SummarySnapshot>)>>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -39,203 +56,215 @@ pub struct AppState {
     pub catalog: Arc<RwLock<CatalogStore>>,
     pub riot_client: ReadOnlyRiotClient,
     pub assets: Arc<GameAssetCache>,
-    pub ws_broadcast_tx: broadcast::Sender<ServerMsg>,
     pub demo_remote: Arc<RwLock<DemoRemoteState>>,
-    pub is_demo: bool,
+    /// Runtime feature switches read by every background task.
+    pub flags: Arc<Flags>,
+    /// Bumped whenever anything a view could display has changed.
+    pub signal: ChangeSignal,
     demo_spawned: Arc<AtomicBool>,
-    lang_tx: watch::Sender<Lang>,
+    lang: Arc<AtomicU8>,
+    projection: Arc<ProjectionCache>,
 }
 
 impl AppState {
-    /// Starts discovery, the event store and every connector (or the synthetic
-    /// generator in demo mode) using persisted or OS-detected language. Must be called from a Tokio runtime.
+    /// Starts Hypatia core with default settings and the persisted or OS-detected language.
+    /// Must be called from a Tokio runtime.
     pub fn start(demo: bool, demo_rate: f32) -> Self {
         Self::start_with_lang(demo, demo_rate, load_persisted_or_detect_lang())
     }
 
-    /// Starts Hypatia core with an explicit initial UI/API language.
-    pub fn start_with_lang(demo: bool, demo_rate: f32, initial_lang: Lang) -> Self {
+    /// Starts Hypatia core with default settings and an explicit language.
+    pub fn start_with_lang(demo: bool, demo_rate: f32, lang: Lang) -> Self {
+        Self::start_with(demo, demo_rate, lang, &Settings::default())
+    }
+
+    /// Starts discovery, the event store and every connector (plus the synthetic generator in
+    /// demo mode). Nothing is recorded beyond the Match Projection until
+    /// [`Self::set_telemetry`] opens the Telemetry Lab.
+    pub fn start_with(demo: bool, demo_rate: f32, lang: Lang, settings: &Settings) -> Self {
+        let signal = ChangeSignal::new();
         let vault = SecretVault::new();
-        let (discovery, _snapshot_rx) = if demo {
-            info!("Demo mode activated (synthetic data, rate: {:.1} evt/s)", demo_rate);
-            DiscoveryManager::new_demo(vault.clone())
+        let flags = Arc::new(Flags::new(settings));
+
+        let discovery = if demo {
+            info!("Demo mode activated (synthetic data, rate: {demo_rate:.1} evt/s)");
+            DiscoveryManager::new_demo(vault.clone(), signal.clone())
         } else {
-            let (disc, rx) = DiscoveryManager::new(vault.clone());
-            disc.spawn_loop(Duration::from_millis(1000));
-            (disc, rx)
+            DiscoveryManager::new(vault.clone(), signal.clone())
         };
+        discovery.spawn_loop(flags.clone());
 
-        let (store_inner, event_rx) = EventStore::new();
-        let store = Arc::new(RwLock::new(store_inner));
-        let (ws_broadcast_tx, _ws_broadcast_rx) = broadcast::channel(1024);
-        let riot_client = ReadOnlyRiotClient::new();
-        let assets = Arc::new(GameAssetCache::new());
-        let catalog = Arc::new(RwLock::new(CatalogStore::new()));
-        let demo_remote = Arc::new(RwLock::new(DemoRemoteState::default()));
-        let demo_spawned = Arc::new(AtomicBool::new(demo));
-        let (lang_tx, _lang_rx) = watch::channel(initial_lang);
+        let mut store = EventStore::new(signal.clone());
+        store.set_capture(false);
 
-        spawn_batcher(event_rx, store.clone(), discovery.clone(), ws_broadcast_tx.clone());
-
-        if demo {
-            spawn_demo_generator_with_remote(
-                store.clone(),
-                catalog.clone(),
-                vault.clone(),
-                demo_rate,
-                Some(demo_remote.clone()),
-            );
-        } else {
-            for source in [SourceId::RiotClient, SourceId::LeagueClient] {
-                spawn_wamp_connector_full(
-                    source,
-                    discovery.clone(),
-                    store.clone(),
-                    vault.clone(),
-                    Some(catalog.clone()),
-                    Some(riot_client.clone()),
-                    Some(ws_broadcast_tx.clone()),
-                );
-            }
-            spawn_live_client_poller(
-                discovery.clone(),
-                store.clone(),
-                catalog.clone(),
-                vault.clone(),
-                riot_client.clone(),
-                ws_broadcast_tx.clone(),
-            );
-            spawn_replay_poller(
-                discovery.clone(),
-                store.clone(),
-                catalog.clone(),
-                vault.clone(),
-                riot_client.clone(),
-                ws_broadcast_tx.clone(),
-            );
-        }
-
-        Self {
+        let state = Self {
             discovery,
             vault,
-            store,
-            catalog,
-            riot_client,
-            assets,
-            ws_broadcast_tx,
-            demo_remote,
-            is_demo: demo,
-            demo_spawned,
-            lang_tx,
+            store: Arc::new(RwLock::new(store)),
+            catalog: Arc::new(RwLock::new(CatalogStore::new())),
+            riot_client: ReadOnlyRiotClient::new(),
+            assets: Arc::new(GameAssetCache::new(signal.clone())),
+            demo_remote: Arc::new(RwLock::new(DemoRemoteState::default())),
+            flags,
+            signal,
+            demo_spawned: Arc::new(AtomicBool::new(false)),
+            lang: Arc::new(AtomicU8::new(lang as u8)),
+            projection: Arc::new(Mutex::new(None)),
+        };
+
+        let ctx = state.connector_context();
+        for source in [SourceId::RiotClient, SourceId::LeagueClient] {
+            spawn_wamp_connector(source, ctx.clone());
+        }
+        spawn_live_client_poller(ctx.clone());
+        spawn_replay_poller(ctx);
+        if demo {
+            state.ensure_demo_generator(demo_rate);
+        }
+        state
+    }
+
+    fn connector_context(&self) -> ConnectorContext {
+        ConnectorContext {
+            discovery: self.discovery.clone(),
+            store: self.store.clone(),
+            catalog: self.catalog.clone(),
+            vault: self.vault.clone(),
+            client: self.riot_client.clone(),
+            flags: self.flags.clone(),
+            signal: self.signal.clone(),
+        }
+    }
+
+    fn ensure_demo_generator(&self, demo_rate: f32) {
+        if !self.demo_spawned.swap(true, Ordering::SeqCst) {
+            spawn_demo_generator(
+                self.store.clone(),
+                self.catalog.clone(),
+                self.vault.clone(),
+                demo_rate,
+                self.demo_remote.clone(),
+                self.discovery.demo_flag(),
+            );
         }
     }
 
     /// Returns the active display/protocol language.
     pub fn lang(&self) -> Lang {
-        *self.lang_tx.borrow()
+        if self.lang.load(Ordering::Relaxed) == Lang::Fr as u8 {
+            Lang::Fr
+        } else {
+            Lang::En
+        }
     }
 
-    /// Updates the active language and notifies subscribers (such as the mobile remote server).
+    /// Updates the active language and notifies every view.
     pub fn set_lang(&self, lang: Lang) {
-        let _ = self.lang_tx.send_if_modified(|cur| {
-            if *cur == lang {
-                false
-            } else {
-                *cur = lang;
-                true
-            }
-        });
+        if self.lang.swap(lang as u8, Ordering::Relaxed) != lang as u8 {
+            self.signal.bump();
+        }
     }
 
-    /// Subscribes to live language changes.
-    pub fn subscribe_lang(&self) -> watch::Receiver<Lang> {
-        self.lang_tx.subscribe()
+    /// Applies user settings to every running background task.
+    pub fn apply_settings(&self, settings: &Settings) {
+        self.flags.apply(settings);
+        self.discovery.wake();
+        self.signal.bump();
+    }
+
+    /// Opens or closes the Telemetry Lab: toggles full event capture, the complete WAMP
+    /// stream, endpoint catalog import and system footprint scans. Closing frees the history.
+    pub fn set_telemetry(&self, on: bool) {
+        self.flags.set_telemetry(on);
+        self.store.write().unwrap().set_capture(on);
+        self.discovery.wake();
     }
 
     /// Returns whether synthetic Demo mode is currently active.
     pub fn is_demo_active(&self) -> bool {
-        self.is_demo || self.discovery.is_demo_override()
+        self.discovery.is_demo_override()
     }
 
     /// Activates or deactivates synthetic Demo mode at runtime.
     pub fn set_demo_active(&self, active: bool, demo_rate: f32) {
         self.discovery.set_demo_override(active);
-        if active && !self.demo_spawned.swap(true, Ordering::SeqCst) {
-            spawn_demo_generator_with_remote(
-                self.store.clone(),
-                self.catalog.clone(),
-                self.vault.clone(),
-                demo_rate,
-                Some(self.demo_remote.clone()),
-            );
+        if active {
+            self.ensure_demo_generator(demo_rate);
         }
     }
 
-    /// Assembles a complete current system Snapshot.
+    /// Assembles the Telemetry Lab snapshot (sources with traffic counters, newest events,
+    /// system footprint).
     pub fn get_snapshot(&self) -> Snapshot {
         let mut sources = self.discovery.get_sources();
-        {
-            let guard = self.store.read().unwrap();
-            for s in &mut sources {
-                let (events_total, bytes_total) = guard.source_stats(s.id);
-                s.events_total = events_total;
-                s.bytes_total = bytes_total;
-            }
+        let store = self.store.read().unwrap();
+        for s in &mut sources {
+            (s.events_total, s.bytes_total) = store.source_stats(s.id);
         }
-        let guard = self.store.read().unwrap();
         Snapshot {
             sources,
-            phase: guard.phase(),
-            recent_events: guard.get_recent_meta(500),
+            phase: store.phase(),
+            recent_events: store.get_recent_meta(500),
             system: self.discovery.get_system_snapshot(),
         }
     }
 
-    /// Assembles a synthesized SummarySnapshot from cached URI states.
-    pub fn get_summary(&self) -> SummarySnapshot {
-        let mut sources = self.discovery.get_sources();
-        let guard = self.store.read().unwrap();
-        for s in &mut sources {
-            let (events_total, bytes_total) = guard.source_stats(s.id);
-            s.events_total = events_total;
-            s.bytes_total = bytes_total;
+    /// Returns the current Match Projection.
+    ///
+    /// The projection is recomputed only when one of its inputs changed (a projected Riot
+    /// payload, discovery, champion metadata or language); otherwise the cached snapshot is
+    /// returned, so callers can compare `Arc` pointers to detect "nothing changed".
+    pub fn get_summary(&self) -> Arc<SummarySnapshot> {
+        let lang = self.lang();
+        let mut cache = self.projection.lock().unwrap();
+
+        let store = self.store.read().unwrap();
+        let key = ProjectionKey {
+            state: store.state_revision(),
+            discovery: self.discovery.revision(),
+            champions: self.assets.metadata_revision(),
+            lang,
+        };
+        if let Some((cached_key, snapshot)) = cache.as_ref() {
+            if *cached_key == key {
+                return Arc::clone(snapshot);
+            }
         }
 
-        let lcu = |uri: &str| guard.get_state(SourceId::LeagueClient, uri).map(|u| u.current);
-        let summoner_val = lcu("/lol-summoner/v1/current-summoner");
-        let ranked_val = lcu("/lol-ranked/v1/current-ranked-stats");
-        let lobby_val = lcu("/lol-lobby/v2/lobby");
-        let search_val = lcu("/lol-matchmaking/v1/search");
-        let ready_val = lcu("/lol-matchmaking/v1/ready-check");
-        let cs_val = lcu("/lol-champ-select/v1/session");
-        let eog_val = lcu("/lol-end-of-game/v1/eog-stats-block");
-        let presences_val = guard
-            .get_state(SourceId::RiotClient, "/chat/v4/presences")
-            .map(|u| u.current);
-        let live = |uri: &str| guard.get_state(SourceId::LiveGame, uri).map(|u| u.current);
-        let allgame_val = live("/liveclientdata/allgamedata");
-        let active_val = live("/liveclientdata/activeplayer");
-        let events_val = live("/liveclientdata/eventdata");
-        let phase = guard.phase();
-        drop(guard);
+        let lcu = |uri: &str| store.current(SourceId::LeagueClient, uri);
+        let live = |uri: &str| store.current(SourceId::LiveGame, uri);
+        let summoner = lcu("/lol-summoner/v1/current-summoner");
+        let ranked = lcu("/lol-ranked/v1/current-ranked-stats");
+        let lobby = lcu("/lol-lobby/v2/lobby");
+        let search = lcu("/lol-matchmaking/v1/search");
+        let ready_check = lcu("/lol-matchmaking/v1/ready-check");
+        let champ_select = lcu("/lol-champ-select/v1/session");
+        let end_of_game = lcu("/lol-end-of-game/v1/eog-stats-block");
+        let presences = store.current(SourceId::RiotClient, "/chat/v4/presences");
+        let allgame = live("/liveclientdata/allgamedata");
+        let active = live("/liveclientdata/activeplayer");
+        let events = live("/liveclientdata/eventdata");
+        let phase = store.phase();
+        drop(store);
 
         let inputs = MatchInputs {
             phase,
-            sources,
-            summoner: summoner_val.as_ref(),
-            ranked: ranked_val.as_ref(),
-            presences: presences_val.as_ref(),
-            lobby: lobby_val.as_ref(),
-            matchmaking_search: search_val.as_ref(),
-            ready_check: ready_val.as_ref(),
-            champ_select: cs_val.as_ref(),
-            live_allgame: allgame_val.as_ref(),
-            live_active: active_val.as_ref(),
-            live_events: events_val.as_ref(),
-            end_of_game: eog_val.as_ref(),
+            sources: self.discovery.get_sources(),
+            summoner: summoner.as_deref(),
+            ranked: ranked.as_deref(),
+            presences: presences.as_deref(),
+            lobby: lobby.as_deref(),
+            matchmaking_search: search.as_deref(),
+            ready_check: ready_check.as_deref(),
+            champ_select: champ_select.as_deref(),
+            live_allgame: allgame.as_deref(),
+            live_active: active.as_deref(),
+            live_events: events.as_deref(),
+            end_of_game: end_of_game.as_deref(),
         };
-
-        project_match(&inputs, &*self.assets, self.lang())
+        let snapshot = Arc::new(project_match(&inputs, &*self.assets, lang));
+        *cache = Some((key, Arc::clone(&snapshot)));
+        snapshot
     }
 
     /// Clears all buffered events in the EventStore.
@@ -244,21 +273,40 @@ impl AppState {
     }
 
     /// Returns a clone of `val` with any `{"$secret": ...}` entries revealed from the vault.
-    pub fn reveal_secrets_in_value(&self, val: &serde_json::Value) -> serde_json::Value {
+    pub fn reveal_secrets_in_value(&self, val: &Value) -> Value {
         crate::redaction::reveal_value(val, &self.vault)
     }
 
-    /// Performs a read-only GET call against the specified Riot source (or returns cached/synthetic
-    /// state in Demo mode), records it as `EventKind::Call` in the store and catalog, and returns
+    /// Records `body` as an `EventKind::Call` event and returns its redacted form and event ID.
+    fn record_call(&self, source: SourceId, path: &str, body: Value) -> (Arc<Value>, u64) {
+        let mut store = self.store.write().unwrap();
+        if !store.wants(source, path) {
+            // Telemetry Lab closed: answer the caller without retaining anything.
+            let mut body = body;
+            crate::redaction::redact_value(&mut body, &self.vault);
+            return (Arc::new(body), 0);
+        }
+        let meta = store.insert_event(source, EventKind::Call, path.to_string(), body, &self.vault);
+        let redacted = store.current(source, path).unwrap_or_default();
+        drop(store);
+        self.catalog
+            .write()
+            .unwrap()
+            .record_observed(source, "GET", path, meta.size as u64);
+        (redacted, meta.id)
+    }
+
+    /// Performs a read-only GET against a Riot source (or serves cached/synthetic state in Demo
+    /// mode), records it as an `EventKind::Call` event and returns
     /// `(http_status, redacted_json, event_id)`.
     pub async fn call_endpoint(
         &self,
-        source_id: SourceId,
+        source: SourceId,
         path: &str,
-    ) -> Result<(u16, serde_json::Value, u64), String> {
+    ) -> Result<(u16, Arc<Value>, u64), String> {
         let lang = self.lang();
-        let clean_path = path.trim();
-        if !clean_path.starts_with('/') {
+        let path = path.trim();
+        if !path.starts_with('/') {
             return Err(lang
                 .pick(
                     "Path must start with '/' (e.g. /lol-summoner/v1/current-summoner)",
@@ -266,210 +314,58 @@ impl AppState {
                 )
                 .to_string());
         }
-        if source_id == SourceId::System {
-            return Err(lang
-                .pick(
-                    "Cannot execute HTTP GET on System source",
-                    "Impossible d'exécuter un HTTP GET sur la source Système",
-                )
-                .to_string());
-        }
 
-        // If in demo mode (or if source is not live but we have cached demo state), serve from store/synthetic
-        if self.is_demo_active() {
-            let cached = {
-                let guard = self.store.read().unwrap();
-                guard.get_state(source_id, clean_path).map(|u| u.current)
-            };
-            let body = cached.unwrap_or_else(|| {
+        if self.is_demo_active() && source != SourceId::System {
+            let cached = self.store.read().unwrap().current(source, path);
+            let body = cached.map(|v| (*v).clone()).unwrap_or_else(|| {
                 serde_json::json!({
                     "demo": true,
-                    "source": source_id.to_string(),
-                    "path": clean_path,
-                    "note": lang.pick("Synthetic demo response for GET tester", "Réponse de démonstration synthétique pour le testeur GET")
+                    "source": source.to_string(),
+                    "path": path,
+                    "note": lang.pick(
+                        "Synthetic demo response for GET tester",
+                        "Réponse de démonstration synthétique pour le testeur GET",
+                    ),
                 })
             });
-            let meta = {
-                let mut guard = self.store.write().unwrap();
-                guard.insert_event(
-                    source_id,
-                    hypatia_shared::EventKind::Call,
-                    clean_path.to_string(),
-                    body.clone(),
-                    &self.vault,
-                )
-            };
-            {
-                let mut cat = self.catalog.write().unwrap();
-                cat.record_observed(source_id, "GET", clean_path, meta.size as u64);
-            }
-            let redacted = self
-                .store
-                .read()
-                .unwrap()
-                .get_event(meta.id)
-                .map(|e| e.payload)
-                .unwrap_or(body);
-            return Ok((200, redacted, meta.id));
+            let (redacted, id) = self.record_call(source, path, body);
+            return Ok((200, redacted, id));
         }
 
-        let (port, auth_password) = match source_id {
-            SourceId::RiotClient => {
-                let src = self.discovery.get_source(SourceId::RiotClient);
-                let port = src.as_ref().and_then(|s| s.port);
-                let cred = src.as_ref().and_then(|s| s.credential.clone());
-                let pwd = cred.and_then(|c| self.vault.reveal(c.id));
-                match (port, pwd) {
-                    (Some(p), Some(pwd)) => (p, Some(pwd)),
-                    _ => return Err(lang
-                        .pick(
-                            "RiotClient is not running or lockfile credentials unavailable",
-                            "RiotClient n'est pas en cours d'exécution ou les identifiants du lockfile sont indisponibles",
-                        )
-                        .to_string()),
-                }
-            }
-            SourceId::LeagueClient => {
-                let src = self.discovery.get_source(SourceId::LeagueClient);
-                let port = src.as_ref().and_then(|s| s.port);
-                let cred = src.as_ref().and_then(|s| s.credential.clone());
-                let pwd = cred.and_then(|c| self.vault.reveal(c.id));
-                match (port, pwd) {
-                    (Some(p), Some(pwd)) => (p, Some(pwd)),
-                    _ => return Err(lang
-                        .pick(
-                            "LeagueClient (LCU) is not running or lockfile credentials unavailable",
-                            "LeagueClient (LCU) n'est pas en cours d'exécution ou les identifiants du lockfile sont indisponibles",
-                        )
-                        .to_string()),
-                }
-            }
+        let (port, password) = match source {
             SourceId::LiveGame => (2999, None),
-            SourceId::System => unreachable!(),
+            SourceId::RiotClient | SourceId::LeagueClient => {
+                let (port, password) = self.discovery.credentials(source).ok_or_else(|| {
+                    if lang.is_fr() {
+                        format!("{source} n'est pas en cours d'exécution ou ses identifiants sont indisponibles")
+                    } else {
+                        format!("{source} is not running or its credentials are unavailable")
+                    }
+                })?;
+                (port, Some(password))
+            }
+            SourceId::System => {
+                return Err(lang
+                    .pick(
+                        "Cannot execute HTTP GET on System source",
+                        "Impossible d'exécuter un HTTP GET sur la source Système",
+                    )
+                    .to_string())
+            }
         };
 
-        let (status, _headers, mut body) = self
+        let (status, _headers, body) = self
             .riot_client
-            .get(port, auth_password.as_deref(), clean_path)
+            .get(port, password.as_deref(), path)
             .await
-            .map_err(|e| format!("{}: {}", lang.pick("GET request failed", "Échec de la requête GET"), e))?;
+            .map_err(|e| {
+                format!(
+                    "{}: {e}",
+                    lang.pick("GET request failed", "Échec de la requête GET")
+                )
+            })?;
 
-        let meta = {
-            let mut guard = self.store.write().unwrap();
-            guard.insert_event(
-                source_id,
-                hypatia_shared::EventKind::Call,
-                clean_path.to_string(),
-                body.clone(),
-                &self.vault,
-            )
-        };
-
-        {
-            let mut cat = self.catalog.write().unwrap();
-            cat.record_observed(source_id, "GET", clean_path, meta.size as u64);
-        }
-
-        let redacted = self
-            .store
-            .read()
-            .unwrap()
-            .get_event(meta.id)
-            .map(|e| e.payload)
-            .unwrap_or_else(|| {
-                crate::redaction::redact_value(&mut body, &self.vault);
-                body
-            });
-
-        Ok((status.as_u16(), redacted, meta.id))
+        let (redacted, id) = self.record_call(source, path, body);
+        Ok((status.as_u16(), redacted, id))
     }
-}
-
-/// Computes a human-readable line-by-line JSON diff between an optional previous JSON value
-/// and a current JSON value in the requested language.
-pub fn compute_json_diff_localized(
-    prev: Option<&serde_json::Value>,
-    curr: &serde_json::Value,
-    lang: Lang,
-) -> String {
-    let curr_pretty = serde_json::to_string_pretty(curr).unwrap_or_else(|_| "{}".to_string());
-    let Some(prev_val) = prev else {
-        return format!(
-            "{}\n{}\n{}",
-            lang.pick(
-                "--- (no previous state for this URI — initial snapshot)",
-                "--- (aucun état précédent pour cette URI — instantané initial)",
-            ),
-            lang.pick("+++ current", "+++ actuel"),
-            curr_pretty
-                .lines()
-                .map(|l| format!("+ {}", l))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-    };
-    if prev_val == curr {
-        return format!(
-            "{}\n\n{}",
-            lang.pick(
-                "(No changes between previous and current payload)",
-                "(Aucune modification entre le payload précédent et l'actuel)",
-            ),
-            curr_pretty
-        );
-    }
-
-    let prev_pretty = serde_json::to_string_pretty(prev_val).unwrap_or_else(|_| "{}".to_string());
-    let prev_lines: Vec<&str> = prev_pretty.lines().collect();
-    let curr_lines: Vec<&str> = curr_pretty.lines().collect();
-
-    let mut out = Vec::new();
-    out.push(lang.pick("--- previous payload", "--- payload précédent").to_string());
-    out.push(lang.pick("+++ current payload", "+++ payload actuel").to_string());
-
-    let max_len = prev_lines.len().max(curr_lines.len());
-    let mut i = 0;
-    let mut j = 0;
-    while i < prev_lines.len() || j < curr_lines.len() {
-        match (prev_lines.get(i), curr_lines.get(j)) {
-            (Some(&p), Some(&c)) if p == c => {
-                out.push(format!("  {}", c));
-                i += 1;
-                j += 1;
-            }
-            (Some(&p), Some(&c)) => {
-                // Look ahead up to 4 lines for resync
-                if let Some(offset) = (1..=4).find(|&off| curr_lines.get(j + off) == Some(&p)) {
-                    for k in 0..offset {
-                        out.push(format!("+ {}", curr_lines[j + k]));
-                    }
-                    j += offset;
-                } else if let Some(offset) = (1..=4).find(|&off| prev_lines.get(i + off) == Some(&c)) {
-                    for k in 0..offset {
-                        out.push(format!("- {}", prev_lines[i + k]));
-                    }
-                    i += offset;
-                } else {
-                    out.push(format!("- {}", p));
-                    out.push(format!("+ {}", c));
-                    i += 1;
-                    j += 1;
-                }
-            }
-            (Some(&p), None) => {
-                out.push(format!("- {}", p));
-                i += 1;
-            }
-            (None, Some(&c)) => {
-                out.push(format!("+ {}", c));
-                j += 1;
-            }
-            (None, None) => break,
-        }
-        if out.len() > max_len * 2 + 32 {
-            break;
-        }
-    }
-
-    out.join("\n")
 }

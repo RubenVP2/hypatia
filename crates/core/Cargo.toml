@@ -5,21 +5,20 @@ edition = "2021"
 
 [dependencies]
 hypatia-shared = { path = "../shared" }
-tokio = { version = "1.43", features = ["full"] }
+tokio = { version = "1.43", features = ["rt-multi-thread", "net", "time", "sync", "macros", "fs"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 native-tls = "0.2"
 tokio-native-tls = "0.3"
 futures-util = "0.3"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["raw_value"] }
 tracing = "0.1"
 base64 = "0.22"
 anyhow = "1.0"
 axum = { version = "0.8", default-features = true, features = ["ws"] }
 qrcode = { version = "0.14", default-features = false }
 rand = "0.9"
-regex = "1.11"
 sysinfo = "0.33"
 netstat2 = "0.11"
 

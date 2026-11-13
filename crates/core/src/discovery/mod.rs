@@ -3,8 +3,9 @@ pub mod ports;
 pub mod process;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak};
+use std::thread::Thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hypatia_shared::{
@@ -12,69 +13,96 @@ use hypatia_shared::{
     SystemSnapshot,
 };
 use sysinfo::System;
-use tokio::sync::watch;
-use tracing::{debug, info};
+use tracing::info;
 
 pub use lockfile::*;
 pub use ports::*;
 pub use process::*;
 
 use crate::redaction::SecretVault;
+use crate::settings::Flags;
+use crate::signal::ChangeSignal;
 
-/// Internal state stored and updated by the `DiscoveryManager`.
+/// Scan cadence while a Riot process is running.
+const ACTIVE_INTERVAL: Duration = Duration::from_millis(1000);
+/// Scan cadence while nothing Riot-related runs (startup detection latency).
+const IDLE_INTERVAL: Duration = Duration::from_millis(2500);
+
+/// Latest discovery result.
 #[derive(Debug, Clone)]
 pub struct DiscoveryState {
     pub snapshot: SystemSnapshot,
     pub sources: Vec<SourceState>,
     pub lcu_args: Option<LeagueClientArgs>,
-    pub since_map: HashMap<SourceId, i64>,
 }
 
-/// The DiscoveryManager coordinates periodic scanning of Riot processes,
-/// lockfiles, TCP ports, and connection states.
+/// Reusable OS handles and bookkeeping carried from one scan to the next.
+struct Scanner {
+    sys: System,
+    since: HashMap<SourceId, i64>,
+}
+
+/// Follows Riot processes, lockfiles and (optionally) their sockets, publishing a new
+/// [`DiscoveryState`] only when something actually changed.
 pub struct DiscoveryManager {
-    state: Arc<RwLock<DiscoveryState>>,
+    state: RwLock<DiscoveryState>,
+    scanner: Mutex<Scanner>,
     vault: SecretVault,
-    snapshot_tx: watch::Sender<SystemSnapshot>,
-    demo_override: AtomicBool,
+    signal: ChangeSignal,
+    revision: AtomicU64,
+    demo_override: Arc<AtomicBool>,
+    loop_thread: OnceLock<Thread>,
+}
+
+fn epoch() -> Duration {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
 }
 
 impl DiscoveryManager {
-    /// Creates a new `DiscoveryManager`, performs an initial scan, and returns
-    /// an `Arc<DiscoveryManager>` along with a `watch::Receiver<SystemSnapshot>`.
-    pub fn new(vault: SecretVault) -> (Arc<Self>, watch::Receiver<SystemSnapshot>) {
-        let mut sys = System::new();
-        let mut since_map = HashMap::new();
-        let (snapshot, sources, lcu_args) = Self::scan_cycle(&mut sys, &vault, &mut since_map);
-
-        let (snapshot_tx, snapshot_rx) = watch::channel(snapshot.clone());
-
-        let initial_state = DiscoveryState {
-            snapshot,
-            sources,
-            lcu_args,
-            since_map,
+    /// Creates a manager and performs an initial (lightweight) scan.
+    pub fn new(vault: SecretVault, signal: ChangeSignal) -> Arc<Self> {
+        let mut scanner = Scanner {
+            sys: System::new(),
+            since: HashMap::new(),
         };
+        let state = Self::scan_cycle(&mut scanner.sys, &vault, &mut scanner.since, false);
+        Self::with_state(state, scanner, vault, signal, false)
+    }
 
-        let manager = Arc::new(Self {
-            state: Arc::new(RwLock::new(initial_state)),
+    /// Creates a manager pre-populated with realistic synthetic sources and processes.
+    pub fn new_demo(vault: SecretVault, signal: ChangeSignal) -> Arc<Self> {
+        let scanner = Scanner {
+            sys: System::new(),
+            since: HashMap::new(),
+        };
+        let state = Self::build_demo_state(&vault);
+        Self::with_state(state, scanner, vault, signal, true)
+    }
+
+    fn with_state(
+        state: DiscoveryState,
+        scanner: Scanner,
+        vault: SecretVault,
+        signal: ChangeSignal,
+        demo: bool,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            state: RwLock::new(state),
+            scanner: Mutex::new(scanner),
             vault,
-            snapshot_tx,
-            demo_override: AtomicBool::new(false),
-        });
-
-        (manager, snapshot_rx)
+            signal,
+            revision: AtomicU64::new(0),
+            demo_override: Arc::new(AtomicBool::new(demo)),
+            loop_thread: OnceLock::new(),
+        })
     }
 
     fn build_demo_state(vault: &SecretVault) -> DiscoveryState {
-        let now_sec = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
+        let now = epoch();
+        let now_sec = now.as_secs() as i64;
+        let now_ms = now.as_millis() as i64;
 
         let rc_cred = vault.store(
             "demo-riot-client-token-xyz789".to_string(),
@@ -233,41 +261,17 @@ impl DiscoveryManager {
             snapshot,
             sources,
             lcu_args,
-            since_map: HashMap::new(),
         }
-    }
-
-    /// Creates a demo `DiscoveryManager` pre-populated with realistic synthetic sources and processes.
-    pub fn new_demo(vault: SecretVault) -> (Arc<Self>, watch::Receiver<SystemSnapshot>) {
-        let initial_state = Self::build_demo_state(&vault);
-        let (snapshot_tx, snapshot_rx) = watch::channel(initial_state.snapshot.clone());
-
-        let manager = Arc::new(Self {
-            state: Arc::new(RwLock::new(initial_state)),
-            vault,
-            snapshot_tx,
-            demo_override: AtomicBool::new(true),
-        });
-
-        (manager, snapshot_rx)
     }
 
     /// Enables or disables synthetic demo discovery state at runtime.
     pub fn set_demo_override(&self, enabled: bool) {
         self.demo_override.store(enabled, Ordering::SeqCst);
         if enabled {
-            let demo_state = Self::build_demo_state(&self.vault);
-            let snap = demo_state.snapshot.clone();
-            *self.state.write().unwrap() = demo_state;
-            let _ = self.snapshot_tx.send(snap);
+            *self.state.write().unwrap() = Self::build_demo_state(&self.vault);
+            self.published();
         } else {
-            let mut sys = System::new();
-            let mut state = self.state.write().unwrap();
-            let (snap, src, args) = Self::scan_cycle(&mut sys, &self.vault, &mut state.since_map);
-            state.snapshot = snap.clone();
-            state.sources = src;
-            state.lcu_args = args;
-            let _ = self.snapshot_tx.send(snap);
+            self.rescan(false);
         }
     }
 
@@ -275,211 +279,188 @@ impl DiscoveryManager {
         self.demo_override.load(Ordering::SeqCst)
     }
 
-    /// Spawns the background discovery loop running at the specified interval.
-    pub fn spawn_loop(self: &Arc<Self>, interval: Duration) -> tokio::task::JoinHandle<()> {
-        let manager = Arc::clone(self);
-
-        tokio::spawn(async move {
-            info!(
-                "Discovery background loop started with interval {:?}",
-                interval
-            );
-            let mut sys = System::new();
-
-            loop {
-                tokio::time::sleep(interval).await;
-
-                if manager.demo_override.load(Ordering::SeqCst) {
-                    continue;
-                }
-
-                let (snapshot, sources, _lcu_args) = {
-                    let mut state = manager.state.write().unwrap();
-                    let (snap, src, args) =
-                        Self::scan_cycle(&mut sys, &manager.vault, &mut state.since_map);
-                    state.snapshot = snap.clone();
-                    state.sources = src.clone();
-                    state.lcu_args = args.clone();
-                    (snap, src, args)
-                };
-
-                let _ = manager.snapshot_tx.send(snapshot);
-                debug!(
-                    "Discovery tick completed: {} sources, {} sockets",
-                    sources.len(),
-                    manager.state.read().unwrap().snapshot.sockets.len()
-                );
-            }
-        })
+    /// Shared flag telling whether synthetic demo data is active.
+    pub fn demo_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.demo_override)
     }
 
-    /// Performs one single scan of processes, lockfiles, and network ports.
+    /// Scans now and publishes the result if it differs from the current state.
+    /// Returns whether any Riot process is running.
+    fn rescan(&self, detailed: bool) -> bool {
+        let fresh = {
+            let mut scanner = self.scanner.lock().unwrap();
+            let Scanner { sys, since } = &mut *scanner;
+            Self::scan_cycle(sys, &self.vault, since, detailed)
+        };
+        let active = !fresh.snapshot.processes.is_empty();
+        let changed = {
+            let mut state = self.state.write().unwrap();
+            let changed = state.sources != fresh.sources
+                || state.lcu_args != fresh.lcu_args
+                || state.snapshot.processes != fresh.snapshot.processes
+                || state.snapshot.sockets != fresh.snapshot.sockets
+                || state.snapshot.connections != fresh.snapshot.connections;
+            if changed {
+                *state = fresh;
+            }
+            changed
+        };
+        if changed {
+            self.published();
+        }
+        active
+    }
+
+    fn published(&self) {
+        self.revision.fetch_add(1, Ordering::Relaxed);
+        self.signal.bump();
+    }
+
+    /// Bumped every time a different [`DiscoveryState`] is published.
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Relaxed)
+    }
+
+    /// True when `id` is `Live` on this machine (never in synthetic demo mode).
+    pub fn is_live_real(&self, id: SourceId) -> bool {
+        !self.is_demo_override() && self.is_live(id)
+    }
+
+    /// Requests an immediate scan from the background loop (e.g. after a settings change).
+    pub fn wake(&self) {
+        if let Some(thread) = self.loop_thread.get() {
+            thread.unpark();
+        }
+    }
+
+    /// Starts the background discovery loop on a dedicated, mostly parked OS thread.
+    ///
+    /// The loop scans every second while a Riot process runs and backs off when none does;
+    /// it exits once the manager is dropped.
+    pub fn spawn_loop(self: &Arc<Self>, flags: Arc<Flags>) {
+        let weak: Weak<Self> = Arc::downgrade(self);
+        let spawned = std::thread::Builder::new()
+            .name("hypatia-discovery".into())
+            .spawn(move || {
+                info!("Discovery loop started");
+                let mut interval = ACTIVE_INTERVAL;
+                loop {
+                    std::thread::park_timeout(interval);
+                    let Some(manager) = weak.upgrade() else {
+                        break;
+                    };
+                    // Synthetic demo state is static: nothing to scan while it is active.
+                    let active = !manager.is_demo_override()
+                        && manager.rescan(flags.system_footprint());
+                    interval = if active { ACTIVE_INTERVAL } else { IDLE_INTERVAL };
+                    if flags.eco_mode() {
+                        interval *= 2;
+                    }
+                }
+            });
+        match spawned {
+            Ok(handle) => {
+                let _ = self.loop_thread.set(handle.thread().clone());
+            }
+            Err(e) => tracing::error!("Failed to start discovery thread: {e}"),
+        }
+    }
+
+    /// Performs one scan of processes and lockfiles. With `detailed`, also samples per-process
+    /// CPU/RAM and enumerates sockets (only needed by the Telemetry Lab system view).
     pub fn scan_cycle(
         sys: &mut System,
         vault: &SecretVault,
         since_map: &mut HashMap<SourceId, i64>,
-    ) -> (SystemSnapshot, Vec<SourceState>, Option<LeagueClientArgs>) {
-        let now_sec = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
+        detailed: bool,
+    ) -> DiscoveryState {
+        let now = epoch();
+        let now_ms = now.as_millis() as i64;
 
-        // 1. Process scan
-        let (processes, lcu_args) = process::scan_processes(sys);
-
-        // 2. Ports and connections scan for Riot PIDs
-        let riot_pids: HashSet<u32> = processes.iter().map(|p| p.pid).collect();
-        let (sockets, connections) = ports::collect_sockets_for_pids(&riot_pids);
-
-        let snapshot = SystemSnapshot {
-            ts: now_sec,
-            processes: processes.clone(),
-            sockets,
-            connections,
-        };
-
-        // 3. Compute SourceStates
-        let mut sources = Vec::with_capacity(4);
-
-        // --- Riot Client Source ---
-        let rc_proc = processes
-            .iter()
-            .find(|p| p.source == Some(SourceId::RiotClient));
-        let rc_creds = lockfile::discover_riot_client_lockfile(vault);
-
-        let (rc_status, rc_pid, rc_port, rc_proto, rc_cred) = match (rc_proc, rc_creds) {
-            (Some(_proc), Some(creds)) => (
-                SourceStatus::Live,
-                Some(creds.pid),
-                Some(creds.port),
-                Some(creds.protocol),
-                Some(creds.secret_ref),
-            ),
-            (Some(proc), None) => {
-                // Process is running but lockfile could not be read yet
-                (
-                    SourceStatus::Connecting,
-                    Some(proc.pid),
-                    None,
-                    None,
-                    None,
-                )
-            }
-            (None, _) => (SourceStatus::Offline, None, None, None, None),
-        };
-
-        let rc_since = update_since(since_map, SourceId::RiotClient, &rc_status, now_ms);
-        sources.push(SourceState {
-            id: SourceId::RiotClient,
-            status: rc_status,
-            pid: rc_pid,
-            port: rc_port,
-            protocol: rc_proto,
-            since: rc_since,
-            events_total: 0,
-            bytes_total: 0,
-            credential: rc_cred,
-        });
-
-        // --- League Client Source ---
-        let lcu_proc = processes
-            .iter()
-            .find(|p| p.source == Some(SourceId::LeagueClient));
-
-        let lcu_credentials: Option<(u32, u16, String, SecretRef)> = if lcu_proc.is_some() {
-            // First priority: inspect command-line args of LeagueClientUx
-            if let Some(args) = &lcu_args {
-                if let (Some(port), Some(token)) = (args.app_port, &args.remoting_auth_token) {
-                    let pid = args.app_pid.unwrap_or_else(|| lcu_proc.unwrap().pid);
-                    let sref = vault.store(token.clone(), "lcu_cmdline_token".to_string());
-                    Some((pid, port, "https".to_string(), sref))
-                } else {
-                    // Second priority: lockfile in install-directory or default path
-                    lockfile::discover_league_client_lockfile(
-                        args.install_directory.as_deref(),
-                        vault,
-                    )
-                    .map(|c| (c.pid, c.port, c.protocol, c.secret_ref))
-                }
-            } else {
-                lockfile::discover_league_client_lockfile(None, vault)
-                    .map(|c| (c.pid, c.port, c.protocol, c.secret_ref))
-            }
+        let (processes, lcu_args) = process::scan_processes(sys, detailed);
+        let (sockets, connections) = if detailed {
+            let riot_pids: HashSet<u32> = processes.iter().map(|p| p.pid).collect();
+            ports::collect_sockets_for_pids(&riot_pids)
         } else {
-            None
+            (Vec::new(), Vec::new())
         };
 
-        let (lc_status, lc_pid, lc_port, lc_proto, lc_cred) = match (lcu_proc, lcu_credentials) {
-            (Some(_), Some((pid, port, proto, cred))) => {
-                (SourceStatus::Live, Some(pid), Some(port), Some(proto), Some(cred))
+        let proc_of = |id: SourceId| processes.iter().find(|p| p.source == Some(id));
+        let mut source = |id: SourceId, proc: Option<&ProcessInfo>, endpoint: Option<Endpoint>| {
+            let status = match (proc, &endpoint) {
+                (None, _) if id != SourceId::System => SourceStatus::Offline,
+                (Some(_), None) if id != SourceId::LiveGame => SourceStatus::Connecting,
+                _ => SourceStatus::Live,
+            };
+            let since = update_since(since_map, id, &status, now_ms);
+            let live = status == SourceStatus::Live;
+            let endpoint = endpoint.filter(|_| live);
+            SourceState {
+                id,
+                pid: endpoint
+                    .as_ref()
+                    .map(|e| e.pid)
+                    .or(proc.map(|p| p.pid)),
+                port: endpoint.as_ref().map(|e| e.port),
+                protocol: endpoint.as_ref().map(|e| e.protocol.clone()),
+                since,
+                events_total: 0,
+                bytes_total: 0,
+                credential: endpoint.and_then(|e| e.credential),
+                status,
             }
-            (Some(proc), None) => {
-                (SourceStatus::Connecting, Some(proc.pid), None, None, None)
-            }
-            (None, _) => (SourceStatus::Offline, None, None, None, None),
         };
 
-        let lc_since = update_since(since_map, SourceId::LeagueClient, &lc_status, now_ms);
-        sources.push(SourceState {
-            id: SourceId::LeagueClient,
-            status: lc_status,
-            pid: lc_pid,
-            port: lc_port,
-            protocol: lc_proto,
-            since: lc_since,
-            events_total: 0,
-            bytes_total: 0,
-            credential: lc_cred,
+        // Riot Client: credentials always come from its lockfile.
+        let rc_proc = proc_of(SourceId::RiotClient);
+        let rc_endpoint = rc_proc
+            .and_then(|_| lockfile::discover_riot_client_lockfile(vault))
+            .map(Endpoint::from);
+
+        // League Client: command-line arguments first, lockfile as a fallback.
+        let lcu_proc = proc_of(SourceId::LeagueClient);
+        let lcu_endpoint = lcu_proc.and_then(|proc| {
+            let args = lcu_args.as_ref();
+            match args.and_then(|a| Some((a.app_port?, a.remoting_auth_token.as_ref()?))) {
+                Some((port, token)) => Some(Endpoint {
+                    pid: args.and_then(|a| a.app_pid).unwrap_or(proc.pid),
+                    port,
+                    protocol: "https".to_string(),
+                    credential: Some(vault.store(token.clone(), "lcu_cmdline_token".to_string())),
+                }),
+                None => lockfile::discover_league_client_lockfile(
+                    args.and_then(|a| a.install_directory.as_deref()),
+                    vault,
+                )
+                .map(Endpoint::from),
+            }
         });
 
-        // --- Live Game Source ---
-        let live_proc = processes
-            .iter()
-            .find(|p| p.source == Some(SourceId::LiveGame));
-
-        let (live_status, live_pid, live_port, live_proto) = match live_proc {
-            Some(proc) => (
-                SourceStatus::Live,
-                Some(proc.pid),
-                Some(2999),
-                Some("https".to_string()),
-            ),
-            None => (SourceStatus::Offline, None, None, None),
-        };
-
-        let live_since = update_since(since_map, SourceId::LiveGame, &live_status, now_ms);
-        sources.push(SourceState {
-            id: SourceId::LiveGame,
-            status: live_status,
-            pid: live_pid,
-            port: live_port,
-            protocol: live_proto,
-            since: live_since,
-            events_total: 0,
-            bytes_total: 0,
+        let live_proc = proc_of(SourceId::LiveGame);
+        let live_endpoint = live_proc.map(|p| Endpoint {
+            pid: p.pid,
+            port: 2999,
+            protocol: "https".to_string(),
             credential: None,
         });
 
-        // --- System Source ---
-        let sys_status = SourceStatus::Live;
-        let sys_since = update_since(since_map, SourceId::System, &sys_status, now_ms);
-        sources.push(SourceState {
-            id: SourceId::System,
-            status: sys_status,
-            pid: None,
-            port: None,
-            protocol: None,
-            since: sys_since,
-            events_total: 0,
-            bytes_total: 0,
-            credential: None,
-        });
+        let sources = vec![
+            source(SourceId::RiotClient, rc_proc, rc_endpoint),
+            source(SourceId::LeagueClient, lcu_proc, lcu_endpoint),
+            source(SourceId::LiveGame, live_proc, live_endpoint),
+            source(SourceId::System, None, None),
+        ];
 
-        (snapshot, sources, lcu_args)
+        DiscoveryState {
+            snapshot: SystemSnapshot {
+                ts: now.as_secs() as i64,
+                processes,
+                sockets,
+                connections,
+            },
+            sources,
+            lcu_args,
+        }
     }
 
     /// Returns the latest `SystemSnapshot`.
@@ -503,6 +484,26 @@ impl DiscoveryManager {
             .cloned()
     }
 
+    /// True when `id` is currently `Live`.
+    pub fn is_live(&self, id: SourceId) -> bool {
+        self.state
+            .read()
+            .unwrap()
+            .sources
+            .iter()
+            .any(|s| s.id == id && s.status == SourceStatus::Live)
+    }
+
+    /// Port and plaintext credential of a live authenticated source (League or Riot Client).
+    pub fn credentials(&self, id: SourceId) -> Option<(u16, String)> {
+        let (port, secret_id) = {
+            let state = self.state.read().unwrap();
+            let src = state.sources.iter().find(|s| s.id == id)?;
+            (src.port?, src.credential.as_ref()?.id)
+        };
+        Some((port, self.vault.reveal(secret_id)?))
+    }
+
     /// Returns the parsed LeagueClientUx arguments, if LeagueClientUx is running.
     pub fn lcu_args(&self) -> Option<LeagueClientArgs> {
         self.state.read().unwrap().lcu_args.clone()
@@ -512,10 +513,24 @@ impl DiscoveryManager {
     pub fn vault(&self) -> &SecretVault {
         &self.vault
     }
+}
 
-    /// Subscribes to new `SystemSnapshot`s.
-    pub fn subscribe_snapshot(&self) -> watch::Receiver<SystemSnapshot> {
-        self.snapshot_tx.subscribe()
+/// Where and how to reach a discovered source.
+struct Endpoint {
+    pid: u32,
+    port: u16,
+    protocol: String,
+    credential: Option<SecretRef>,
+}
+
+impl From<DiscoveredCredentials> for Endpoint {
+    fn from(c: DiscoveredCredentials) -> Self {
+        Self {
+            pid: c.pid,
+            port: c.port,
+            protocol: c.protocol,
+            credential: Some(c.secret_ref),
+        }
     }
 }
 
@@ -541,19 +556,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_discovery_manager_initialization() {
-        let vault = SecretVault::new();
-        let (manager, mut rx) = DiscoveryManager::new(vault);
+    fn initial_scan_reports_all_four_sources_in_order() {
+        let manager = DiscoveryManager::new(SecretVault::new(), ChangeSignal::new());
+        let ids: Vec<SourceId> = manager.get_sources().iter().map(|s| s.id).collect();
+        assert_eq!(
+            ids,
+            [
+                SourceId::RiotClient,
+                SourceId::LeagueClient,
+                SourceId::LiveGame,
+                SourceId::System
+            ]
+        );
+        assert!(manager.is_live(SourceId::System));
+    }
 
-        let snap = manager.get_system_snapshot();
-        let sources = manager.get_sources();
-
-        assert_eq!(sources.len(), 4);
-        assert_eq!(sources[0].id, SourceId::RiotClient);
-        assert_eq!(sources[1].id, SourceId::LeagueClient);
-        assert_eq!(sources[2].id, SourceId::LiveGame);
-        assert_eq!(sources[3].id, SourceId::System);
-
-        assert_eq!(*rx.borrow_and_update(), snap);
+    #[test]
+    fn demo_override_publishes_synthetic_state_and_signals() {
+        let signal = ChangeSignal::new();
+        let manager = DiscoveryManager::new(SecretVault::new(), signal.clone());
+        let before = signal.revision();
+        manager.set_demo_override(true);
+        assert!(signal.revision() > before);
+        assert!(manager.is_live(SourceId::LeagueClient));
+        let (port, password) = manager.credentials(SourceId::LeagueClient).unwrap();
+        assert_eq!(port, 58921);
+        assert_eq!(password, "demo-league-client-token-abc123");
     }
 }

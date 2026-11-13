@@ -1,11 +1,12 @@
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hypatia_shared::{EndpointInfo, EndpointOrigin, ServerMsg, SourceId};
+use hypatia_shared::{EndpointInfo, EndpointOrigin, SourceId};
 use serde_json::Value;
-use tokio::sync::broadcast;
 
 use crate::riot_http::ReadOnlyRiotClient;
+use crate::signal::ChangeSignal;
 
 /// Extracts the first path segment as the namespace (e.g., `/lol-champ-select/v1/session` -> `lol-champ-select`).
 pub fn extract_namespace(path: &str) -> String {
@@ -246,66 +247,93 @@ pub fn parse_help_format_full(source: SourceId, doc: &Value) -> Vec<EndpointInfo
     endpoints
 }
 
-/// Parses the `/help` simple JSON response and extracts `EndpointInfo` entries.
-pub fn parse_help_simple(source: SourceId, doc: &Value) -> Vec<EndpointInfo> {
-    parse_help_format_full(source, doc)
-}
-
-/// In-memory catalog store managing discovered and observed endpoints.
-#[derive(Debug, Clone, Default)]
+/// In-memory catalog of declared (Swagger / `/help`) and observed endpoints.
+#[derive(Debug, Default)]
 pub struct CatalogStore {
     endpoints: Vec<EndpointInfo>,
+    /// Per source: path -> positions in `endpoints` (one per HTTP method).
+    index: [HashMap<String, Vec<u32>>; SourceId::COUNT],
+    /// Port whose declared endpoints were last imported, per source.
+    imported_port: [Option<u16>; SourceId::COUNT],
+    revision: u64,
 }
 
 impl CatalogStore {
     pub fn new() -> Self {
-        Self {
-            endpoints: Vec::new(),
+        Self::default()
+    }
+
+    /// All endpoints across all sources, in insertion order.
+    pub fn endpoints(&self) -> &[EndpointInfo] {
+        &self.endpoints
+    }
+
+    pub fn len(&self) -> usize {
+        self.endpoints.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.endpoints.is_empty()
+    }
+
+    /// Bumped whenever an endpoint is added or its origin changes (not on traffic counters).
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Claims the declared-endpoint import for `source` on `port`; `false` if already done.
+    pub fn claim_import(&mut self, source: SourceId, port: u16) -> bool {
+        let slot = &mut self.imported_port[source.index()];
+        if *slot == Some(port) {
+            return false;
         }
+        *slot = Some(port);
+        true
     }
 
-    /// Returns a list of all endpoints across all sources.
-    pub fn get_all(&self) -> Vec<EndpointInfo> {
-        self.endpoints.clone()
-    }
-
-    /// Returns all endpoints for a specific source.
-    pub fn get_by_source(&self, source: SourceId) -> Vec<EndpointInfo> {
-        self.endpoints
+    fn position(&self, source: SourceId, method: &str, path: &str) -> Option<usize> {
+        self.index[source.index()]
+            .get(path)?
             .iter()
-            .filter(|ep| ep.source == source)
-            .cloned()
-            .collect()
+            .map(|&i| i as usize)
+            .find(|&i| self.endpoints[i].method.eq_ignore_ascii_case(method))
     }
 
-    /// Adds declared endpoints from discovery into the catalog, merging with existing entries.
-    /// Returns the number of newly added endpoints.
+    fn push(&mut self, endpoint: EndpointInfo) {
+        self.index[endpoint.source.index()]
+            .entry(endpoint.path_template.clone())
+            .or_default()
+            .push(self.endpoints.len() as u32);
+        self.endpoints.push(endpoint);
+        self.revision += 1;
+    }
+
+    /// Merges declared endpoints into the catalog. Returns the number of newly added endpoints.
     pub fn add_declared(&mut self, new_endpoints: Vec<EndpointInfo>) -> usize {
         let mut added = 0;
-
         for new_ep in new_endpoints {
-            if let Some(existing) = self.endpoints.iter_mut().find(|ep| {
-                ep.source == new_ep.source
-                    && ep.method.eq_ignore_ascii_case(&new_ep.method)
-                    && ep.path_template == new_ep.path_template
-            }) {
-                if existing.origin == EndpointOrigin::Observed {
-                    existing.origin = EndpointOrigin::Both;
+            match self.position(new_ep.source, &new_ep.method, &new_ep.path_template) {
+                Some(i) => {
+                    let existing = &mut self.endpoints[i];
+                    if existing.description.is_none() && new_ep.description.is_some() {
+                        existing.description = new_ep.description;
+                    }
+                    if existing.origin == EndpointOrigin::Observed {
+                        existing.origin = EndpointOrigin::Both;
+                        self.revision += 1;
+                    }
                 }
-                if existing.description.is_none() && new_ep.description.is_some() {
-                    existing.description = new_ep.description;
+                None => {
+                    self.push(new_ep);
+                    added += 1;
                 }
-            } else {
-                self.endpoints.push(new_ep);
-                added += 1;
             }
         }
-
         added
     }
 
-    /// Records an observed endpoint call or event.
-    /// Returns true if a new endpoint was added or origin was updated.
+    /// Records an observed call or event. Returns true if an endpoint was added or its origin
+    /// changed.
     pub fn record_observed(
         &mut self,
         source: SourceId,
@@ -318,29 +346,22 @@ impl CatalogStore {
             .unwrap_or_default()
             .as_millis() as i64;
 
-        let method_upper = method.to_uppercase();
-
-        // Check if an existing endpoint matches exact URI or path template
-        if let Some(existing) = self.endpoints.iter_mut().find(|ep| {
-            ep.source == source
-                && ep.method.eq_ignore_ascii_case(&method_upper)
-                && ep.path_template == uri
-        }) {
-            let mut changed = false;
-            if existing.origin == EndpointOrigin::Declared {
-                existing.origin = EndpointOrigin::Both;
-                changed = true;
-            }
+        if let Some(i) = self.position(source, method, uri) {
+            let existing = &mut self.endpoints[i];
             existing.last_seen = Some(now_ms);
             existing.event_count += 1;
             existing.bytes_total += bytes;
-            return changed;
+            if existing.origin == EndpointOrigin::Declared {
+                existing.origin = EndpointOrigin::Both;
+                self.revision += 1;
+                return true;
+            }
+            return false;
         }
 
-        // New observed endpoint
-        self.endpoints.push(EndpointInfo {
+        self.push(EndpointInfo {
             source,
-            method: method_upper,
+            method: method.to_ascii_uppercase(),
             path_template: uri.to_string(),
             namespace: extract_namespace(uri),
             description: None,
@@ -349,116 +370,62 @@ impl CatalogStore {
             event_count: 1,
             bytes_total: bytes,
         });
-
         true
     }
 }
 
-/// Discovers endpoints for a given source following the fallback order:
-/// 1. `GET /swagger/v3/openapi.json`
-/// 2. `GET /swagger/v2/swagger.json`
-/// 3. `GET /help?format=Full`
-/// 4. `GET /help`
+/// Discovers endpoints for a source, trying in order `/swagger/v3/openapi.json`,
+/// `/swagger/v2/swagger.json`, `/help?format=Full` and `/help`.
 pub async fn discover_endpoints(
     client: &ReadOnlyRiotClient,
     source: SourceId,
     port: u16,
     password: Option<&str>,
 ) -> Vec<EndpointInfo> {
-    // 1. Try /swagger/v3/openapi.json
-    if let Ok((status, _, body)) = client
-        .get(port, password, "/swagger/v3/openapi.json")
-        .await
-    {
-        if status.is_success() && body.get("paths").is_some() {
-            let endpoints = parse_openapi_json(source, &body);
-            if !endpoints.is_empty() {
-                tracing::info!(
-                    "{}: Discovered {} endpoints via /swagger/v3/openapi.json",
-                    source,
-                    endpoints.len()
-                );
-                return endpoints;
-            }
+    type Parser = fn(SourceId, &Value) -> Vec<EndpointInfo>;
+    let probes: [(&str, Parser); 4] = [
+        ("/swagger/v3/openapi.json", parse_openapi_json),
+        ("/swagger/v2/swagger.json", parse_openapi_json),
+        ("/help?format=Full", parse_help_format_full),
+        ("/help", parse_help_format_full),
+    ];
+
+    for (path, parse) in probes {
+        let Ok((status, _, body)) = client.get(port, password, path).await else {
+            continue;
+        };
+        if !status.is_success() {
+            continue;
+        }
+        let endpoints = parse(source, &body);
+        if !endpoints.is_empty() {
+            tracing::info!("{source}: discovered {} endpoints via {path}", endpoints.len());
+            return endpoints;
         }
     }
 
-    // 2. Try /swagger/v2/swagger.json
-    if let Ok((status, _, body)) = client
-        .get(port, password, "/swagger/v2/swagger.json")
-        .await
-    {
-        if status.is_success() && body.get("paths").is_some() {
-            let endpoints = parse_openapi_json(source, &body);
-            if !endpoints.is_empty() {
-                tracing::info!(
-                    "{}: Discovered {} endpoints via /swagger/v2/swagger.json",
-                    source,
-                    endpoints.len()
-                );
-                return endpoints;
-            }
-        }
-    }
-
-    // 3. Try /help?format=Full
-    if let Ok((status, _, body)) = client.get(port, password, "/help?format=Full").await {
-        if status.is_success() && (body.get("events").is_some() || body.get("functions").is_some())
-        {
-            let endpoints = parse_help_format_full(source, &body);
-            if !endpoints.is_empty() {
-                tracing::info!(
-                    "{}: Discovered {} endpoints via /help?format=Full",
-                    source,
-                    endpoints.len()
-                );
-                return endpoints;
-            }
-        }
-    }
-
-    // 4. Try /help
-    if let Ok((status, _, body)) = client.get(port, password, "/help").await {
-        if status.is_success() && (body.get("events").is_some() || body.get("functions").is_some())
-        {
-            let endpoints = parse_help_simple(source, &body);
-            if !endpoints.is_empty() {
-                tracing::info!(
-                    "{}: Discovered {} endpoints via /help",
-                    source,
-                    endpoints.len()
-                );
-                return endpoints;
-            }
-        }
-    }
-
-    tracing::warn!("{}: No endpoints discovered via Swagger or /help", source);
+    tracing::warn!("{source}: no endpoints discovered via Swagger or /help");
     Vec::new()
 }
 
-/// Spawns background discovery task for a given source and updates `CatalogStore`.
+/// Imports the declared endpoints of `source` in the background, once per port.
 pub fn spawn_catalog_discovery(
     source: SourceId,
     port: u16,
     password: Option<String>,
     catalog: Arc<RwLock<CatalogStore>>,
     client: ReadOnlyRiotClient,
-    ws_broadcast_tx: broadcast::Sender<ServerMsg>,
+    signal: ChangeSignal,
 ) {
+    if !catalog.write().unwrap().claim_import(source, port) {
+        return;
+    }
     tokio::spawn(async move {
         let endpoints = discover_endpoints(&client, source, port, password.as_deref()).await;
         if !endpoints.is_empty() {
-            let count = {
-                let mut guard = catalog.write().unwrap();
-                guard.add_declared(endpoints)
-            };
-            tracing::info!(
-                "{}: Added {} declared endpoints to catalog",
-                source,
-                count
-            );
-            let _ = ws_broadcast_tx.send(ServerMsg::CatalogChanged { source });
+            let added = catalog.write().unwrap().add_declared(endpoints);
+            tracing::info!("{source}: added {added} declared endpoints to catalog");
+            signal.bump();
         }
     });
 }
@@ -543,7 +510,7 @@ mod tests {
             "/lol-gameflow/v1/gameflow-phase",
             128,
         );
-        let all = store.get_all();
+        let all = store.endpoints();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].origin, EndpointOrigin::Observed);
         assert_eq!(all[0].event_count, 1);
@@ -563,7 +530,7 @@ mod tests {
         }];
 
         store.add_declared(declared);
-        let all2 = store.get_all();
+        let all2 = store.endpoints();
         assert_eq!(all2.len(), 1);
         assert_eq!(all2[0].origin, EndpointOrigin::Both);
         assert_eq!(all2[0].description, Some("Phase info".to_string()));

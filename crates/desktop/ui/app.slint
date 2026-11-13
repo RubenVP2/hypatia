@@ -1,10 +1,10 @@
-import { Theme, Type } from "theme.slint";
+import { Theme, Type, Space } from "theme.slint";
 import {
     AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
-    Roundel, ChampPlate, GameIconBadge, SectionLabel, Plate, Specimen, Action, RailNavItem, RailSourceRow,
-    PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow,
+    Roundel, ChampPlate, GameIconBadge, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
+    PhaseLine, LineMap, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
@@ -14,6 +14,19 @@ import "fonts/BarlowCondensed-ExtraBold.ttf";
 import "fonts/OverpassMono.ttf";
 
 export { Theme }
+
+// Mirrors `hypatia_core::settings::Settings`: one switch per background activity.
+export struct PerfSettings {
+    live-game: bool,
+    riot-client: bool,
+    replay-api: bool,
+    game-icons: bool,
+    mobile-remote: bool,
+    system-footprint: bool,
+    endpoint-catalog: bool,
+    eco-mode: bool,
+    reduce-motion: bool,
+}
 
 export struct WaitView {
     title: string,
@@ -29,6 +42,8 @@ export struct ChampSelectView {
     title: string,
     detail: string,
     timer: string,
+    // True while the local player is the one picking or banning.
+    my-turn: bool,
     allies: [AllyRow],
     map-allies: [MapAlly],
     enemies: [EnemyPick],
@@ -73,7 +88,7 @@ component NoteRow inherits Rectangle {
     in property <StatLine> note;
     height: 44px;
     HorizontalLayout {
-        spacing: 12px;
+        spacing: Space.md;
         Text {
             text: root.note.label;
             color: Theme.muted;
@@ -99,16 +114,22 @@ component NoteRow inherits Rectangle {
     }
 }
 
+// Phase headline plus the screen's one large figure: a running clock when the phase has one,
+// otherwise `specimen` (e.g. the final KDA).
 component Header inherits Rectangle {
     in property <string> title;
     in property <string> detail;
     in property <string> specimen;
+    in property <int> clock-seconds: -1;
+    in property <int> clock-total: 0;
+    in property <bool> clock-down: true;
     in property <bool> active-turn: false;
     in property <bool> compact: false;
+    property <bool> has-figure: root.clock-seconds >= 0 || root.specimen != "";
     min-height: 92px;
 
     if !root.compact: HorizontalLayout {
-        spacing: 20px;
+        spacing: Space.xl;
         alignment: stretch;
         Plate {
             horizontal-stretch: 1;
@@ -116,27 +137,28 @@ component Header inherits Rectangle {
             detail: root.detail;
             active-turn: root.active-turn;
         }
-        if root.specimen != "": Rectangle {
-            min-width: spec-txt.preferred-width + 12px;
-            spec-txt := Specimen {
-                width: 100%;
-                height: 100%;
-                text: root.specimen;
-            }
+        if root.has-figure: ClockReadout {
+            seconds: root.clock-seconds;
+            total: root.clock-total;
+            down: root.clock-down;
+            fallback: root.specimen;
         }
     }
 
     if root.compact: VerticalLayout {
-        spacing: 10px;
+        spacing: Space.md;
         Plate {
             title: root.title;
             detail: root.detail;
             active-turn: root.active-turn;
         }
-        if root.specimen != "": Specimen {
-            horizontal-alignment: left;
-            font-size: 68px;
-            text: root.specimen;
+        if root.has-figure: ClockReadout {
+            seconds: root.clock-seconds;
+            total: root.clock-total;
+            down: root.clock-down;
+            fallback: root.specimen;
+            size: Type.specimen-compact;
+            align-left: true;
         }
     }
 }
@@ -152,11 +174,17 @@ component RosterRow inherits Rectangle {
     border-color: root.ally.picking
         ? Theme.signal
         : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
+    animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+    accessible-role: text;
+    accessible-label: Theme.lane-name(root.ally.lane) + ", "
+        + (root.ally.champion != "" ? root.ally.champion : (Theme.fr ? "pas encore choisi" : "no pick yet"))
+        + (root.ally.is-self ? (Theme.fr ? ", vous" : ", you") : "")
+        + (root.ally.picking ? (Theme.fr ? ", à son tour" : ", acting now") : "");
 
     HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 12px;
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.md;
         alignment: stretch;
 
         Rectangle {
@@ -182,15 +210,15 @@ component RosterRow inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            spacing: 3px;
+            spacing: Space.xs;
             horizontal-stretch: 1;
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Space.sm;
                 alignment: stretch;
                 HorizontalLayout {
                     horizontal-stretch: 1;
-                    spacing: 8px;
+                    spacing: Space.sm;
                     alignment: start;
                     Text {
                         text: root.ally.champion != "" ? root.ally.champion : (Theme.fr ? "En attente de choix" : "Waiting for pick");
@@ -204,13 +232,15 @@ component RosterRow inherits Rectangle {
                         y: (parent.height - self.height) / 2;
                         height: 20px;
                         width: turn-lbl.preferred-width + 14px;
-                        border-radius: 3px;
+                        border-radius: Theme.radius-sm;
                         background: Theme.signal;
                         turn-lbl := Text {
-                            text: Theme.fr ? "À SON TOUR" : "ACTING NOW";
-                            color: #0f1116;
+                            text: root.ally.is-self
+                                ? (Theme.fr ? "À VOUS" : "YOUR TURN")
+                                : (Theme.fr ? "À SON TOUR" : "ACTING NOW");
+                            color: Theme.on-signal;
                             font-family: Type.mono-family;
-                            font-size: 11px;
+                            font-size: Type.label;
                             font-weight: 800;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -218,7 +248,7 @@ component RosterRow inherits Rectangle {
                     }
                 }
                 if root.ally.spell1-name != "" || root.ally.spell2-name != "": HorizontalLayout {
-                    spacing: 5px;
+                    spacing: Space.xs;
                     alignment: end;
                     if root.ally.spell1-name != "": Rectangle {
                         y: (parent.height - self.height) / 2;
@@ -229,9 +259,9 @@ component RosterRow inherits Rectangle {
                         border-width: 1px;
                         border-color: Theme.rule;
                         sp1-row := HorizontalLayout {
-                            padding-left: 3px;
-                            padding-right: 6px;
-                            spacing: 4px;
+                            padding-left: Space.xs;
+                            padding-right: Space.sm;
+                            spacing: Space.xs;
                             GameIconBadge {
                                 y: (parent.height - self.height) / 2;
                                 size: 16px;
@@ -241,7 +271,7 @@ component RosterRow inherits Rectangle {
                             Text {
                                 text: root.ally.spell1-name;
                                 color: Theme.text;
-                                font-size: 11px;
+                                font-size: Type.label;
                                 font-weight: 600;
                                 vertical-alignment: center;
                             }
@@ -256,9 +286,9 @@ component RosterRow inherits Rectangle {
                         border-width: 1px;
                         border-color: Theme.rule;
                         sp2-row := HorizontalLayout {
-                            padding-left: 3px;
-                            padding-right: 6px;
-                            spacing: 4px;
+                            padding-left: Space.xs;
+                            padding-right: Space.sm;
+                            spacing: Space.xs;
                             GameIconBadge {
                                 y: (parent.height - self.height) / 2;
                                 size: 16px;
@@ -268,7 +298,7 @@ component RosterRow inherits Rectangle {
                             Text {
                                 text: root.ally.spell2-name;
                                 color: Theme.text;
-                                font-size: 11px;
+                                font-size: Type.label;
                                 font-weight: 600;
                                 vertical-alignment: center;
                             }
@@ -295,44 +325,49 @@ component RosterRow inherits Rectangle {
 
 component ChampSelectScreen inherits Flickable {
     in property <ChampSelectView> cs;
+    in property <int> clock-seconds: -1;
+    in property <int> clock-total: 0;
     in property <bool> compact: false;
     content-height: body.preferred-height;
 
     body := VerticalLayout {
         padding: Theme.gutter;
-        spacing: 18px;
+        spacing: Space.lg;
 
         Header {
             title: root.cs.title;
             detail: root.cs.detail;
             specimen: root.cs.timer;
+            clock-seconds: root.clock-seconds;
+            clock-total: root.clock-total;
+            active-turn: root.cs.my-turn;
             compact: root.compact;
         }
 
         if !root.compact: HorizontalLayout {
-            spacing: 22px;
+            spacing: Space.xl;
             alignment: stretch;
 
             // Left: 5 allied draft rows
             VerticalLayout {
                 horizontal-stretch: 1;
-                spacing: 8px;
+                spacing: Space.sm;
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: Space.sm;
                     alignment: stretch;
                     SectionLabel { text: Theme.fr ? "DRAFT DES ALLIÉS" : "ALLIES DRAFT"; vertical-alignment: center; }
                     if root.cs.anonymized: Rectangle {
                         height: 20px;
                         width: anon-lbl.preferred-width + 14px;
-                        border-radius: 3px;
+                        border-radius: Theme.radius-sm;
                         background: Theme.panel-raised;
                         border-width: 1px;
                         border-color: Theme.rule-strong;
                         anon-lbl := Text {
                             text: Theme.fr ? "Solo/Duo anonymisé" : "Solo/Duo Anonymized";
                             color: Theme.muted;
-                            font-size: 11px;
-                            font-weight: 700;
+                            font-size: Type.label;
+                            font-weight: 800;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -344,7 +379,7 @@ component ChampSelectScreen inherits Flickable {
             // Right: Rift map, enemy picks, and visual bans
             VerticalLayout {
                 width: 340px;
-                spacing: 14px;
+                spacing: Space.md;
 
                 Rectangle {
                     height: 268px;
@@ -353,7 +388,7 @@ component ChampSelectScreen inherits Flickable {
                     border-width: 1px;
                     border-color: Theme.rule;
                     VerticalLayout {
-                        padding: 10px;
+                        padding: Space.md;
                         alignment: center;
                         LineMap {
                             width: 248px;
@@ -374,24 +409,24 @@ component ChampSelectScreen inherits Flickable {
                     border-width: 1px;
                     border-color: Theme.rule;
                     VerticalLayout {
-                        padding: 14px;
-                        spacing: 10px;
+                        padding: Space.md;
+                        spacing: Space.md;
                         HorizontalLayout {
                             alignment: stretch;
                             SectionLabel { text: Theme.fr ? "ÉQUIPE ENNEMIE" : "ENEMY TEAM"; vertical-alignment: center; }
                             if root.cs.enemies-to-come > 0: Text {
                                 text: root.cs.enemies-to-come + (Theme.fr ? " à choisir" : " to pick");
                                 color: Theme.muted;
-                                font-size: 11px;
+                                font-size: Type.label;
                                 horizontal-alignment: right;
                             }
                         }
                         HorizontalLayout {
-                            spacing: 8px;
+                            spacing: Space.sm;
                             alignment: start;
                             for e in root.cs.enemies: VerticalLayout {
                                 width: 54px;
-                                spacing: 4px;
+                                spacing: Space.xs;
                                 ChampPlate {
                                     x: (parent.width - self.width) / 2;
                                     size: 46px;
@@ -402,7 +437,7 @@ component ChampSelectScreen inherits Flickable {
                                 Text {
                                     text: e.champion;
                                     color: Theme.text;
-                                    font-size: 11px;
+                                    font-size: Type.label;
                                     font-weight: 600;
                                     horizontal-alignment: center;
                                     overflow: elide;
@@ -418,31 +453,31 @@ component ChampSelectScreen inherits Flickable {
                     border-width: 1px;
                     border-color: Theme.rule;
                     VerticalLayout {
-                        padding: 14px;
-                        spacing: 8px;
+                        padding: Space.md;
+                        spacing: Space.sm;
                         SectionLabel { text: Theme.fr ? "BANNISSEMENTS" : "BANS"; }
                         if root.cs.my-ban-list.length > 0: HorizontalLayout {
-                            spacing: 6px;
+                            spacing: Space.sm;
                             alignment: start;
                             Text {
                                 text: Theme.fr ? "Bleu" : "Blue";
                                 width: 44px;
                                 color: Theme.blue-soft;
-                                font-size: 11px;
-                                font-weight: 700;
+                                font-size: Type.label;
+                                font-weight: 800;
                                 vertical-alignment: center;
                             }
                             for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; }
                         }
                         if root.cs.their-ban-list.length > 0: HorizontalLayout {
-                            spacing: 6px;
+                            spacing: Space.sm;
                             alignment: start;
                             Text {
                                 text: Theme.fr ? "Rouge" : "Red";
                                 width: 44px;
                                 color: Theme.red-soft;
-                                font-size: 11px;
-                                font-weight: 700;
+                                font-size: Type.label;
+                                font-weight: 800;
                                 vertical-alignment: center;
                             }
                             for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
@@ -450,7 +485,7 @@ component ChampSelectScreen inherits Flickable {
                         if root.cs.my-ban-list.length == 0 && root.cs.their-ban-list.length == 0: Text {
                             text: Theme.fr ? "Aucun champion banni pour l'instant" : "No champions banned yet";
                             color: Theme.muted;
-                            font-size: 12px;
+                            font-size: Type.small;
                         }
                     }
                 }
@@ -459,7 +494,7 @@ component ChampSelectScreen inherits Flickable {
 
         // Stacked single-column mode for narrow split pane
         if root.compact: VerticalLayout {
-            spacing: 14px;
+            spacing: Space.md;
             SectionLabel { text: Theme.fr ? "DRAFT DES ALLIÉS" : "ALLIES DRAFT"; }
             for ally in root.cs.allies: RosterRow { ally: ally; }
 
@@ -488,11 +523,11 @@ component ChampSelectScreen inherits Flickable {
                 border-width: 1px;
                 border-color: Theme.rule;
                 VerticalLayout {
-                    padding: 12px;
-                    spacing: 8px;
+                    padding: Space.md;
+                    spacing: Space.sm;
                     SectionLabel { text: Theme.fr ? "CHOIX ET BANNISSEMENTS ENNEMIS" : "ENEMY PICKS & BANS"; }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Space.sm;
                         for e in root.cs.enemies: ChampPlate {
                             size: 40px;
                             label: e.initials;
@@ -502,30 +537,30 @@ component ChampSelectScreen inherits Flickable {
                         if root.cs.enemies-to-come > 0: Text {
                             text: "+" + root.cs.enemies-to-come + (Theme.fr ? " en attente" : " pending");
                             color: Theme.muted;
-                            font-size: 12px;
+                            font-size: Type.small;
                             vertical-alignment: center;
                         }
                     }
                     if root.cs.my-ban-list.length > 0: HorizontalLayout {
-                        spacing: 5px;
+                        spacing: Space.xs;
                         alignment: start;
                         Text {
                             text: Theme.fr ? "Bleu :" : "Blue:";
                             color: Theme.blue-soft;
-                            font-size: 11px;
-                            font-weight: 700;
+                            font-size: Type.label;
+                            font-weight: 800;
                             vertical-alignment: center;
                         }
                         for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; }
                     }
                     if root.cs.their-ban-list.length > 0: HorizontalLayout {
-                        spacing: 5px;
+                        spacing: Space.xs;
                         alignment: start;
                         Text {
                             text: Theme.fr ? "Rouge :" : "Red:";
                             color: Theme.red-soft;
-                            font-size: 11px;
-                            font-weight: 700;
+                            font-size: Type.label;
+                            font-weight: 800;
                             vertical-alignment: center;
                         }
                         for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
@@ -539,13 +574,16 @@ component ChampSelectScreen inherits Flickable {
 component ScoreSpecimen inherits HorizontalLayout {
     in property <int> mine;
     in property <int> theirs;
-    spacing: 8px;
+    spacing: Space.sm;
     alignment: end;
+    accessible-role: text;
+    accessible-label: (Theme.fr ? "Score : alliés " : "Score: allies ") + root.mine
+        + (Theme.fr ? ", ennemis " : ", enemies ") + root.theirs;
     Text {
         text: root.mine;
         color: Theme.blue;
         font-family: Type.display-family;
-        font-size: 56px;
+        font-size: Type.score;
         font-weight: 800;
         vertical-alignment: center;
     }
@@ -553,7 +591,7 @@ component ScoreSpecimen inherits HorizontalLayout {
         text: ":";
         color: Theme.muted;
         font-family: Type.display-family;
-        font-size: 42px;
+        font-size: Type.score * 0.75;
         font-weight: 700;
         vertical-alignment: center;
     }
@@ -561,7 +599,7 @@ component ScoreSpecimen inherits HorizontalLayout {
         text: root.theirs;
         color: Theme.red;
         font-family: Type.display-family;
-        font-size: 56px;
+        font-size: Type.score;
         font-weight: 800;
         vertical-alignment: center;
     }
@@ -569,12 +607,13 @@ component ScoreSpecimen inherits HorizontalLayout {
 
 component LiveScreen inherits Flickable {
     in property <LiveView> live;
+    in property <int> clock-seconds: -1;
     in property <bool> compact: false;
     content-height: live-body.preferred-height;
 
     live-body := VerticalLayout {
         padding: Theme.gutter;
-        spacing: 18px;
+        spacing: Space.lg;
 
         // Top score & game clock telemetry bar
         Rectangle {
@@ -584,8 +623,8 @@ component LiveScreen inherits Flickable {
             border-color: root.live.dead ? Theme.danger : Theme.rule;
 
             HorizontalLayout {
-                padding: 14px;
-                spacing: 16px;
+                padding: Space.md;
+                spacing: Space.lg;
                 alignment: stretch;
 
                 if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
@@ -603,12 +642,12 @@ component LiveScreen inherits Flickable {
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
-                    spacing: 2px;
+                    spacing: Space.xxs;
                     Text {
                         text: root.live.title;
                         color: root.live.dead ? Theme.danger : Theme.text;
                         font-family: Type.display-family;
-                        font-size: 26px;
+                        font-size: Type.headline;
                         font-weight: 800;
                     }
                     Text {
@@ -631,14 +670,14 @@ component LiveScreen inherits Flickable {
                     border-width: 1px;
                     border-color: Theme.rule;
                     VerticalLayout {
-                        padding: 8px;
+                        padding: Space.sm;
                         alignment: center;
                         spacing: 1px;
                         Text {
-                            text: root.live.clock;
-                            color: Theme.signal-text;
+                            text: root.clock-seconds >= 0 ? Theme.clock-text(root.clock-seconds) : root.live.clock;
+                            color: Theme.text;
                             font-family: Type.mono-family;
-                            font-size: 20px;
+                            font-size: Type.title;
                             font-weight: 700;
                             horizontal-alignment: center;
                         }
@@ -646,7 +685,7 @@ component LiveScreen inherits Flickable {
                             text: root.live.self-kda;
                             color: Theme.muted;
                             font-family: Type.mono-family;
-                            font-size: 11px;
+                            font-size: Type.label;
                             horizontal-alignment: center;
                         }
                     }
@@ -661,24 +700,24 @@ component LiveScreen inherits Flickable {
         }
 
         if !root.compact: HorizontalLayout {
-            spacing: 16px;
+            spacing: Space.lg;
             alignment: stretch;
             VerticalLayout {
                 horizontal-stretch: 1;
-                spacing: 6px;
+                spacing: Space.sm;
                 SectionLabel { text: Theme.fr ? "ALLIÉS" : "ALLIES"; }
                 for p in root.live.my-players: PlayerRow { p: p; mine: true; }
             }
             VerticalLayout {
                 horizontal-stretch: 1;
-                spacing: 6px;
+                spacing: Space.sm;
                 SectionLabel { text: Theme.fr ? "ENNEMIS" : "ENEMIES"; }
                 for p in root.live.enemy-players: PlayerRow { p: p; mine: false; }
             }
         }
 
         if root.compact: VerticalLayout {
-            spacing: 10px;
+            spacing: Space.md;
             SectionLabel { text: Theme.fr ? "ALLIÉS" : "ALLIES"; }
             for p in root.live.my-players: PlayerRow { p: p; mine: true; }
             SectionLabel { text: Theme.fr ? "ENNEMIS" : "ENEMIES"; }
@@ -687,7 +726,7 @@ component LiveScreen inherits Flickable {
 
         // Map, Objectives & Live Event Feed
         if !root.compact: HorizontalLayout {
-            spacing: 18px;
+            spacing: Space.lg;
             alignment: stretch;
 
             Rectangle {
@@ -717,36 +756,36 @@ component LiveScreen inherits Flickable {
                 border-width: 1px;
                 border-color: Theme.rule;
                 VerticalLayout {
-                    padding: 14px;
-                    spacing: 10px;
+                    padding: Space.md;
+                    spacing: Space.md;
                     SectionLabel { text: Theme.fr ? "OBJECTIFS ET FIL EN DIRECT" : "OBJECTIVES & FEED"; }
                     HorizontalLayout {
-                        spacing: 12px;
+                        spacing: Space.md;
                         Text {
                             text: Theme.fr ? "Bleu" : "Blue";
                             width: 48px;
                             color: Theme.blue-soft;
-                            font-size: 12px;
-                            font-weight: 700;
+                            font-size: Type.small;
+                            font-weight: 800;
                             vertical-alignment: center;
                         }
                         ObjectiveRow { horizontal-stretch: 1; chips: root.live.my-objectives; }
                     }
                     HorizontalLayout {
-                        spacing: 12px;
+                        spacing: Space.md;
                         Text {
                             text: Theme.fr ? "Rouge" : "Red";
                             width: 48px;
                             color: Theme.red-soft;
-                            font-size: 12px;
-                            font-weight: 700;
+                            font-size: Type.small;
+                            font-weight: 800;
                             vertical-alignment: center;
                         }
                         ObjectiveRow { horizontal-stretch: 1; chips: root.live.enemy-objectives; }
                     }
                     Rectangle { height: 1px; background: Theme.rule; }
                     VerticalLayout {
-                        spacing: 2px;
+                        spacing: Space.xxs;
                         for line in root.live.feed: FeedRow { line: line; }
                     }
                 }
@@ -759,8 +798,8 @@ component LiveScreen inherits Flickable {
             border-width: 1px;
             border-color: Theme.rule;
             VerticalLayout {
-                padding: 12px;
-                spacing: 8px;
+                padding: Space.md;
+                spacing: Space.sm;
                 SectionLabel { text: Theme.fr ? "OBJECTIFS ET FIL EN DIRECT" : "OBJECTIVES & FEED"; }
                 ObjectiveRow { chips: root.live.my-objectives; empty-text: Theme.fr ? "Aucun objectif bleu" : "No blue objectives"; }
                 ObjectiveRow { chips: root.live.enemy-objectives; empty-text: Theme.fr ? "Aucun objectif rouge" : "No red objectives"; }
@@ -780,6 +819,9 @@ component WaitScreen inherits Flickable {
     in property <bool> telemetry-enabled: false;
     in property <bool> remote-panel-open: false;
     in property <bool> demo: false;
+    in property <int> clock-seconds: -1;
+    in property <int> clock-total: 0;
+    in property <bool> clock-down: true;
     callback toggle-telemetry();
     callback toggle-remote-panel();
     callback toggle-demo();
@@ -787,18 +829,21 @@ component WaitScreen inherits Flickable {
 
     wait-body := VerticalLayout {
         padding: Theme.gutter;
-        spacing: 20px;
+        spacing: Space.xl;
 
         Header {
             title: root.wait.title;
             detail: root.wait.detail;
             specimen: root.wait.specimen;
+            clock-seconds: root.clock-seconds;
+            clock-total: root.clock-total;
+            clock-down: root.clock-down;
             active-turn: root.is-ready-check;
             compact: root.compact;
         }
 
         if !root.compact: HorizontalLayout {
-            spacing: 20px;
+            spacing: Space.xl;
             alignment: stretch;
 
             // Left: Party roster or summoner telemetry ledger
@@ -809,25 +854,25 @@ component WaitScreen inherits Flickable {
                 border-width: 1px;
                 border-color: Theme.rule;
                 VerticalLayout {
-                    padding: 16px;
-                    spacing: 10px;
+                    padding: Space.lg;
+                    spacing: Space.md;
                     SectionLabel {
                         text: root.show-party
                             ? (Theme.fr ? "MEMBRES DU GROUPE" : "PARTY ROSTER")
-                            : (Theme.fr ? "TÉLÉMÉTRIE DE L'INVOCATEUR" : "SUMMONER TELEMETRY");
+                            : (Theme.fr ? "VOTRE COMPTE" : "YOUR ACCOUNT");
                     }
                     if root.show-party: VerticalLayout {
-                        spacing: 6px;
+                        spacing: Space.sm;
                         for m in root.party: Rectangle {
                             height: 46px;
                             border-radius: Theme.radius-sm;
-                            background: m.is-self ? Theme.signal-soft : Theme.ground;
+                            background: m.is-self ? Theme.panel-raised : Theme.ground;
                             border-width: 1px;
-                            border-color: m.is-self ? Theme.signal : Theme.rule;
+                            border-color: m.is-self ? Theme.rule-strong : Theme.rule;
                             HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 8px;
+                                padding-left: Space.md;
+                                padding-right: Space.md;
+                                spacing: Space.sm;
                                 Text {
                                     text: m.name + (m.is-leader ? (Theme.fr ? " · Chef" : " · Leader") : "");
                                     color: Theme.text;
@@ -837,9 +882,9 @@ component WaitScreen inherits Flickable {
                                 }
                                 HorizontalLayout {
                                     alignment: end;
-                                    spacing: 10px;
+                                    spacing: Space.md;
                                     if m.first-lane >= 0: HorizontalLayout {
-                                        spacing: 5px;
+                                        spacing: Space.xs;
                                         Rectangle {
                                             width: 22px;
                                             Roundel {
@@ -857,7 +902,7 @@ component WaitScreen inherits Flickable {
                                         }
                                     }
                                     if m.second-lane >= 0: HorizontalLayout {
-                                        spacing: 5px;
+                                        spacing: Space.xs;
                                         Rectangle {
                                             width: 22px;
                                             Roundel {
@@ -879,9 +924,9 @@ component WaitScreen inherits Flickable {
                         }
                     }
                     if !root.show-party: VerticalLayout {
-                        spacing: 8px;
+                        spacing: Space.sm;
                         if root.wait.summoner-name != "": HorizontalLayout {
-                            spacing: 10px;
+                            spacing: Space.md;
                             GameIconBadge {
                                 size: 38px;
                                 icon: root.wait.summoner-icon;
@@ -908,27 +953,26 @@ component WaitScreen inherits Flickable {
                 border-width: 1px;
                 border-color: Theme.rule;
                 VerticalLayout {
-                    padding: 16px;
-                    spacing: 12px;
-                    SectionLabel { text: Theme.fr ? "CONTRÔLES RAPIDES" : "PIT-WALL CONTROLS"; }
+                    padding: Space.lg;
+                    spacing: Space.md;
+                    SectionLabel { text: Theme.fr ? "POUR COMMENCER" : "GET STARTED"; }
                     if root.show-party: VerticalLayout {
                         for n in root.wait.notes: NoteRow { note: n; }
                     }
                     Text {
                         text: root.demo
-                            ? (Theme.fr ? "Flux de démonstration actif. Naviguez entre les phases depuis le menu de gauche." : "Synthetic fixture stream active. Jump across any match phase from the left rail.")
-                            : (Theme.fr ? "Les API locales Riot sont interrogées strictement en lecture seule, sauf action depuis l'App Mobile." : "Riot local APIs are polled strictly in read-only mode unless Mobile Remote actions are sent.");
+                            ? (Theme.fr ? "Mode démo : des parties simulées, rien ne vient de votre compte. Changez de phase depuis le menu de gauche." : "Demo mode: simulated matches, nothing comes from your account. Switch phases from the left rail.")
+                            : (Theme.fr ? "Hypatia lit seulement ce que League affiche déjà sur ce PC. Rien ne quitte votre machine." : "Hypatia only reads what League already shows on this PC. Nothing leaves your machine.");
                         color: Theme.muted;
                         font-size: Type.small;
                         wrap: word-wrap;
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Space.sm;
                         alignment: start;
                         if !root.demo: Action {
                             text: Theme.fr ? "Essayer le Mode Démo" : "Try Demo Mode";
-                            primary-signal: true;
-                            selected: true;
+                            primary: true;
                             clicked => { root.toggle-demo(); }
                         }
                         if !root.remote-panel-open: Action {
@@ -936,7 +980,7 @@ component WaitScreen inherits Flickable {
                             clicked => { root.toggle-remote-panel(); }
                         }
                         if !root.telemetry-enabled: Action {
-                            text: Theme.fr ? "Labo Télémétrie" : "Telemetry Lab";
+                            text: Theme.fr ? "Observatoire" : "Observatory";
                             clicked => { root.toggle-telemetry(); }
                         }
                     }
@@ -945,22 +989,22 @@ component WaitScreen inherits Flickable {
         }
 
         if root.compact: VerticalLayout {
-            spacing: 14px;
+            spacing: Space.md;
             Rectangle {
                 background: Theme.panel;
                 border-radius: Theme.radius;
                 border-width: 1px;
                 border-color: Theme.rule;
                 VerticalLayout {
-                    padding: 14px;
-                    spacing: 8px;
+                    padding: Space.md;
+                    spacing: Space.sm;
                     SectionLabel {
                         text: root.show-party
                             ? (Theme.fr ? "MEMBRES DU GROUPE" : "PARTY ROSTER")
-                            : (Theme.fr ? "TÉLÉMÉTRIE DE L'INVOCATEUR" : "SUMMONER TELEMETRY");
+                            : (Theme.fr ? "VOTRE COMPTE" : "YOUR ACCOUNT");
                     }
                     if !root.show-party && root.wait.summoner-name != "": HorizontalLayout {
-                        spacing: 10px;
+                        spacing: Space.md;
                         GameIconBadge {
                             size: 36px;
                             icon: root.wait.summoner-icon;
@@ -975,10 +1019,10 @@ component WaitScreen inherits Flickable {
                         }
                     }
                     if root.show-party: VerticalLayout {
-                        spacing: 6px;
+                        spacing: Space.sm;
                         for m in root.party: HorizontalLayout {
                             height: 36px;
-                            spacing: 8px;
+                            spacing: Space.sm;
                             Text {
                                 horizontal-stretch: 1;
                                 text: m.name + (m.is-leader ? (Theme.fr ? " · Chef" : " · Leader") : "");
@@ -989,7 +1033,7 @@ component WaitScreen inherits Flickable {
                                 overflow: elide;
                             }
                             if m.first-lane >= 0: HorizontalLayout {
-                                spacing: 4px;
+                                spacing: Space.xs;
                                 Rectangle {
                                     width: 18px;
                                     Roundel {
@@ -1001,13 +1045,13 @@ component WaitScreen inherits Flickable {
                                 Text {
                                     text: Theme.lane-name(m.first-lane);
                                     color: Theme.text;
-                                    font-size: 11px;
+                                    font-size: Type.label;
                                     font-weight: 600;
                                     vertical-alignment: center;
                                 }
                             }
                             if m.second-lane >= 0: HorizontalLayout {
-                                spacing: 4px;
+                                spacing: Space.xs;
                                 Rectangle {
                                     width: 18px;
                                     Roundel {
@@ -1019,7 +1063,7 @@ component WaitScreen inherits Flickable {
                                 Text {
                                     text: Theme.lane-name(m.second-lane);
                                     color: Theme.muted;
-                                    font-size: 11px;
+                                    font-size: Type.label;
                                     font-weight: 600;
                                     vertical-alignment: center;
                                 }
@@ -1043,15 +1087,15 @@ component TelemetrySourceCard inherits Rectangle {
     border-color: src.live ? Theme.live-green : Theme.rule;
 
     VerticalLayout {
-        padding: 8px;
-        spacing: 2px;
+        padding: Space.sm;
+        spacing: Space.xxs;
         HorizontalLayout {
-            spacing: 5px;
+            spacing: Space.xs;
             alignment: stretch;
             Text {
                 text: src.name;
                 color: Theme.text;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 800;
                 overflow: elide;
                 vertical-alignment: center;
@@ -1060,7 +1104,7 @@ component TelemetrySourceCard inherits Rectangle {
                 text: src.port;
                 color: src.live ? Theme.live-green : Theme.muted;
                 font-family: Type.mono-family;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 700;
                 horizontal-alignment: right;
                 vertical-alignment: center;
@@ -1070,7 +1114,7 @@ component TelemetrySourceCard inherits Rectangle {
             text: src.stats;
             color: Theme.muted;
             font-family: Type.mono-family;
-            font-size: 11px;
+            font-size: Type.label;
             overflow: elide;
         }
     }
@@ -1082,25 +1126,23 @@ component TelemetryEventRow inherits Rectangle {
     callback clicked();
     height: 44px;
     border-radius: Theme.radius-sm;
-    background: selected
-        ? Theme.signal-soft
-        : (touch.has-hover ? Theme.panel-raised : Theme.ground);
+    background: selected || touch.has-hover ? Theme.panel-raised : Theme.ground;
     border-width: 1px;
-    border-color: selected ? Theme.signal : Theme.rule;
+    border-color: selected ? Theme.text : Theme.rule;
     accessible-role: button;
     accessible-label: ev.source + " " + ev.kind + " " + ev.uri;
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 8px;
+        padding-left: Space.sm;
+        padding-right: Space.sm;
+        spacing: Space.sm;
 
         Text {
             width: 56px;
             text: ev.time;
             color: Theme.muted;
             font-family: Type.mono-family;
-            font-size: 11px;
+            font-size: Type.label;
             vertical-alignment: center;
         }
 
@@ -1108,7 +1150,7 @@ component TelemetryEventRow inherits Rectangle {
             width: 38px;
             height: 20px;
             y: (parent.height - self.height) / 2;
-            border-radius: 3px;
+            border-radius: Theme.radius-sm;
             background: Theme.panel-raised;
             border-width: 1px;
             border-color: ev.source-idx == 1 ? Theme.blue : (ev.source-idx == 2 ? Theme.live-green : Theme.rule-strong);
@@ -1116,7 +1158,7 @@ component TelemetryEventRow inherits Rectangle {
                 text: ev.source;
                 color: Theme.text;
                 font-family: Type.mono-family;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 800;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -1129,16 +1171,16 @@ component TelemetryEventRow inherits Rectangle {
             spacing: 1px;
             Text {
                 text: ev.uri;
-                color: selected ? Theme.signal-text : Theme.text;
+                color: Theme.text;
                 font-family: Type.mono-family;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 700;
                 overflow: elide;
             }
             Text {
                 text: ev.kind + " · " + ev.preview;
                 color: Theme.muted;
-                font-size: 11px;
+                font-size: Type.label;
                 overflow: elide;
             }
         }
@@ -1147,7 +1189,7 @@ component TelemetryEventRow inherits Rectangle {
             text: ev.size;
             color: Theme.muted;
             font-family: Type.mono-family;
-            font-size: 11px;
+            font-size: Type.label;
             vertical-alignment: center;
         }
     }
@@ -1168,11 +1210,11 @@ component TelemetryInspector inherits Rectangle {
     border-color: Theme.rule;
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+        padding: Space.md;
+        spacing: Space.sm;
 
         HorizontalLayout {
-            spacing: 8px;
+            spacing: Space.sm;
             alignment: stretch;
             VerticalLayout {
                 horizontal-stretch: 1;
@@ -1180,19 +1222,19 @@ component TelemetryInspector inherits Rectangle {
                     text: root.telemetry.inspector-title != "" ? root.telemetry.inspector-title : (Theme.fr ? "Inspecteur de Données" : "Payload Inspector");
                     color: Theme.text;
                     font-family: Type.mono-family;
-                    font-size: 12px;
+                    font-size: Type.small;
                     font-weight: 700;
                     overflow: elide;
                 }
                 Text {
                     text: root.telemetry.inspector-meta != "" ? root.telemetry.inspector-meta : (Theme.fr ? "Sélectionnez une ligne du flux pour inspecter le JSON masqué ou les diffs d'état" : "Select any stream row to inspect redacted JSON or state diffs");
                     color: Theme.muted;
-                    font-size: 11px;
+                    font-size: Type.label;
                     overflow: elide;
                 }
             }
             HorizontalLayout {
-                spacing: 4px;
+                spacing: Space.xs;
                 Action {
                     text: "JSON";
                     selected: root.inspector-mode == 0;
@@ -1211,7 +1253,6 @@ component TelemetryInspector inherits Rectangle {
                 if root.telemetry.inspector-has-secrets: Action {
                     text: root.telemetry.secrets-revealed ? (Theme.fr ? "Masquer" : "Mask") : (Theme.fr ? "Révéler" : "Reveal");
                     selected: root.telemetry.secrets-revealed;
-                    primary-signal: true;
                     clicked => { root.toggle-reveal-secrets(); }
                 }
             }
@@ -1237,7 +1278,7 @@ component TelemetryInspector inherits Rectangle {
                     single-line: false;
                     wrap: word-wrap;
                     font-family: Type.mono-family;
-                    font-size: 11px;
+                    font-size: Type.label;
                     color: Theme.text;
                     text: root.telemetry.inspector-payload != ""
                         ? root.telemetry.inspector-payload
@@ -1263,10 +1304,10 @@ component TelemetryEventsList inherits Rectangle {
         content-height: ev-col.preferred-height + 16px;
         ev-col := VerticalLayout {
             width: parent.width;
-            padding: 8px;
-            spacing: 4px;
+            padding: Space.sm;
+            spacing: Space.xs;
             if root.telemetry.events.length == 0: Text {
-                text: Theme.fr ? "Aucun événement de télémétrie capturé pour ce filtre." : "No telemetry events captured for current filter.";
+                text: Theme.fr ? "Aucun événement capturé pour ce filtre." : "No events captured for this filter.";
                 color: Theme.muted;
                 font-size: Type.small;
                 horizontal-alignment: center;
@@ -1287,17 +1328,17 @@ component TelemetryEndpointRow inherits Rectangle {
     border-radius: Theme.radius-sm;
     background: touch.has-hover ? Theme.panel-raised : Theme.ground;
     border-width: 1px;
-    border-color: touch.has-hover ? Theme.signal : Theme.rule;
+    border-color: touch.has-hover ? Theme.rule-strong : Theme.rule;
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 8px;
+        padding-left: Space.sm;
+        padding-right: Space.sm;
+        spacing: Space.sm;
         Rectangle {
             width: 38px;
             height: 20px;
             y: (parent.height - self.height) / 2;
-            border-radius: 3px;
+            border-radius: Theme.radius-sm;
             background: Theme.panel-raised;
             border-width: 1px;
             border-color: ep.source-idx == 0 ? Theme.blue : (ep.source-idx == 2 ? Theme.live-green : Theme.rule-strong);
@@ -1305,7 +1346,7 @@ component TelemetryEndpointRow inherits Rectangle {
                 text: ep.source;
                 color: Theme.text;
                 font-family: Type.mono-family;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 800;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -1319,22 +1360,22 @@ component TelemetryEndpointRow inherits Rectangle {
                 text: ep.method + " " + ep.path;
                 color: Theme.text;
                 font-family: Type.mono-family;
-                font-size: 11px;
+                font-size: Type.label;
                 font-weight: 700;
                 overflow: elide;
             }
             Text {
                 text: ep.namespace + " · " + ep.origin + " · " + ep.stats;
                 color: Theme.muted;
-                font-size: 11px;
+                font-size: Type.label;
                 overflow: elide;
             }
         }
         Text {
             text: Theme.fr ? "Tester GET" : "Use GET";
-            color: touch.has-hover ? Theme.signal-text : Theme.muted;
-            font-size: 11px;
-            font-weight: 700;
+            color: touch.has-hover ? Theme.text : Theme.muted;
+            font-size: Type.label;
+            font-weight: 800;
             vertical-alignment: center;
         }
     }
@@ -1360,8 +1401,8 @@ component TelemetryEndpointsList inherits Rectangle {
         content-height: ep-col.preferred-height + 16px;
         ep-col := VerticalLayout {
             width: parent.width;
-            padding: 8px;
-            spacing: 4px;
+            padding: Space.sm;
+            spacing: Space.xs;
             if root.telemetry.endpoints.length == 0: Text {
                 text: Theme.fr ? "Aucun point d'API ne correspond au filtre." : "No API endpoints matched filter.";
                 color: Theme.muted;
@@ -1390,8 +1431,8 @@ component TelemetrySystemView inherits Rectangle {
         content-height: sys-col.preferred-height + 20px;
         sys-col := VerticalLayout {
             width: parent.width;
-            padding: 12px;
-            spacing: 14px;
+            padding: Space.md;
+            spacing: Space.md;
 
             SectionLabel { text: (Theme.fr ? "PROCESSUS RIOT (" : "RIOT PROCESSES (") + root.telemetry.processes.length + ")"; }
             if root.telemetry.processes.length == 0: Text {
@@ -1406,14 +1447,14 @@ component TelemetrySystemView inherits Rectangle {
                 border-width: 1px;
                 border-color: Theme.rule;
                 HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    spacing: 8px;
+                    padding-left: Space.md;
+                    padding-right: Space.md;
+                    spacing: Space.sm;
                     Text {
                         text: p.name + " (PID " + p.pid + ")";
                         color: Theme.text;
-                        font-size: 12px;
-                        font-weight: 700;
+                        font-size: Type.small;
+                        font-weight: 800;
                         vertical-alignment: center;
                         overflow: elide;
                     }
@@ -1421,7 +1462,7 @@ component TelemetrySystemView inherits Rectangle {
                         text: p.cpu + " · " + p.mem;
                         color: Theme.muted;
                         font-family: Type.mono-family;
-                        font-size: 11px;
+                        font-size: Type.label;
                         horizontal-alignment: right;
                         vertical-alignment: center;
                     }
@@ -1436,21 +1477,21 @@ component TelemetrySystemView inherits Rectangle {
                 border-width: 1px;
                 border-color: Theme.rule;
                 HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    spacing: 8px;
+                    padding-left: Space.md;
+                    padding-right: Space.md;
+                    spacing: Space.sm;
                     Text {
                         text: s.proto + " " + s.address;
                         color: Theme.text;
                         font-family: Type.mono-family;
-                        font-size: 11px;
+                        font-size: Type.label;
                         vertical-alignment: center;
                     }
                     Text {
                         text: "PID " + s.pid + " · " + s.state;
                         color: Theme.muted;
                         font-family: Type.mono-family;
-                        font-size: 11px;
+                        font-size: Type.label;
                         horizontal-alignment: right;
                         vertical-alignment: center;
                     }
@@ -1465,14 +1506,14 @@ component TelemetrySystemView inherits Rectangle {
                 border-width: 1px;
                 border-color: Theme.rule;
                 HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    spacing: 8px;
+                    padding-left: Space.md;
+                    padding-right: Space.md;
+                    spacing: Space.sm;
                     Text {
                         text: c.address;
                         color: Theme.text;
                         font-family: Type.mono-family;
-                        font-size: 11px;
+                        font-size: Type.label;
                         vertical-alignment: center;
                         overflow: elide;
                     }
@@ -1480,7 +1521,7 @@ component TelemetrySystemView inherits Rectangle {
                         text: c.state;
                         color: Theme.muted;
                         font-family: Type.mono-family;
-                        font-size: 11px;
+                        font-size: Type.label;
                         horizontal-alignment: right;
                         vertical-alignment: center;
                     }
@@ -1520,25 +1561,25 @@ component TelemetryPanel inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: 14px;
-        spacing: 10px;
+        padding: Space.md;
+        spacing: Space.md;
 
         // Telemetry Header Bar
         HorizontalLayout {
-            spacing: 8px;
+            spacing: Space.sm;
             alignment: stretch;
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: center;
                 spacing: 1px;
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: Space.sm;
                     alignment: start;
                     Text {
-                        text: Theme.fr ? "LABO TÉLÉMÉTRIE" : "TELEMETRY LAB";
+                        text: Theme.fr ? "OBSERVATOIRE" : "OBSERVATORY";
                         color: Theme.text;
                         font-family: Type.display-family;
-                        font-size: 20px;
+                        font-size: Type.title;
                         font-weight: 800;
                         letter-spacing: 0.6px;
                         vertical-alignment: center;
@@ -1547,15 +1588,15 @@ component TelemetryPanel inherits Rectangle {
                         y: (parent.height - self.height) / 2;
                         height: 20px;
                         width: phase-badge.preferred-width + 12px;
-                        border-radius: 3px;
-                        background: Theme.signal-soft;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.panel-raised;
                         border-width: 1px;
-                        border-color: Theme.signal;
+                        border-color: Theme.rule-strong;
                         phase-badge := Text {
                             text: root.telemetry.phase;
-                            color: Theme.signal-text;
+                            color: Theme.text;
                             font-family: Type.mono-family;
-                            font-size: 11px;
+                            font-size: Type.label;
                             font-weight: 700;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -1566,11 +1607,11 @@ component TelemetryPanel inherits Rectangle {
                     text: root.telemetry.rate + " · " + root.telemetry.total-events;
                     color: Theme.muted;
                     font-family: Type.mono-family;
-                    font-size: 11px;
+                    font-size: Type.label;
                 }
             }
             HorizontalLayout {
-                spacing: 6px;
+                spacing: Space.sm;
                 Action {
                     text: root.split ? (Theme.fr ? "Pleine Vue" : "Full View") : (Theme.fr ? "Vue Scindée" : "Split View");
                     selected: !root.split;
@@ -1585,30 +1626,27 @@ component TelemetryPanel inherits Rectangle {
 
         // Sources Summary Strip
         HorizontalLayout {
-            spacing: 6px;
+            spacing: Space.sm;
             for src in root.telemetry.sources: TelemetrySourceCard { src: src; }
         }
 
         // Sub-tabs (without numeric prefixes)
         HorizontalLayout {
-            spacing: 6px;
+            spacing: Space.sm;
             alignment: stretch;
             Action {
                 text: Theme.fr ? "Flux en Direct" : "Live Stream";
                 selected: root.tab == 0;
-                primary-signal: true;
                 clicked => { root.tab = 0; }
             }
             Action {
                 text: (Theme.fr ? "Catalogue API (" : "API Catalog (") + root.telemetry.endpoints-total + ")";
                 selected: root.tab == 1;
-                primary-signal: true;
                 clicked => { root.tab = 1; }
             }
             Action {
                 text: Theme.fr ? "Système" : "System";
                 selected: root.tab == 2;
-                primary-signal: true;
                 clicked => { root.tab = 2; }
             }
         }
@@ -1616,10 +1654,10 @@ component TelemetryPanel inherits Rectangle {
         // Tab 0: Event Stream + Inspector
         if root.tab == 0: VerticalLayout {
             vertical-stretch: 1;
-            spacing: 8px;
+            spacing: Space.sm;
 
             HorizontalLayout {
-                spacing: 4px;
+                spacing: Space.xs;
                 Action { text: Theme.fr ? "Tous" : "All"; selected: root.source-filter == 0; clicked => { root.source-filter = 0; } }
                 Action { text: "LCU"; selected: root.source-filter == 1; clicked => { root.source-filter = 1; } }
                 Action { text: "RC"; selected: root.source-filter == 2; clicked => { root.source-filter = 2; } }
@@ -1628,14 +1666,13 @@ component TelemetryPanel inherits Rectangle {
                 Action {
                     text: root.paused ? (Theme.fr ? "Reprendre" : "Resume") : "Pause";
                     selected: root.paused;
-                    primary-signal: true;
                     clicked => { root.paused = !root.paused; }
                 }
                 Action { text: Theme.fr ? "Vider" : "Clear"; clicked => { root.clear-events(); } }
             }
 
             HorizontalLayout {
-                spacing: 4px;
+                spacing: Space.xs;
                 Action { text: Theme.fr ? "Tous types" : "All types"; selected: root.kind-filter == 0; clicked => { root.kind-filter = 0; } }
                 Action { text: Theme.fr ? "MàJ" : "Update"; selected: root.kind-filter == 1; clicked => { root.kind-filter = 1; } }
                 Action { text: Theme.fr ? "Création" : "Create"; selected: root.kind-filter == 2; clicked => { root.kind-filter = 2; } }
@@ -1662,7 +1699,7 @@ component TelemetryPanel inherits Rectangle {
         // Tab 1: API Catalog & Read-Only GET Runner
         if root.tab == 1: VerticalLayout {
             vertical-stretch: 1;
-            spacing: 8px;
+            spacing: Space.sm;
 
             Rectangle {
                 height: 46px;
@@ -1671,8 +1708,8 @@ component TelemetryPanel inherits Rectangle {
                 border-width: 1px;
                 border-color: Theme.rule;
                 HorizontalLayout {
-                    padding: 6px;
-                    spacing: 6px;
+                    padding: Space.sm;
+                    spacing: Space.sm;
                     Action { text: "LCU"; selected: root.call-source-idx == 0; clicked => { root.call-source-idx = 0; } }
                     Action { text: "RC"; selected: root.call-source-idx == 1; clicked => { root.call-source-idx = 1; } }
                     Action { text: ":2999"; selected: root.call-source-idx == 2; clicked => { root.call-source-idx = 2; } }
@@ -1689,7 +1726,7 @@ component TelemetryPanel inherits Rectangle {
                             text <=> root.call-path;
                             color: Theme.text;
                             font-family: Type.mono-family;
-                            font-size: 11px;
+                            font-size: Type.label;
                             vertical-alignment: center;
                             single-line: true;
                             accepted => { root.execute-get(root.call-source-idx, root.call-path); }
@@ -1697,15 +1734,14 @@ component TelemetryPanel inherits Rectangle {
                     }
                     Action {
                         text: "GET";
-                        selected: true;
-                        primary-signal: true;
+                        primary: true;
                         clicked => { root.execute-get(root.call-source-idx, root.call-path); }
                     }
                 }
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Space.sm;
                 Rectangle {
                     horizontal-stretch: 1;
                     height: 32px;
@@ -1718,7 +1754,7 @@ component TelemetryPanel inherits Rectangle {
                         height: 100%;
                         text: root.endpoint-filter == "" ? (Theme.fr ? "Filtrer les API (summoner, lobby, champ-select...)" : "Filter APIs (summoner, lobby, champ-select...)") : "";
                         color: Theme.muted;
-                        font-size: 12px;
+                        font-size: Type.small;
                         vertical-alignment: center;
                     }
                     TextInput {
@@ -1727,7 +1763,7 @@ component TelemetryPanel inherits Rectangle {
                         height: 100%;
                         text <=> root.endpoint-filter;
                         color: Theme.text;
-                        font-size: 12px;
+                        font-size: Type.small;
                         vertical-alignment: center;
                         single-line: true;
                         edited => { root.set-endpoint-filter(self.text); }
@@ -1737,7 +1773,7 @@ component TelemetryPanel inherits Rectangle {
                     text: root.telemetry.endpoints-summary;
                     color: Theme.muted;
                     font-family: Type.mono-family;
-                    font-size: 11px;
+                    font-size: Type.label;
                     vertical-alignment: center;
                 }
             }
@@ -1759,13 +1795,13 @@ component TelemetryPanel inherits Rectangle {
                 border-color: Theme.rule-strong;
                 clip: true;
                 VerticalLayout {
-                    padding: 8px;
-                    spacing: 4px;
+                    padding: Space.sm;
+                    spacing: Space.xs;
                     Text {
                         text: root.telemetry.call-status;
-                        color: Theme.signal-text;
+                        color: Theme.text;
                         font-family: Type.mono-family;
-                        font-size: 11px;
+                        font-size: Type.label;
                         font-weight: 700;
                     }
                     Flickable {
@@ -1779,7 +1815,7 @@ component TelemetryPanel inherits Rectangle {
                             text: root.telemetry.call-response;
                             color: Theme.text;
                             font-family: Type.mono-family;
-                            font-size: 11px;
+                            font-size: Type.label;
                         }
                     }
                 }
@@ -1801,13 +1837,12 @@ component EndScreen inherits Flickable {
 
     end-body := VerticalLayout {
         padding: Theme.gutter;
-        spacing: 20px;
+        spacing: Space.xl;
 
         Header {
             title: root.end.title;
             detail: root.end.detail;
             specimen: root.end.kda;
-            active-turn: root.end.victory;
             compact: root.compact;
         }
 
@@ -1817,11 +1852,11 @@ component EndScreen inherits Flickable {
             border-width: 1px;
             border-color: Theme.rule;
             VerticalLayout {
-                padding: 18px;
-                spacing: 8px;
-                SectionLabel { text: Theme.fr ? "RÉSUMÉ TÉLÉMÉTRIQUE DU MATCH" : "MATCH TELEMETRY SUMMARY"; }
+                padding: Space.lg;
+                spacing: Space.sm;
+                SectionLabel { text: Theme.fr ? "RÉSUMÉ DU MATCH" : "MATCH SUMMARY"; }
                 if root.end.champion-name != "": HorizontalLayout {
-                    spacing: 12px;
+                    spacing: Space.md;
                     height: 48px;
                     ChampPlate {
                         y: (parent.height - self.height) / 2;
@@ -1832,7 +1867,7 @@ component EndScreen inherits Flickable {
                     }
                     VerticalLayout {
                         alignment: center;
-                        spacing: 2px;
+                        spacing: Space.xxs;
                         Text {
                             text: root.end.champion-name;
                             color: Theme.text;
@@ -1841,7 +1876,7 @@ component EndScreen inherits Flickable {
                         }
                         Text {
                             text: root.end.title + " · " + root.end.kda;
-                            color: root.end.victory ? Theme.signal-text : Theme.muted;
+                            color: root.end.victory ? Theme.live-green : Theme.muted;
                             font-size: Type.small;
                             font-weight: 600;
                         }
@@ -1885,6 +1920,12 @@ export component MainWindow inherits Window {
     in property <ChampSelectView> champ;
     in property <LiveView> live;
     in property <EndView> end;
+    // Running phase clock pushed by Rust four times a second: -1 when the phase has none.
+    in property <int> clock-seconds: -1;
+    in property <int> clock-total: 0;
+    in property <bool> clock-down: true;
+    // Stop server asks once before it closes the phone link.
+    in-out property <bool> remote-confirm-stop: false;
 
     in-out property <bool> telemetry-enabled: false;
     in-out property <bool> telemetry-split: true;
@@ -1897,6 +1938,10 @@ export component MainWindow inherits Window {
     in-out property <string> call-path: "/lol-summoner/v1/current-summoner";
     in-out property <string> endpoint-filter: "";
     in property <TelemetryView> telemetry;
+
+    in property <PerfSettings> perf;
+    in-out property <bool> settings-open: false;
+    callback toggle-setting(string);
 
     callback toggle-widget();
     callback toggle-remote-panel();
@@ -1925,7 +1970,7 @@ export component MainWindow inherits Window {
     HorizontalLayout {
         spacing: 0px;
 
-        // Persistent Left Pit-Wall Workspace Rail
+        // Persistent left workspace rail. Scrolls instead of clipping when the window is short.
         Rectangle {
             width: 216px;
             background: Theme.shell;
@@ -1938,20 +1983,27 @@ export component MainWindow inherits Window {
                 background: Theme.rule;
             }
 
-            VerticalLayout {
-                padding: 12px;
-                spacing: 10px;
+            rail-flick := Flickable {
+                width: parent.width - 1px;
+                height: 100%;
+                content-height: max(self.height, rail-col.preferred-height);
+
+            rail-col := VerticalLayout {
+                width: rail-flick.width;
+                height: rail-flick.content-height;
+                padding: Space.md;
+                spacing: Space.md;
 
                 // Brand emblem + title
                 HorizontalLayout {
                     height: 40px;
-                    spacing: 10px;
+                    spacing: Space.md;
                     alignment: start;
                     Rectangle {
                         width: 28px;
                         height: 28px;
                         y: (parent.height - self.height) / 2;
-                        border-radius: 5px;
+                        border-radius: Theme.radius;
                         clip: true;
                         border-width: 1px;
                         border-color: Theme.rule-strong;
@@ -1969,15 +2021,15 @@ export component MainWindow inherits Window {
                             text: "HYPATIA";
                             color: Theme.text;
                             font-family: Type.display-family;
-                            font-size: 19px;
+                            font-size: Type.title;
                             font-weight: 800;
                             letter-spacing: 0.9px;
                         }
                         Text {
-                            text: Theme.fr ? "POSTE DE PILOTAGE" : "PIT WALL";
-                            color: Theme.signal-text;
+                            text: Theme.fr ? "COMPAGNON LOL" : "LOL COMPANION";
+                            color: Theme.muted;
                             font-family: Type.mono-family;
-                            font-size: 11px;
+                            font-size: Type.label;
                             font-weight: 700;
                             letter-spacing: 1px;
                         }
@@ -2001,7 +2053,7 @@ export component MainWindow inherits Window {
                 }
 
                 RailNavItem {
-                    label: Theme.fr ? "Télémétrie" : "Telemetry Lab";
+                    label: Theme.fr ? "Observatoire" : "Observatory";
                     icon-path: "M 3 12 H 7 L 10 5 L 14 19 L 17 12 H 21";
                     active: root.telemetry-enabled;
                     badge: root.telemetry-enabled ? (root.telemetry-split ? (Theme.fr ? "DIV." : "SPLIT") : (Theme.fr ? "PLEIN" : "FULL")) : "";
@@ -2030,6 +2082,17 @@ export component MainWindow inherits Window {
                     clicked => { root.toggle-widget(); }
                 }
 
+                RailNavItem {
+                    label: "Performance";
+                    icon-path: "M 4 6 H 20 M 4 12 H 20 M 4 18 H 20 M 8 4 V 8 M 16 10 V 14 M 10 16 V 20";
+                    active: root.settings-open;
+                    badge: root.perf.eco-mode ? (Theme.fr ? "ÉCO" : "ECO") : "";
+                    clicked => {
+                        root.remote-panel-open = false;
+                        root.settings-open = !root.settings-open;
+                    }
+                }
+
                 Rectangle { height: 1px; background: Theme.rule; }
 
                 SectionLabel { text: "SIMULATION"; }
@@ -2043,55 +2106,49 @@ export component MainWindow inherits Window {
                 }
 
                 if root.demo: VerticalLayout {
-                    spacing: 4px;
+                    spacing: Space.xs;
                     HorizontalLayout {
-                        spacing: 4px;
+                        spacing: Space.xs;
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Salon" : "Lobby";
                             selected: root.view == 2;
-                            primary-signal: true;
                             clicked => { root.select-demo-phase("Lobby"); }
                         }
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "File" : "Queue";
                             selected: root.view == 3;
-                            primary-signal: true;
                             clicked => { root.select-demo-phase("Matchmaking"); }
                         }
                     }
                     HorizontalLayout {
-                        spacing: 4px;
+                        spacing: Space.xs;
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Prêt" : "Ready";
                             selected: root.view == 4;
-                            primary-signal: true;
                             clicked => { root.select-demo-phase("ReadyCheck"); }
                         }
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Champ." : "Champ";
                             selected: root.view == 5;
-                            primary-signal: true;
                             clicked => { root.select-demo-phase("ChampSelect"); }
                         }
                     }
                     HorizontalLayout {
-                        spacing: 4px;
+                        spacing: Space.xs;
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "En jeu" : "Live";
                             selected: root.view == 6;
-                            primary-signal: true;
                             clicked => { root.select-demo-phase("InProgress"); }
                         }
                         Action {
                             horizontal-stretch: 1;
                             text: Theme.fr ? "Bilan" : "End";
                             selected: root.view == 7;
-                            primary-signal: true;
                             clicked => { root.select-demo-phase("EndOfGame"); }
                         }
                     }
@@ -2103,7 +2160,7 @@ export component MainWindow inherits Window {
 
                 SectionLabel { text: Theme.fr ? "SOURCES RIOT" : "RIOT SOURCES"; }
                 VerticalLayout {
-                    spacing: 2px;
+                    spacing: Space.xxs;
                     RailSourceRow {
                         label: Theme.fr ? "API LCU" : "LCU API";
                         port: root.lcu-live && root.lcu-port != "" ? root.lcu-port : (root.lcu-live ? (Theme.fr ? "prêt" : "ready") : (Theme.fr ? "hors ligne" : "offline"));
@@ -2125,41 +2182,38 @@ export component MainWindow inherits Window {
 
                 // Language switcher (EN / FR)
                 HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Space.xs;
                     Action {
                         horizontal-stretch: 1;
                         text: "EN";
                         selected: !Theme.fr;
-                        primary-signal: true;
                         clicked => { root.set-fr(false); }
                     }
                     Action {
                         horizontal-stretch: 1;
                         text: "FR";
                         selected: Theme.fr;
-                        primary-signal: true;
                         clicked => { root.set-fr(true); }
                     }
                 }
 
                 // Day / Night theme printing switch
                 HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Space.xs;
                     Action {
                         horizontal-stretch: 1;
                         text: Theme.fr ? "Nuit" : "Dark";
                         selected: Theme.dark;
-                        primary-signal: true;
                         clicked => { root.set-dark(true); }
                     }
                     Action {
                         horizontal-stretch: 1;
                         text: Theme.fr ? "Jour" : "Light";
                         selected: !Theme.dark;
-                        primary-signal: true;
                         clicked => { root.set-dark(false); }
                     }
                 }
+            }
             }
         }
 
@@ -2181,9 +2235,9 @@ export component MainWindow inherits Window {
                 }
 
                 HorizontalLayout {
-                    padding-left: 20px;
-                    padding-right: 20px;
-                    spacing: 12px;
+                    padding-left: Space.xl;
+                    padding-right: Space.xl;
+                    spacing: Space.md;
                     alignment: stretch;
 
                     PhaseLine {
@@ -2194,7 +2248,7 @@ export component MainWindow inherits Window {
                     Rectangle { horizontal-stretch: 1; }
 
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Space.sm;
 
                         if root.queue-label != "": Rectangle {
                             y: (parent.height - self.height) / 2;
@@ -2207,8 +2261,8 @@ export component MainWindow inherits Window {
                             q-lbl := Text {
                                 text: root.queue-label;
                                 color: Theme.text;
-                                font-size: 11px;
-                                font-weight: 700;
+                                font-size: Type.label;
+                                font-weight: 800;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -2219,14 +2273,14 @@ export component MainWindow inherits Window {
                             height: 24px;
                             width: demo-tag.preferred-width + 14px;
                             border-radius: Theme.radius-sm;
-                            background: Theme.signal-soft;
+                            background: Theme.panel-raised;
                             border-width: 1px;
-                            border-color: Theme.signal;
+                            border-color: Theme.rule-strong;
                             demo-tag := Text {
-                                text: Theme.fr ? "FLUX DÉMO" : "DEMO STREAM";
-                                color: Theme.signal-text;
+                                text: Theme.fr ? "DÉMO" : "DEMO";
+                                color: Theme.text;
                                 font-family: Type.mono-family;
-                                font-size: 11px;
+                                font-size: Type.label;
                                 font-weight: 700;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
@@ -2239,7 +2293,6 @@ export component MainWindow inherits Window {
                                 ? (Theme.fr ? "Mobile connecté (" + root.remote-clients + ")" : "Mobile connected (" + root.remote-clients + ")")
                                 : (Theme.fr ? "App Mobile prête" : "Mobile Remote ready");
                             selected: root.remote-panel-open;
-                            primary-signal: true;
                             clicked => { root.toggle-remote-panel(); }
                         }
                     }
@@ -2273,6 +2326,9 @@ export component MainWindow inherits Window {
                             telemetry-enabled: root.telemetry-enabled;
                             remote-panel-open: root.remote-panel-open;
                             demo: root.demo;
+                            clock-seconds: root.clock-seconds;
+                            clock-total: root.clock-total;
+                            clock-down: root.clock-down;
                             toggle-telemetry => { root.toggle-telemetry(); }
                             toggle-remote-panel => { root.toggle-remote-panel(); }
                             toggle-demo => { root.toggle-demo(); }
@@ -2281,12 +2337,15 @@ export component MainWindow inherits Window {
                             width: 100%;
                             height: 100%;
                             cs: root.champ;
+                            clock-seconds: root.clock-seconds;
+                            clock-total: root.clock-total;
                             compact: stage.is-compact;
                         }
                         if root.view == 6: LiveScreen {
                             width: 100%;
                             height: 100%;
                             live: root.live;
+                            clock-seconds: root.clock-seconds;
                             compact: stage.is-compact;
                         }
                         if root.view == 7: EndScreen {
@@ -2325,10 +2384,23 @@ export component MainWindow inherits Window {
                 if root.remote-panel-open: Rectangle {
                     width: 100%;
                     height: 100%;
-                    background: #090b0faa;
+                    background: Theme.scrim;
 
                     TouchArea {
                         clicked => { root.remote-panel-open = false; }
+                    }
+                    FocusScope {
+                        init => {
+                            root.remote-confirm-stop = false;
+                            self.focus();
+                        }
+                        key-pressed(event) => {
+                            if (event.text == Key.Escape) {
+                                root.remote-panel-open = false;
+                                return accept;
+                            }
+                            return reject;
+                        }
                     }
 
                     Rectangle {
@@ -2345,20 +2417,20 @@ export component MainWindow inherits Window {
                         TouchArea {}
 
                         sheet-col := VerticalLayout {
-                            padding: 20px;
-                            spacing: 14px;
+                            padding: Space.xl;
+                            spacing: Space.md;
 
                             HorizontalLayout {
-                                spacing: 10px;
+                                spacing: Space.md;
                                 alignment: stretch;
                                 VerticalLayout {
                                     horizontal-stretch: 1;
-                                    spacing: 2px;
+                                    spacing: Space.xxs;
                                     Text {
                                         text: Theme.fr ? "ASSOCIATION APP MOBILE" : "MOBILE REMOTE PAIRING";
                                         color: Theme.text;
                                         font-family: Type.display-family;
-                                        font-size: 22px;
+                                        font-size: Type.title;
                                         font-weight: 800;
                                     }
                                     Text {
@@ -2372,7 +2444,7 @@ export component MainWindow inherits Window {
                                                     : root.remote-clients + " phone connected on LAN"))
                                             : (Theme.fr ? "En attente du scan QR sur le même réseau Wi-Fi" : "Waiting for QR scan on same Wi-Fi");
                                         color: root.remote-clients > 0 ? Theme.live-green : Theme.muted;
-                                        font-size: 12px;
+                                        font-size: Type.small;
                                         font-weight: 600;
                                     }
                                 }
@@ -2385,14 +2457,14 @@ export component MainWindow inherits Window {
                             Rectangle { height: 1px; background: Theme.rule; }
 
                             HorizontalLayout {
-                                spacing: 18px;
+                                spacing: Space.lg;
                                 alignment: stretch;
 
                                 Rectangle {
                                     width: 168px;
                                     height: 168px;
                                     border-radius: Theme.radius;
-                                    background: #efece3;
+                                    background: Theme.qr-ground;
                                     border-width: 1px;
                                     border-color: Theme.rule-strong;
                                     Image {
@@ -2408,19 +2480,19 @@ export component MainWindow inherits Window {
                                 VerticalLayout {
                                     horizontal-stretch: 1;
                                     alignment: space-between;
-                                    spacing: 10px;
+                                    spacing: Space.md;
 
                                     Text {
                                         text: Theme.fr
                                             ? "Scannez le code QR pour accepter la file, verrouiller vos choix et bans, échanger de poste, modifier vos runes et suivre la partie depuis votre téléphone."
                                             : "Scan the QR code to accept queues, lock picks & bans, swap roles/champions, switch runes, and view live objectives from your phone.";
                                         color: Theme.text;
-                                        font-size: 13px;
+                                        font-size: Type.body;
                                         wrap: word-wrap;
                                     }
 
                                     VerticalLayout {
-                                        spacing: 4px;
+                                        spacing: Space.xs;
                                         SectionLabel { text: Theme.fr ? "URL D'ASSOCIATION DIRECTE (SÉLECTIONNER POUR COPIER)" : "DIRECT PAIRING URL (SELECT TO COPY)"; }
                                         Rectangle {
                                             height: 32px;
@@ -2435,26 +2507,32 @@ export component MainWindow inherits Window {
                                                 read-only: true;
                                                 single-line: true;
                                                 text: root.remote-url;
-                                                color: Theme.signal-text;
+                                                color: Theme.text;
                                                 font-family: Type.mono-family;
-                                                font-size: 11px;
+                                                font-size: Type.label;
                                                 vertical-alignment: center;
                                             }
                                         }
                                     }
 
                                     HorizontalLayout {
-                                        spacing: 8px;
+                                        spacing: Space.sm;
                                         alignment: start;
                                         Action {
-                                            text: Theme.fr ? "Nouveau jeton QR" : "Rotate QR Token";
-                                            selected: true;
-                                            primary-signal: true;
+                                            text: Theme.fr ? "Nouveau code QR" : "New QR code";
                                             clicked => { root.rotate-remote-token(); }
                                         }
                                         Action {
-                                            text: Theme.fr ? "Arrêter le serveur" : "Stop Server";
-                                            clicked => { root.disable-remote(); }
+                                            text: root.remote-confirm-stop
+                                                ? (Theme.fr ? "Confirmer l'arrêt" : "Confirm stop")
+                                                : (Theme.fr ? "Arrêter le serveur" : "Stop server");
+                                            clicked => {
+                                                if (root.remote-confirm-stop) {
+                                                    root.disable-remote();
+                                                } else {
+                                                    root.remote-confirm-stop = true;
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2462,8 +2540,253 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
+
+                // Performance & Features sheet: every background activity has its own switch.
+                if root.settings-open: Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: Theme.scrim;
+
+                    TouchArea {
+                        clicked => { root.settings-open = false; }
+                    }
+                    FocusScope {
+                        init => { self.focus(); }
+                        key-pressed(event) => {
+                            if (event.text == Key.Escape) {
+                                root.settings-open = false;
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+
+                    Rectangle {
+                        x: 24px;
+                        y: max(12px, (parent.height - self.height) / 2);
+                        width: min(600px, parent.width - 48px);
+                        height: min(settings-col.preferred-height, parent.height - 24px);
+                        background: Theme.panel;
+                        border-radius: Theme.radius;
+                        border-width: 1px;
+                        border-color: Theme.rule-strong;
+                        clip: true;
+
+                        // Absorb clicks inside the sheet so the backdrop does not dismiss it.
+                        TouchArea {}
+
+                        Flickable {
+                            width: 100%;
+                            height: 100%;
+
+                            settings-col := VerticalLayout {
+                                padding: Space.xl;
+                                spacing: Space.sm;
+
+                                HorizontalLayout {
+                                    spacing: Space.md;
+                                    alignment: stretch;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: Space.xxs;
+                                        Text {
+                                            text: Theme.fr ? "PERFORMANCE ET FONCTIONS" : "PERFORMANCE & FEATURES";
+                                            color: Theme.text;
+                                            font-family: Type.display-family;
+                                            font-size: Type.title;
+                                            font-weight: 800;
+                                        }
+                                        Text {
+                                            text: Theme.fr
+                                                ? "Désactivez ce dont vous n'avez pas besoin : une fonction éteinte ne consomme rien."
+                                                : "Switch off what you do not need: a disabled feature costs nothing.";
+                                            color: Theme.muted;
+                                            font-size: Type.small;
+                                            font-weight: 600;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    Action {
+                                        text: Theme.fr ? "Fermer" : "Close";
+                                        clicked => { root.settings-open = false; }
+                                    }
+                                }
+
+                                Rectangle { height: 1px; background: Theme.rule; }
+                                SectionLabel { text: Theme.fr ? "COMPAGNON" : "COMPANION"; }
+
+                                SettingRow {
+                                    title: Theme.fr ? "Suivi de partie en direct" : "Live game board";
+                                    detail: Theme.fr
+                                        ? "Interroge le jeu une fois par seconde pendant la partie (score, tours, objectifs, mini widget)."
+                                        : "Polls the game once per second while you play (score, towers, objectives, mini widget).";
+                                    checked: root.perf.live-game;
+                                    toggled => { root.toggle-setting("live_game"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "Icônes du jeu" : "Game icons";
+                                    detail: Theme.fr
+                                        ? "Télécharge et affiche les portraits de champions, sorts et icônes de profil. Sinon : initiales."
+                                        : "Fetches and shows champion portraits, spells and profile icons. Otherwise: initials.";
+                                    checked: root.perf.game-icons;
+                                    toggled => { root.toggle-setting("game_icons"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "Connexion au Client Riot" : "Riot Client connection";
+                                    detail: Theme.fr
+                                        ? "Garde un second WebSocket ouvert vers le Client Riot (présence du chat)."
+                                        : "Keeps a second WebSocket open to the Riot Client (chat presence).";
+                                    checked: root.perf.riot-client;
+                                    toggled => { root.toggle-setting("riot_client"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "App Mobile au démarrage" : "Mobile Remote at launch";
+                                    detail: Theme.fr
+                                        ? "Démarre le serveur local d'association. Éteint : aucun port ouvert sur le réseau."
+                                        : "Starts the local pairing server. Off: no port is opened on your network.";
+                                    checked: root.perf.mobile-remote;
+                                    toggled => { root.toggle-setting("mobile_remote"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "Mode éco" : "Eco mode";
+                                    detail: Theme.fr
+                                        ? "Divise par deux les fréquences de rafraîchissement (interface, détection, partie en direct)."
+                                        : "Halves refresh rates (interface, detection, live game).";
+                                    checked: root.perf.eco-mode;
+                                    toggled => { root.toggle-setting("eco_mode"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "Réduire les animations" : "Reduce motion";
+                                    detail: Theme.fr
+                                        ? "Coupe toutes les animations. Le réglage d'animations de Windows est respecté dans tous les cas."
+                                        : "Turns every animation off. The Windows animation setting is honoured either way.";
+                                    checked: root.perf.reduce-motion;
+                                    toggled => { root.toggle-setting("reduce_motion"); }
+                                }
+
+                                Rectangle { height: 1px; background: Theme.rule; }
+                                SectionLabel {
+                                    text: Theme.fr
+                                        ? "OBSERVATOIRE (ACTIF UNIQUEMENT QUAND IL EST OUVERT)"
+                                        : "OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)";
+                                }
+
+                                SettingRow {
+                                    title: Theme.fr ? "Empreinte système" : "System footprint";
+                                    detail: Theme.fr
+                                        ? "Mesure CPU / RAM des processus Riot et liste leurs ports et connexions."
+                                        : "Samples Riot process CPU / RAM and lists their ports and connections.";
+                                    checked: root.perf.system-footprint;
+                                    toggled => { root.toggle-setting("system_footprint"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "Catalogue des endpoints" : "Endpoint catalog";
+                                    detail: Theme.fr
+                                        ? "Importe la liste Swagger / help des clients (plusieurs milliers d'entrées)."
+                                        : "Imports the clients' Swagger / help listing (several thousand entries).";
+                                    checked: root.perf.endpoint-catalog;
+                                    toggled => { root.toggle-setting("endpoint_catalog"); }
+                                }
+                                SettingRow {
+                                    title: Theme.fr ? "Sonde API Replay" : "Replay API probe";
+                                    detail: Theme.fr
+                                        ? "Interroge /replay/game toutes les 5 secondes pendant une partie."
+                                        : "Queries /replay/game every 5 seconds during a game.";
+                                    checked: root.perf.replay-api;
+                                    toggled => { root.toggle-setting("replay_api"); }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+// One allied draft slot in the mini widget: lane, champion, and whose turn it is.
+component MiniAllyRow inherits Rectangle {
+    in property <AllyRow> ally;
+    height: 44px;
+    border-radius: Theme.radius-sm;
+    background: root.ally.picking ? Theme.signal-soft : (root.ally.is-self ? Theme.panel-raised : Theme.panel);
+    border-width: 1px;
+    border-color: root.ally.picking ? Theme.signal : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
+    animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+    accessible-role: text;
+    accessible-label: Theme.lane-name(root.ally.lane) + ", "
+        + (root.ally.champion != "" ? root.ally.champion : (Theme.fr ? "pas encore choisi" : "no pick yet"))
+        + (root.ally.picking ? (Theme.fr ? ", à son tour" : ", acting now") : "");
+
+    HorizontalLayout {
+        padding-left: Space.sm;
+        padding-right: Space.md;
+        spacing: Space.sm;
+        Rectangle {
+            width: 22px;
+            Roundel { size: 22px; lane: root.ally.lane; y: (parent.height - self.height) / 2; }
+        }
+        Rectangle {
+            width: 30px;
+            ChampPlate {
+                y: (parent.height - self.height) / 2;
+                size: 30px;
+                label: root.ally.initials;
+                icon: root.ally.icon;
+                mine: true;
+                empty: root.ally.champion == "";
+            }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.ally.champion != "" ? root.ally.champion : (Theme.fr ? "En attente" : "Waiting");
+            color: root.ally.champion != "" ? Theme.text : Theme.muted;
+            font-size: Type.body;
+            font-weight: 800;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.ally.is-self || root.ally.picking: Text {
+            text: root.ally.picking
+                ? (root.ally.is-self ? (Theme.fr ? "À VOUS" : "YOUR TURN") : (Theme.fr ? "CHOISIT" : "PICKING"))
+                : (Theme.fr ? "VOUS" : "YOU");
+            color: root.ally.picking ? Theme.signal-text : Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One player in the mini widget's team strip: portrait, then level or respawn countdown.
+component MiniPlayerCell inherits VerticalLayout {
+    in property <PlayerLine> p;
+    in property <bool> mine: true;
+    spacing: Space.xxs;
+    alignment: start;
+    accessible-role: text;
+    accessible-label: root.p.champion
+        + (root.p.dead ? (Theme.fr ? ", mort, réapparition " : ", dead, respawn ") + root.p.respawn : "");
+    HorizontalLayout {
+        alignment: center;
+        ChampPlate {
+            size: 36px;
+            label: root.p.initials;
+            icon: root.p.icon;
+            mine: root.mine;
+            faded: root.p.dead;
+            border-width: root.p.is-self ? 2px : 0px;
+            border-color: Theme.plate;
+        }
+    }
+    Text {
+        text: root.p.dead ? root.p.respawn : ((Theme.fr ? "Niv " : "Lv ") + root.p.level);
+        color: root.p.dead ? Theme.danger : Theme.muted;
+        font-family: Type.mono-family;
+        font-size: Type.label;
+        font-weight: root.p.dead ? 700 : 400;
+        horizontal-alignment: center;
     }
 }
 
@@ -2478,49 +2801,86 @@ export component MiniWidget inherits Window {
     always-on-top: true;
     background: Theme.ground;
 
+    // Same view index as the main window: 4 match found, 5 champion select, 6 in game.
+    in property <int> view: 0;
     in property <bool> in-game: false;
-    in property <string> wait-title: Theme.fr ? "En attente d'une partie" : "Waiting for a match";
-    in property <string> wait-detail: Theme.fr
-        ? "La télémétrie en direct s'affichera au lancement de la partie."
-        : "Live match telemetry appears automatically when a game starts.";
+    in property <WaitView> wait;
+    in property <ChampSelectView> champ;
     in property <LiveView> live;
+    in property <int> clock-seconds: -1;
+    in property <int> clock-total: 0;
+    in property <bool> clock-down: true;
+    property <bool> drafting: !root.in-game && root.view == 5;
 
-    if !root.in-game: VerticalLayout {
-        padding: 20px;
+    // Between games: what the client is doing, with the queue or ready-check clock.
+    if !root.in-game && !root.drafting: VerticalLayout {
+        padding: Space.xl;
         alignment: center;
-        spacing: 12px;
+        spacing: Space.lg;
         Plate {
-            title: root.wait-title;
-            detail: root.wait-detail;
+            title: root.wait.title != "" ? root.wait.title : (Theme.fr ? "En attente d'une partie" : "Waiting for a match");
+            detail: root.wait.title != "" ? "" : (Theme.fr
+                ? "La sélection des champions et la partie s'afficheront ici automatiquement."
+                : "Champion select and your game show up here automatically.");
+            active-turn: root.view == 4;
+        }
+        if root.clock-seconds >= 0: ClockReadout {
+            seconds: root.clock-seconds;
+            total: root.clock-total;
+            down: root.clock-down;
+            size: Type.specimen-compact;
+            align-left: true;
         }
     }
 
-    if root.in-game: VerticalLayout {
-        padding: 14px;
-        spacing: 10px;
+    // Champion select: whose turn, the clock, and the five allied slots.
+    if root.drafting: VerticalLayout {
+        padding: Space.md;
+        spacing: Space.sm;
+        Plate {
+            title: root.champ.title;
+            detail: root.champ.detail;
+            active-turn: root.champ.my-turn;
+        }
+        ClockReadout {
+            seconds: root.clock-seconds;
+            total: root.clock-total;
+            fallback: root.champ.timer;
+            size: Type.specimen-compact;
+            align-left: true;
+        }
+        for a in root.champ.allies: MiniAllyRow { ally: a; }
+        Rectangle { vertical-stretch: 1; }
+    }
 
-        // Compact Top Scoreboard & Clock Bar
+    if root.in-game: VerticalLayout {
+        padding: Space.md;
+        spacing: Space.sm;
+
+        // Score, game clock, your KDA
         Rectangle {
-            height: 48px;
+            height: 52px;
             background: Theme.panel;
             border-radius: Theme.radius-sm;
             border-width: 1px;
             border-color: Theme.rule;
 
             HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 8px;
+                padding-left: Space.md;
+                padding-right: Space.md;
+                spacing: Space.sm;
                 alignment: stretch;
 
                 HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Space.xs;
                     alignment: start;
+                    accessible-role: text;
+                    accessible-label: (Theme.fr ? "Score : " : "Score: ") + root.live.my-score + " - " + root.live.enemy-score;
                     Text {
                         text: root.live.my-score;
                         color: Theme.blue;
                         font-family: Type.display-family;
-                        font-size: 30px;
+                        font-size: Type.timer;
                         font-weight: 800;
                         vertical-alignment: center;
                     }
@@ -2528,25 +2888,26 @@ export component MiniWidget inherits Window {
                         text: ":";
                         color: Theme.muted;
                         font-family: Type.display-family;
-                        font-size: 24px;
+                        font-size: Type.title;
                         vertical-alignment: center;
                     }
                     Text {
                         text: root.live.enemy-score;
                         color: Theme.red;
                         font-family: Type.display-family;
-                        font-size: 30px;
+                        font-size: Type.timer;
                         font-weight: 800;
                         vertical-alignment: center;
                     }
                 }
 
                 Text {
-                    text: root.live.clock;
-                    color: Theme.signal-text;
-                    font-family: Type.mono-family;
-                    font-size: 16px;
-                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    text: root.clock-seconds >= 0 ? Theme.clock-text(root.clock-seconds) : root.live.clock;
+                    color: Theme.text;
+                    font-family: Type.display-family;
+                    font-size: Type.timer;
+                    font-weight: 800;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -2555,7 +2916,7 @@ export component MiniWidget inherits Window {
                     text: root.live.self-kda;
                     color: Theme.text;
                     font-family: Type.mono-family;
-                    font-size: 12px;
+                    font-size: Type.small;
                     font-weight: 700;
                     horizontal-alignment: right;
                     vertical-alignment: center;
@@ -2563,17 +2924,18 @@ export component MiniWidget inherits Window {
             }
         }
 
-        // Player Status Strip
+        // Your champion, alive or respawning
         Rectangle {
             height: 40px;
             background: root.live.dead ? Theme.danger-soft : Theme.panel;
             border-radius: Theme.radius-sm;
             border-width: 1px;
             border-color: root.live.dead ? Theme.danger : Theme.rule;
+            animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
             HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 12px;
-                spacing: 8px;
+                padding-left: Space.md;
+                padding-right: Space.md;
+                spacing: Space.sm;
                 if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
                     width: 24px;
                     ChampPlate {
@@ -2588,14 +2950,15 @@ export component MiniWidget inherits Window {
                 Text {
                     text: root.live.title;
                     color: root.live.dead ? Theme.danger : Theme.text;
-                    font-size: 13px;
+                    font-size: Type.body;
                     font-weight: 800;
                     vertical-alignment: center;
                 }
                 Text {
+                    horizontal-stretch: 1;
                     text: root.live.detail;
                     color: Theme.muted;
-                    font-size: 11px;
+                    font-size: Type.label;
                     horizontal-alignment: right;
                     vertical-alignment: center;
                     overflow: elide;
@@ -2603,52 +2966,70 @@ export component MiniWidget inherits Window {
             }
         }
 
-        // Tight Rift Map Frame (sized so feed never clips)
+        // Who is up, who is dead and for how long
         Rectangle {
-            height: 204px;
             background: Theme.panel;
             border-radius: Theme.radius;
             border-width: 1px;
             border-color: Theme.rule;
-            LineMap {
-                width: 184px;
-                height: 184px;
-                x: (parent.width - self.width) / 2;
-                y: 10px;
-                towers: root.live.towers;
-                show-jungle: false;
-                line-width: 7px;
-                station: 14px;
-                halo: Theme.panel;
-            }
-        }
-
-        // Compact Objectives Strip
-        Rectangle {
-            height: 62px;
-            background: Theme.panel;
-            border-radius: Theme.radius-sm;
-            border-width: 1px;
-            border-color: Theme.rule;
             VerticalLayout {
-                padding: 8px;
-                spacing: 2px;
+                padding: Space.sm;
+                spacing: Space.sm;
                 HorizontalLayout {
-                    spacing: 8px;
-                    height: 22px;
-                    Text { text: Theme.fr ? "BLEU" : "BLUE"; width: 44px; color: Theme.blue-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
-                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.my-objectives; empty-text: Theme.fr ? "Aucun" : "None"; }
+                    spacing: Space.xs;
+                    alignment: space-around;
+                    for p in root.live.my-players: MiniPlayerCell { p: p; mine: true; }
                 }
+                Rectangle { height: 1px; background: Theme.rule; }
                 HorizontalLayout {
-                    spacing: 8px;
-                    height: 22px;
-                    Text { text: Theme.fr ? "ROUGE" : "RED"; width: 44px; color: Theme.red-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
-                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.enemy-objectives; empty-text: Theme.fr ? "Aucun" : "None"; }
+                    spacing: Space.xs;
+                    alignment: space-around;
+                    for p in root.live.enemy-players: MiniPlayerCell { p: p; mine: false; }
                 }
             }
         }
 
-        // Scrollable Recent Match Feed (all entries remain readable & unclipped)
+        // Towers and objectives side by side
+        HorizontalLayout {
+            spacing: Space.sm;
+            height: 140px;
+            Rectangle {
+                width: 140px;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                LineMap {
+                    width: 124px;
+                    height: 124px;
+                    x: 8px;
+                    y: 8px;
+                    towers: root.live.towers;
+                    show-jungle: false;
+                    line-width: 5px;
+                    station: 10px;
+                    halo: Theme.panel;
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.panel;
+                border-radius: Theme.radius;
+                border-width: 1px;
+                border-color: Theme.rule;
+                VerticalLayout {
+                    padding: Space.sm;
+                    spacing: Space.xs;
+                    alignment: start;
+                    Text { text: Theme.fr ? "BLEU" : "BLUE"; color: Theme.blue-soft; font-size: Type.label; font-weight: 800; }
+                    ObjectiveRow { compact: true; chips: root.live.my-objectives; empty-text: Theme.fr ? "Aucun" : "None"; }
+                    Text { text: Theme.fr ? "ROUGE" : "RED"; color: Theme.red-soft; font-size: Type.label; font-weight: 800; }
+                    ObjectiveRow { compact: true; chips: root.live.enemy-objectives; empty-text: Theme.fr ? "Aucun" : "None"; }
+                }
+            }
+        }
+
+        // Recent events, scrollable
         Rectangle {
             vertical-stretch: 1;
             background: Theme.panel;
@@ -2658,15 +3039,15 @@ export component MiniWidget inherits Window {
             clip: true;
 
             VerticalLayout {
-                padding: 10px;
-                spacing: 6px;
-                SectionLabel { text: Theme.fr ? "FIL D'ÉVÉNEMENTS EN DIRECT" : "LIVE EVENT FEED"; }
+                padding: Space.sm;
+                spacing: Space.xs;
+                SectionLabel { text: Theme.fr ? "DERNIERS ÉVÉNEMENTS" : "RECENT EVENTS"; }
                 Flickable {
                     vertical-stretch: 1;
                     content-height: mini-feed.preferred-height;
                     mini-feed := VerticalLayout {
                         width: parent.width;
-                        spacing: 2px;
+                        spacing: Space.xxs;
                         for line in root.live.feed: FeedRow { line: line; }
                     }
                 }

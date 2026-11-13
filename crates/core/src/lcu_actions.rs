@@ -922,7 +922,8 @@ impl DemoRemoteState {
                 "trades": trades,
                 "timer": {
                     "phase": self.sub_phase,
-                    "adjustedTimeLeftInPhase": 24
+                    "adjustedTimeLeftInPhase": 24_000,
+                    "totalTimeInPhase": 30_000
                 }
             }),
             vault,
@@ -943,7 +944,7 @@ pub fn extract_remote_state(
 
     let (pickable_val, bannable_val, skins_val, pages_val) = {
         let guard = app_state.store.read().unwrap();
-        let lcu = |uri: &str| guard.get_state(SourceId::LeagueClient, uri).map(|u| u.current);
+        let lcu = |uri: &str| guard.current(SourceId::LeagueClient, uri);
         (
             lcu("/lol-champ-select/v1/pickable-champion-ids"),
             lcu("/lol-champ-select/v1/bannable-champion-ids"),
@@ -1261,6 +1262,7 @@ pub fn extract_remote_state(
         RemoteChampSelectState {
             sub_phase: cs.sub_phase.clone(),
             time_left_sec: cs.time_left_sec,
+            total_time_sec: cs.total_time_sec,
             queue_type: cs.queue_type.clone(),
             local_cell_id: cs.local_cell_id,
             assigned_position,
@@ -1357,8 +1359,8 @@ pub fn extract_remote_state(
 
     // 5. Live Game + Board state (projected via SummarySnapshot)
     let live_game = if phase == "InProgress" {
-        summary.live_game.map(|lg| {
-            let board = summary.board.unwrap_or_default();
+        summary.live_game.as_ref().map(|lg| {
+            let board = summary.board.clone().unwrap_or_default();
             let clock_sec = lg.game_time_sec.max(0.0).round() as u32;
             let clock = format!("{:02}:{:02}", clock_sec / 60, clock_sec % 60);
             let my_team_name = lg
@@ -1432,14 +1434,14 @@ pub fn extract_remote_state(
                 .collect();
 
             RemoteLiveState {
-                game_mode: lg.game_mode,
+                game_mode: lg.game_mode.clone(),
                 clock,
                 my_kills: board.my_kills(),
                 enemy_kills: board.enemy_kills(),
                 my_towers,
                 enemy_towers,
                 active_champion_id: lg.active_champion_id,
-                active_champion: lg.active_champion,
+                active_champion: lg.active_champion.clone(),
                 level: lg.level,
                 current_gold: lg.current_gold,
                 kda: format!("{}/{}/{}", lg.kills, lg.deaths, lg.assists),

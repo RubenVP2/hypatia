@@ -317,29 +317,37 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         active_clients: active_clients.clone(),
     };
 
-    // Background task that broadcasts state updates whenever WAMP/store/language changes or every 1s
+    // Pushes a fresh snapshot to paired phones whenever observable state changes. With no
+    // phone connected this task does nothing: no projection, no serialization, no LCU calls.
     let bg_state = router_state.clone();
     let mut shutdown_bg = shutdown_rx.clone();
     tokio::spawn(async move {
-        let mut wamp_rx = bg_state.app.ws_broadcast_tx.subscribe();
-        let mut lang_rx = bg_state.app.subscribe_lang();
-        let mut ticker = tokio::time::interval(Duration::from_millis(1000));
+        let mut changes = bg_state.app.signal.subscribe();
+        let mut aux_sync = tokio::time::interval(Duration::from_millis(1000));
+        aux_sync.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut last_sent = String::new();
         loop {
+            let has_clients = bg_state.active_clients.load(Ordering::Relaxed) > 0;
             tokio::select! {
                 _ = shutdown_bg.changed() => break,
-                _ = ticker.tick() => {
+                _ = aux_sync.tick(), if has_clients => {
                     if !bg_state.app.is_demo_active() {
                         sync_live_lcu_aux(&bg_state).await;
                     }
-                    broadcast_latest(&bg_state);
                 }
-                Ok(_) = wamp_rx.recv() => {
-                    broadcast_latest(&bg_state);
-                }
-                res = lang_rx.changed() => {
-                    if res.is_ok() {
-                        broadcast_latest(&bg_state);
+                changed = changes.changed() => {
+                    if changed.is_err() {
+                        break;
                     }
+                    if has_clients {
+                        let payload = current_snapshot_json(&bg_state);
+                        if payload != last_sent {
+                            let _ = bg_state.state_tx.send(payload.clone());
+                            last_sent = payload;
+                        }
+                    }
+                    // Coalesce bursts of changes into at most ~10 pushes per second.
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
@@ -377,7 +385,7 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
 async fn sync_live_lcu_aux(st: &RemoteRouterState) {
     st.app
         .assets
-        .ensure_metadata_synced(&st.app.discovery, &st.app.vault, &st.app.riot_client)
+        .ensure_metadata_synced(&st.app.discovery, &st.app.riot_client)
         .await;
 
     let Some(lcu) = st.app.discovery.lcu_args() else {
@@ -444,11 +452,6 @@ fn current_snapshot_json(st: &RemoteRouterState) -> String {
     let mut alert_guard = st.alerts.write().unwrap();
     let snap = extract_remote_state(&st.app, &demo_guard, &mut alert_guard);
     serde_json::to_string(&snap).unwrap_or_else(|_| "{}".to_string())
-}
-
-fn broadcast_latest(st: &RemoteRouterState) {
-    let payload = current_snapshot_json(st);
-    let _ = st.state_tx.send(payload);
 }
 
 fn request_lang(headers: &HeaderMap, app: &AppState) -> hypatia_shared::Lang {
@@ -578,13 +581,7 @@ async fn handle_asset(
     let Some((mime, bytes)) = st
         .app
         .assets
-        .get_or_fetch_bytes(
-            &category,
-            id,
-            &st.app.discovery,
-            &st.app.vault,
-            &st.app.riot_client,
-        )
+        .get_or_fetch_bytes(&category, id, &st.app.discovery, &st.app.riot_client)
         .await
     else {
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
@@ -767,17 +764,32 @@ async fn handle_ws(
     ws.on_upgrade(move |socket| ws_session(socket, st))
 }
 
-struct ClientGuard(Arc<AtomicUsize>);
+/// Counts a paired phone for as long as its WebSocket session lives.
+struct ClientGuard {
+    count: Arc<AtomicUsize>,
+    signal: crate::signal::ChangeSignal,
+}
+
+impl ClientGuard {
+    fn new(st: &RemoteRouterState) -> Self {
+        st.active_clients.fetch_add(1, Ordering::Relaxed);
+        st.app.signal.bump();
+        Self {
+            count: st.active_clients.clone(),
+            signal: st.app.signal.clone(),
+        }
+    }
+}
 
 impl Drop for ClientGuard {
     fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::Relaxed);
+        self.count.fetch_sub(1, Ordering::Relaxed);
+        self.signal.bump();
     }
 }
 
 async fn ws_session(mut socket: WebSocket, st: RemoteRouterState) {
-    st.active_clients.fetch_add(1, Ordering::Relaxed);
-    let _guard = ClientGuard(st.active_clients.clone());
+    let _guard = ClientGuard::new(&st);
 
     let initial = current_snapshot_json(&st);
     if socket.send(Message::Text(initial.into())).await.is_err() {

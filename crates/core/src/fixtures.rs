@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -83,24 +84,17 @@ pub fn seed_demo_catalog(catalog: &Arc<RwLock<CatalogStore>>) {
     cat.add_declared(endpoints);
 }
 
-/// Spawns the synthetic demo event generator.
+/// Spawns the synthetic demo event generator. It only produces events while `active` is set,
+/// so leaving Demo mode stops all synthetic traffic.
 pub fn spawn_demo_generator(
     store: Arc<RwLock<EventStore>>,
     catalog: Arc<RwLock<CatalogStore>>,
     vault: SecretVault,
     rate_hz: f32,
+    demo_remote: Arc<RwLock<crate::lcu_actions::DemoRemoteState>>,
+    active: Arc<AtomicBool>,
 ) -> tokio::task::JoinHandle<()> {
-    spawn_demo_generator_with_remote(store, catalog, vault, rate_hz, None)
-}
-
-/// Spawns the synthetic demo event generator with optional interactive remote state.
-pub fn spawn_demo_generator_with_remote(
-    store: Arc<RwLock<EventStore>>,
-    catalog: Arc<RwLock<CatalogStore>>,
-    vault: SecretVault,
-    rate_hz: f32,
-    demo_remote: Option<Arc<RwLock<crate::lcu_actions::DemoRemoteState>>>,
-) -> tokio::task::JoinHandle<()> {
+    let demo_remote = Some(demo_remote);
     tokio::spawn(async move {
         seed_demo_catalog(&catalog);
 
@@ -203,6 +197,10 @@ pub fn spawn_demo_generator_with_remote(
         }
 
         loop {
+            if !active.load(Ordering::Relaxed) {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                continue;
+            }
             ticker.tick().await;
             tick_counter = tick_counter.wrapping_add(1);
 
@@ -500,7 +498,8 @@ pub fn spawn_demo_generator_with_remote(
                                 "lastBannedChampion": chosen_ban,
                                 "timer": {
                                     "phase": "BAN_PICK",
-                                    "adjustedTimeLeftInPhase": (30 - ((tick_counter % 30) as i64))
+                                    "adjustedTimeLeftInPhase": (30 - ((tick_counter % 30) as i64)) * 1000,
+                                    "totalTimeInPhase": 30_000
                                 }
                             }),
                         ),

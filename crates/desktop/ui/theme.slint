@@ -1,8 +1,17 @@
-// Pit-Wall telemetry instrument palette in Night (default) and Day printings.
+// Observatory instrument palette in Night (default) and Day printings.
 
 export global Theme {
     in-out property <bool> dark: true;
     in-out property <bool> fr: false;
+    // False when the OS asks for reduced motion (or `--reduce-motion`): every duration drops to 0.
+    in-out property <bool> motion: true;
+
+    // Motion scale. Hover and press feedback, state changes, structural moves, the 1 s tick.
+    out property <duration> dur-fast: motion ? 110ms : 0ms;
+    out property <duration> dur-base: motion ? 180ms : 0ms;
+    out property <duration> dur-slow: motion ? 240ms : 0ms;
+    out property <duration> dur-tick: motion ? 1000ms : 0ms;
+    out property <duration> dur-pulse: motion ? 650ms : 0ms;
 
     out property <color> shell: dark ? #0b0d11 : #e5e1d6;
     out property <color> ground: dark ? #0f1116 : #efece3;
@@ -17,6 +26,12 @@ export global Theme {
     out property <color> on-plate: dark ? #0f1116 : #faf8f2;
     out property <color> on-plate-muted: dark ? #4c5364 : #9ca3b5;
     out property <color> focus: dark ? #f5b400 : #b87300;
+    // Ink on an amber fill, and the dim veil behind sheets.
+    out property <color> on-signal: #0f1116;
+    out property <color> on-signal-muted: dark ? #2a2d36 : #0f1116;
+    out property <color> scrim: dark ? #090b0fb3 : #14171f73;
+    // A QR code must stay dark-on-light in both printings to scan.
+    out property <color> qr-ground: #efece3;
 
     out property <color> signal: dark ? #f5b400 : #b87300;
     out property <color> signal-soft: dark ? #f5b40024 : #b873001c;
@@ -99,14 +114,52 @@ export global Theme {
     public pure function team-color(mine: bool) -> color {
         return mine ? self.blue : self.red;
     }
+
+    // m:ss for a phase clock; "" when no clock runs.
+    public pure function clock-text(seconds: int) -> string {
+        if (seconds < 0) { return ""; }
+        return Math.floor(seconds / 60) + ":" + (Math.mod(seconds, 60) < 10 ? "0" : "") + Math.mod(seconds, 60);
+    }
+
+    // 0 calm, 1 closing (10 s or less), 2 critical (5 s or less). Only countdowns escalate.
+    public pure function clock-urgency(seconds: int, down: bool) -> int {
+        if (!down || seconds < 0) { return 0; }
+        if (seconds <= 5) { return 2; }
+        if (seconds <= 10) { return 1; }
+        return 0;
+    }
+
+    public pure function urgency-color(level: int) -> color {
+        if (level == 2) { return self.danger; }
+        if (level == 1) { return self.signal-text; }
+        return self.text;
+    }
+}
+
+// Spacing scale: every gap and padding in the UI comes from these six steps.
+export global Space {
+    out property <length> xxs: 2px;
+    out property <length> xs: 4px;
+    out property <length> sm: 8px;
+    out property <length> md: 12px;
+    out property <length> lg: 16px;
+    out property <length> xl: 20px;
 }
 
 export global Type {
     out property <string> family: "Overpass";
     out property <string> display-family: "Barlow Condensed";
     out property <string> mono-family: "Overpass Mono";
-    out property <length> specimen: 96px;
+    // Clock or final KDA, one per screen.
+    out property <length> specimen: 88px;
+    out property <length> specimen-compact: 64px;
     out property <length> display: 58px;
+    // Team kill comparison.
+    out property <length> score: 56px;
+    // Secondary clocks (mini widget, compact strips).
+    out property <length> timer: 32px;
+    // Attention plate headline.
+    out property <length> headline: 26px;
     out property <length> title: 22px;
     out property <length> name: 18px;
     out property <length> body: 14px;

@@ -1,147 +1,121 @@
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use hypatia_shared::{EventKind, ServerMsg, SourceId, SourceStatus};
-use tokio::sync::broadcast;
+use hypatia_shared::{EventKind, SourceId};
+use serde_json::Value;
 use tracing::{debug, info, trace};
 
-use crate::catalog::CatalogStore;
-use crate::discovery::DiscoveryManager;
-use crate::redaction::SecretVault;
-use crate::riot_http::ReadOnlyRiotClient;
-use crate::store::EventStore;
+use super::ConnectorContext;
+
+const ALLGAMEDATA: &str = "/liveclientdata/allgamedata";
+const EVENTDATA: &str = "/liveclientdata/eventdata";
 
 /// Spawns the Live Client Data polling task.
 ///
 /// Invariants:
-/// - If `League of Legends.exe` is absent: state is `Offline`, 0 HTTP requests are made (0% CPU).
-/// - If `League of Legends.exe` is running: polls `/liveclientdata/allgamedata` at 1 Hz and records `EventKind::Poll`.
-/// - Polls `/liveclientdata/eventdata` and produces an `EventKind::Create` event for each new `EventID`.
-pub fn spawn_live_client_poller(
-    discovery: Arc<DiscoveryManager>,
-    store: Arc<RwLock<EventStore>>,
-    catalog: Arc<RwLock<CatalogStore>>,
-    vault: SecretVault,
-    client: ReadOnlyRiotClient,
-    ws_broadcast_tx: broadcast::Sender<ServerMsg>,
-) {
+/// - No request is made unless `League of Legends.exe` runs and the live-game feature is on.
+/// - While in game, a single `GET /liveclientdata/allgamedata` per second (every other second
+///   in eco mode) feeds the live board; the game event list is read from that same payload.
+/// - While the Telemetry Lab is open, each new game event is also recorded individually.
+pub fn spawn_live_client_poller(ctx: ConnectorContext) {
     tokio::spawn(async move {
-        info!("Starting Live Client Data poller (port 2999)...");
-
         let mut seen_event_ids: HashSet<i64> = HashSet::new();
         let mut was_running = false;
 
         loop {
-            // Check if League of Legends.exe is running
-            let is_game_running = discovery
-                .get_source(SourceId::LiveGame)
-                .map(|s| s.status == SourceStatus::Live)
-                .unwrap_or(false);
-
-            if !is_game_running {
-                if was_running {
-                    info!("League of Legends.exe terminated: stopping Live Client Data polling (0% CPU)");
-                    seen_event_ids.clear();
-                    was_running = false;
-                }
+            let period = Duration::from_millis(if ctx.flags.eco_mode() { 2000 } else { 1000 });
+            let running = ctx.flags.live_game() && ctx.discovery.is_live_real(SourceId::LiveGame);
+            if running != was_running {
+                info!(
+                    "Live Client Data polling {}",
+                    if running { "started" } else { "stopped" }
+                );
+                seen_event_ids.clear();
+                was_running = running;
+            }
+            if !running {
                 tokio::time::sleep(Duration::from_millis(1000)).await;
                 continue;
             }
 
-            if !was_running {
-                info!("League of Legends.exe detected: starting Live Client Data polling at 1 Hz");
-                was_running = true;
-            }
-
-            // 1. Poll /liveclientdata/allgamedata at 1 Hz
-            match client.get(2999, None, "/liveclientdata/allgamedata").await {
+            match ctx.client.get(2999, None, ALLGAMEDATA).await {
                 Ok((status, _, body)) if status.is_success() => {
-                    let size = serde_json::to_vec(&body).map(|v| v.len() as u64).unwrap_or(0);
-
-                    {
-                        let mut store_guard = store.write().unwrap();
-                        store_guard.insert_event(
+                    let new_events = take_new_events(&body, &mut seen_event_ids);
+                    let capture = ctx.flags.telemetry();
+                    let (poll_bytes, event_bytes) = {
+                        let mut store = ctx.store.write().unwrap();
+                        let meta = store.insert_event(
                             SourceId::LiveGame,
                             EventKind::Poll,
-                            "/liveclientdata/allgamedata".to_string(),
+                            ALLGAMEDATA.to_string(),
                             body,
-                            &vault,
+                            &ctx.vault,
                         );
-                    }
-
-                    let changed = {
-                        let mut cat_guard = catalog.write().unwrap();
-                        cat_guard.record_observed(
-                            SourceId::LiveGame,
-                            "GET",
-                            "/liveclientdata/allgamedata",
-                            size,
-                        )
-                    };
-                    if changed {
-                        let _ = ws_broadcast_tx
-                            .send(ServerMsg::CatalogChanged { source: SourceId::LiveGame });
-                    }
-                }
-                Ok((status, _, _)) => {
-                    trace!("Live Client allgamedata non-success: {}", status);
-                }
-                Err(e) => {
-                    debug!("Live Client allgamedata connection error: {:?}", e);
-                }
-            }
-
-            // 2. Poll /liveclientdata/eventdata and produce Create event for new EventIDs
-            match client.get(2999, None, "/liveclientdata/eventdata").await {
-                Ok((status, _, body)) if status.is_success() => {
-                    if let Some(events_arr) = body.get("Events").and_then(|e| e.as_array()) {
-                        for ev in events_arr {
-                            if let Some(event_id) = ev.get("EventID").and_then(|id| id.as_i64()) {
-                                if seen_event_ids.insert(event_id) {
-                                    let size = serde_json::to_vec(ev)
-                                        .map(|v| v.len() as u64)
-                                        .unwrap_or(0);
-
-                                    {
-                                        let mut store_guard = store.write().unwrap();
-                                        store_guard.insert_event(
-                                            SourceId::LiveGame,
-                                            EventKind::Create,
-                                            "/liveclientdata/eventdata".to_string(),
-                                            ev.clone(),
-                                            &vault,
-                                        );
-                                    }
-
-                                    let changed = {
-                                        let mut cat_guard = catalog.write().unwrap();
-                                        cat_guard.record_observed(
-                                            SourceId::LiveGame,
-                                            "GET",
-                                            "/liveclientdata/eventdata",
-                                            size,
-                                        )
-                                    };
-                                    if changed {
-                                        let _ = ws_broadcast_tx.send(ServerMsg::CatalogChanged {
-                                            source: SourceId::LiveGame,
-                                        });
-                                    }
-                                }
+                        let mut event_bytes = Vec::new();
+                        if capture {
+                            for ev in new_events {
+                                let m = store.insert_event(
+                                    SourceId::LiveGame,
+                                    EventKind::Create,
+                                    EVENTDATA.to_string(),
+                                    ev,
+                                    &ctx.vault,
+                                );
+                                event_bytes.push(m.size as u64);
                             }
                         }
+                        (meta.size as u64, event_bytes)
+                    };
+                    ctx.observe(SourceId::LiveGame, ALLGAMEDATA, poll_bytes);
+                    for bytes in event_bytes {
+                        ctx.observe(SourceId::LiveGame, EVENTDATA, bytes);
                     }
                 }
-                Ok((status, _, _)) => {
-                    trace!("Live Client eventdata non-success: {}", status);
-                }
-                Err(e) => {
-                    debug!("Live Client eventdata connection error: {:?}", e);
-                }
+                Ok((status, _, _)) => trace!("Live Client allgamedata non-success: {status}"),
+                Err(e) => debug!("Live Client allgamedata connection error: {e:?}"),
             }
 
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            tokio::time::sleep(period).await;
         }
     });
+}
+
+/// Returns the game events of `allgamedata` not seen before, remembering their IDs.
+fn take_new_events(allgamedata: &Value, seen: &mut HashSet<i64>) -> Vec<Value> {
+    allgamedata
+        .get("events")
+        .and_then(|e| e.get("Events"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|ev| {
+            ev.get("EventID")
+                .and_then(Value::as_i64)
+                .is_some_and(|id| seen.insert(id))
+        })
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn only_unseen_game_events_are_reported() {
+        let mut seen = HashSet::new();
+        let first = json!({"events": {"Events": [{"EventID": 0, "EventName": "GameStart"}]}});
+        assert_eq!(take_new_events(&first, &mut seen).len(), 1);
+
+        let second = json!({"events": {"Events": [
+            {"EventID": 0, "EventName": "GameStart"},
+            {"EventID": 1, "EventName": "MinionsSpawning"},
+            {"EventName": "NoId"}
+        ]}});
+        let fresh = take_new_events(&second, &mut seen);
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(fresh[0]["EventID"], 1);
+        assert!(take_new_events(&json!({}), &mut seen).is_empty());
+    }
 }

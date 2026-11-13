@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
+
 use crate::source::SourceId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,8 +34,9 @@ pub struct GamePhase {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UriState {
-    pub current: serde_json::Value,
-    pub previous: Option<serde_json::Value>,
+    /// Latest redacted payload, shared with the event history (never deep-cloned).
+    pub current: Arc<serde_json::Value>,
+    pub previous: Option<Arc<serde_json::Value>>,
     pub kind: EventKind,
     pub count: u64,
     pub last_ts: i64,
@@ -44,8 +48,8 @@ pub struct UriState {
 pub struct StoredEvent {
     #[serde(rename = "event")]
     pub meta: EventMeta,
-    pub payload: serde_json::Value,
-    pub previous_payload: Option<serde_json::Value>,
+    pub payload: Arc<serde_json::Value>,
+    pub previous_payload: Option<Arc<serde_json::Value>>,
 }
 
 #[cfg(test)]
@@ -74,8 +78,8 @@ mod tests {
         assert_eq!(k_json, r#"{"t":"Create"}"#);
 
         let uri_state = UriState {
-            current: serde_json::json!({"status": "active"}),
-            previous: Some(serde_json::json!({"status": "idle"})),
+            current: Arc::new(serde_json::json!({"status": "active"})),
+            previous: Some(Arc::new(serde_json::json!({"status": "idle"}))),
             kind: EventKind::Update,
             count: 42,
             last_ts: 1700000000123,
@@ -87,8 +91,8 @@ mod tests {
 
         let stored = StoredEvent {
             meta: meta.clone(),
-            payload: serde_json::json!({"phase": "ChampSelect"}),
-            previous_payload: Some(serde_json::json!({"phase": "Matchmaking"})),
+            payload: Arc::new(serde_json::json!({"phase": "ChampSelect"})),
+            previous_payload: Some(Arc::new(serde_json::json!({"phase": "Matchmaking"}))),
         };
         let s_json = serde_json::to_string(&stored).unwrap();
         let back_stored: StoredEvent = serde_json::from_str(&s_json).unwrap();

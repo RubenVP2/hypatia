@@ -1,17 +1,65 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hypatia_shared::{EventKind, EventMeta, GamePhase, SourceId, UriState};
 pub use hypatia_shared::StoredEvent;
-use tokio::sync::{broadcast, mpsc};
+use hypatia_shared::{EventKind, EventMeta, GamePhase, SourceId, UriState};
+use serde_json::Value;
 
-use crate::redaction::{generate_preview, redact_value, SecretVault};
+use crate::redaction::{generate_preview, json_len, redact_value, SecretVault};
+use crate::signal::ChangeSignal;
 
 pub const DEFAULT_MAX_EVENTS: usize = 10_000;
+/// Budget for the serialized size of payloads retained by the event history.
+pub const DEFAULT_MAX_HISTORY_BYTES: u64 = 16 * 1024 * 1024;
 
+const GAMEFLOW_PHASE_URI: &str = "/lol-gameflow/v1/gameflow-phase";
 
+/// LCU resources the Match Projection and Mobile Remote read. Only these are retained (and only
+/// these are subscribed to over WAMP) while the Telemetry Lab is closed.
+pub const LCU_PROJECTED_URIS: &[&str] = &[
+    GAMEFLOW_PHASE_URI,
+    "/lol-summoner/v1/current-summoner",
+    "/lol-ranked/v1/current-ranked-stats",
+    "/lol-lobby/v2/lobby",
+    "/lol-matchmaking/v1/search",
+    "/lol-matchmaking/v1/ready-check",
+    "/lol-champ-select/v1/session",
+    "/lol-champ-select/v1/pickable-champion-ids",
+    "/lol-champ-select/v1/bannable-champion-ids",
+    "/lol-champ-select/v1/skin-carousel-skins",
+    "/lol-perks/v1/pages",
+    "/lol-end-of-game/v1/eog-stats-block",
+];
+pub const RIOT_CLIENT_PROJECTED_URIS: &[&str] = &["/chat/v4/presences"];
+pub const LIVE_GAME_PROJECTED_URIS: &[&str] = &[
+    "/liveclientdata/allgamedata",
+    "/liveclientdata/activeplayer",
+    "/liveclientdata/eventdata",
+];
 
-/// Circular buffer for counting events per second over the last 60 seconds.
+/// URIs of `source` that feed the Match Projection.
+pub fn projected_uris(source: SourceId) -> &'static [&'static str] {
+    match source {
+        SourceId::LeagueClient => LCU_PROJECTED_URIS,
+        SourceId::RiotClient => RIOT_CLIENT_PROJECTED_URIS,
+        SourceId::LiveGame => LIVE_GAME_PROJECTED_URIS,
+        SourceId::System => &[],
+    }
+}
+
+fn is_projected(source: SourceId, uri: &str) -> bool {
+    projected_uris(source).contains(&uri)
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
+/// Circular buffer counting events per second over the last 60 seconds.
 #[derive(Debug, Clone)]
 pub struct SecondRateCounter {
     buckets: [(i64, u32); 60],
@@ -27,221 +75,244 @@ impl Default for SecondRateCounter {
 
 impl SecondRateCounter {
     pub fn record(&mut self, sec: i64) {
-        let idx = sec.rem_euclid(60) as usize;
-        if self.buckets[idx].0 == sec {
-            self.buckets[idx].1 += 1;
+        let bucket = &mut self.buckets[sec.rem_euclid(60) as usize];
+        if bucket.0 == sec {
+            bucket.1 += 1;
         } else {
-            self.buckets[idx] = (sec, 1);
+            *bucket = (sec, 1);
         }
     }
 
-    /// Returns the rate (events/second) for the given second.
+    fn count_at(&self, sec: i64) -> u32 {
+        let bucket = self.buckets[sec.rem_euclid(60) as usize];
+        if bucket.0 == sec {
+            bucket.1
+        } else {
+            0
+        }
+    }
+
+    /// Events/second: the busier of the current (partial) and previous (complete) second.
     pub fn current_rate(&self, now_sec: i64) -> f32 {
-        let curr_idx = now_sec.rem_euclid(60) as usize;
-        let prev_idx = (now_sec - 1).rem_euclid(60) as usize;
-
-        let curr_count = if self.buckets[curr_idx].0 == now_sec {
-            self.buckets[curr_idx].1
-        } else {
-            0
-        };
-        let prev_count = if self.buckets[prev_idx].0 == (now_sec - 1) {
-            self.buckets[prev_idx].1
-        } else {
-            0
-        };
-
-        curr_count.max(prev_count) as f32
-    }
-
-    /// Returns the 60 data points representing [now_sec - 59, ..., now_sec].
-    pub fn history_60s(&self, now_sec: i64) -> Vec<u32> {
-        let mut hist = Vec::with_capacity(60);
-        for sec in (now_sec - 59)..=now_sec {
-            let idx = sec.rem_euclid(60) as usize;
-            if self.buckets[idx].0 == sec {
-                hist.push(self.buckets[idx].1);
-            } else {
-                hist.push(0);
-            }
-        }
-        hist
+        self.count_at(now_sec).max(self.count_at(now_sec - 1)) as f32
     }
 }
 
-/// Central in-memory store for all Riot events, URI states, rate counters, and phase tracking.
+/// Central in-memory store: latest payload per URI, optional event history, rate and phase.
+///
+/// Two retention modes:
+/// - **capturing** (Telemetry Lab open): every event is redacted, previewed and appended to a
+///   history bounded by both event count and payload bytes.
+/// - **projection only** (default): just the latest payload of the few projected URIs is kept;
+///   everything else is counted and dropped, so memory stays flat however long a session runs.
 pub struct EventStore {
     events: VecDeque<StoredEvent>,
+    history_bytes: u64,
     max_events: usize,
-    by_uri: HashMap<(SourceId, String), UriState>,
+    max_history_bytes: u64,
+    capture: bool,
+    by_uri: [HashMap<String, UriState>; SourceId::COUNT],
     rate_counter: SecondRateCounter,
     phase: Option<GamePhase>,
-    source_stats: HashMap<SourceId, (u64, u64)>, // (events_total, bytes_total)
+    source_stats: [(u64, u64); SourceId::COUNT],
     next_event_id: u64,
-    batcher_tx: mpsc::UnboundedSender<EventMeta>,
-    phase_tx: broadcast::Sender<GamePhase>,
+    revision: u64,
+    state_revision: u64,
+    signal: ChangeSignal,
 }
 
 impl Default for EventStore {
+    /// A capturing store with its own private change signal.
     fn default() -> Self {
-        let (batcher_tx, _batcher_rx) = mpsc::unbounded_channel();
-        let (phase_tx, _phase_rx) = broadcast::channel(32);
-        Self::with_channels(DEFAULT_MAX_EVENTS, batcher_tx, phase_tx)
+        Self::new(ChangeSignal::new())
     }
 }
 
 impl EventStore {
-    /// Creates a new `EventStore` with default capacity and returns the store along with the batcher event receiver.
-    pub fn new() -> (Self, mpsc::UnboundedReceiver<EventMeta>) {
-        let (batcher_tx, batcher_rx) = mpsc::unbounded_channel();
-        let (phase_tx, _phase_rx) = broadcast::channel(32);
-        (
-            Self::with_channels(DEFAULT_MAX_EVENTS, batcher_tx, phase_tx),
-            batcher_rx,
-        )
+    pub fn new(signal: ChangeSignal) -> Self {
+        Self::with_limits(DEFAULT_MAX_EVENTS, DEFAULT_MAX_HISTORY_BYTES, signal)
     }
 
-    /// Creates a store with custom capacity and channels.
-    pub fn with_channels(
-        max_events: usize,
-        batcher_tx: mpsc::UnboundedSender<EventMeta>,
-        phase_tx: broadcast::Sender<GamePhase>,
-    ) -> Self {
+    pub fn with_limits(max_events: usize, max_history_bytes: u64, signal: ChangeSignal) -> Self {
         Self {
-            events: VecDeque::with_capacity(max_events.min(1024)),
+            events: VecDeque::new(),
+            history_bytes: 0,
             max_events,
-            by_uri: HashMap::new(),
+            max_history_bytes,
+            capture: true,
+            by_uri: Default::default(),
             rate_counter: SecondRateCounter::default(),
             phase: None,
-            source_stats: HashMap::new(),
+            source_stats: [(0, 0); SourceId::COUNT],
             next_event_id: 1,
-            batcher_tx,
-            phase_tx,
+            revision: 0,
+            state_revision: 0,
+            signal,
         }
     }
 
-    /// Inserts a new event into the store:
-    /// - Retrieves previous payload for the same (source, URI)
-    /// - Redacts sensitive data in `payload` using `vault`
-    /// - Generates a single-line preview (<= 120 chars)
-    /// - Stores state in `by_uri` and in the ring buffer
-    /// - Updates current game phase if URI is `/lol-gameflow/v1/gameflow-phase`
-    /// - Notifies the batcher channel
+    /// Whether the full event history is being recorded.
+    pub fn capture(&self) -> bool {
+        self.capture
+    }
+
+    /// Switches retention mode. Leaving capture mode frees the history and every payload the
+    /// Match Projection does not need.
+    pub fn set_capture(&mut self, capture: bool) {
+        if self.capture == capture {
+            return;
+        }
+        self.capture = capture;
+        if !capture {
+            self.events = VecDeque::new();
+            self.history_bytes = 0;
+            for (idx, map) in self.by_uri.iter_mut().enumerate() {
+                let keep = match idx {
+                    i if i == SourceId::LeagueClient.index() => LCU_PROJECTED_URIS,
+                    i if i == SourceId::RiotClient.index() => RIOT_CLIENT_PROJECTED_URIS,
+                    i if i == SourceId::LiveGame.index() => LIVE_GAME_PROJECTED_URIS,
+                    _ => &[],
+                };
+                map.retain(|uri, state| {
+                    state.previous = None;
+                    keep.contains(&uri.as_str())
+                });
+                map.shrink_to_fit();
+            }
+        }
+        self.revision += 1;
+        self.signal.bump();
+    }
+
+    /// True when an event on `uri` would be retained; lets connectors skip parsing otherwise.
+    pub fn wants(&self, source: SourceId, uri: &str) -> bool {
+        self.capture || is_projected(source, uri)
+    }
+
+    /// Accounts for an event that was dropped before parsing (see [`Self::wants`]).
+    pub fn record_skipped(&mut self, source: SourceId, bytes: u64) {
+        self.rate_counter.record(now_ms() / 1000);
+        let stats = &mut self.source_stats[source.index()];
+        stats.0 += 1;
+        stats.1 += bytes;
+    }
+
+    /// Records an event: redacts secrets, updates the per-URI state and game phase, and (when
+    /// capturing) appends it to the history. Subscribers of the change signal are woken only
+    /// when something they can observe actually changed.
     pub fn insert_event(
         &mut self,
         source: SourceId,
         kind: EventKind,
         uri: String,
-        mut payload: serde_json::Value,
+        mut payload: Value,
         vault: &SecretVault,
     ) -> EventMeta {
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        let now_sec = now_ms / 1000;
-
-        // 1. Retrieve previous payload for this URI if available
-        let key = (source, uri.clone());
-        let previous_payload = self.by_uri.get(&key).map(|s| s.current.clone());
-
-        // 2. Redact payload
+        let ts = now_ms();
         let has_secrets = redact_value(&mut payload, vault);
+        let size = json_len(&payload);
 
-        // 3. Generate preview
-        let preview = generate_preview(&payload, 120);
-
-        // 4. Calculate size
-        let size = serde_json::to_vec(&payload)
-            .map(|v| v.len() as u32)
-            .unwrap_or(0);
-
-        // 5. Update rate counter
-        self.rate_counter.record(now_sec);
-
-        // 6. Assign unique event id
-        let id = self.next_event_id;
-        self.next_event_id = self.next_event_id.wrapping_add(1);
-        if self.next_event_id == 0 {
-            self.next_event_id = 1;
-        }
-
-        let meta = EventMeta {
-            id,
-            ts: now_ms,
-            source,
-            kind,
-            uri: uri.clone(),
-            size,
-            preview,
-            has_secrets,
-        };
-
-        // 7. Update by_uri state
-        let uri_entry = self.by_uri.entry(key).or_insert_with(|| UriState {
-            current: payload.clone(),
-            previous: None,
-            kind,
-            count: 0,
-            last_ts: now_ms,
-            bytes: 0,
-        });
-        uri_entry.previous = previous_payload.clone();
-        uri_entry.current = payload.clone();
-        uri_entry.kind = kind;
-        uri_entry.count += 1;
-        uri_entry.last_ts = now_ms;
-        uri_entry.bytes = size as u64;
-
-        // 8. Update source stats
-        let stats = self.source_stats.entry(source).or_insert((0, 0));
+        self.rate_counter.record(ts / 1000);
+        let stats = &mut self.source_stats[source.index()];
         stats.0 += 1;
         stats.1 += size as u64;
 
-        // 9. Update game phase if URI is gameflow-phase
-        if uri == "/lol-gameflow/v1/gameflow-phase" {
-            let phase_name = match &payload {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Object(map) if map.get("phase").and_then(|v| v.as_str()).is_some() => {
-                    map.get("phase").unwrap().as_str().unwrap().to_string()
-                }
-                other => other.to_string().trim_matches('"').to_string(),
-            };
+        let id = self.next_event_id;
+        self.next_event_id = self.next_event_id.checked_add(1).unwrap_or(1);
 
-            if !phase_name.is_empty() {
-                let phase_changed = match &self.phase {
-                    Some(current) => current.phase != phase_name,
-                    None => true,
-                };
+        let projected = is_projected(source, &uri);
+        let mut meta = EventMeta {
+            id,
+            ts,
+            source,
+            kind,
+            uri,
+            size,
+            preview: String::new(),
+            has_secrets,
+        };
+        if !self.capture && !projected {
+            return meta;
+        }
 
-                if phase_changed {
-                    let new_phase = GamePhase {
-                        phase: phase_name,
-                        since: now_ms,
-                    };
-                    self.phase = Some(new_phase.clone());
-                    let _ = self.phase_tx.send(new_phase);
-                }
+        let mut state_changed = uri_is_phase(source, &meta.uri) && self.update_phase(&payload, ts);
+
+        let payload = Arc::new(payload);
+        let map = &mut self.by_uri[source.index()];
+        let previous = match map.get_mut(meta.uri.as_str()) {
+            Some(state) => {
+                state_changed |= projected && *state.current != *payload;
+                let previous = std::mem::replace(&mut state.current, Arc::clone(&payload));
+                state.previous = self.capture.then(|| Arc::clone(&previous));
+                state.kind = kind;
+                state.count += 1;
+                state.last_ts = ts;
+                state.bytes = size as u64;
+                Some(previous)
             }
+            None => {
+                state_changed |= projected;
+                map.insert(
+                    meta.uri.clone(),
+                    UriState {
+                        current: Arc::clone(&payload),
+                        previous: None,
+                        kind,
+                        count: 1,
+                        last_ts: ts,
+                        bytes: size as u64,
+                    },
+                );
+                None
+            }
+        };
+
+        if self.capture {
+            meta.preview = generate_preview(&payload, 120);
+            self.history_bytes += size as u64;
+            self.events.push_back(StoredEvent {
+                meta: meta.clone(),
+                payload,
+                previous_payload: previous,
+            });
+            self.evict();
+            self.revision += 1;
         }
-
-        // 10. Store in ring buffer with FIFO eviction
-        if self.events.len() >= self.max_events {
-            self.events.pop_front();
+        if state_changed {
+            self.state_revision += 1;
         }
-        self.events.push_back(StoredEvent {
-            meta: meta.clone(),
-            payload,
-            previous_payload,
-        });
-
-        // 11. Notify batcher
-        let _ = self.batcher_tx.send(meta.clone());
-
+        if state_changed || self.capture {
+            self.signal.bump();
+        }
         meta
     }
 
-    /// Retrieves a stored event by ID via binary search.
+    fn evict(&mut self) {
+        while self.events.len() > self.max_events
+            || (self.history_bytes > self.max_history_bytes && self.events.len() > 1)
+        {
+            if let Some(old) = self.events.pop_front() {
+                self.history_bytes -= old.meta.size as u64;
+            }
+        }
+    }
+
+    fn update_phase(&mut self, payload: &Value, ts: i64) -> bool {
+        let name = match payload {
+            Value::String(s) => s.as_str(),
+            other => other.get("phase").and_then(Value::as_str).unwrap_or(""),
+        };
+        if name.is_empty() || self.phase.as_ref().is_some_and(|p| p.phase == name) {
+            return false;
+        }
+        self.phase = Some(GamePhase {
+            phase: name.to_string(),
+            since: ts,
+        });
+        true
+    }
+
+    /// Retrieves a stored event by ID (history is ordered by ID).
     pub fn get_event(&self, id: u64) -> Option<StoredEvent> {
         self.events
             .binary_search_by_key(&id, |e| e.meta.id)
@@ -249,72 +320,78 @@ impl EventStore {
             .map(|idx| self.events[idx].clone())
     }
 
-    /// Retrieves the URI state for a specific source and URI.
-    pub fn get_state(&self, source: SourceId, uri: &str) -> Option<UriState> {
-        self.by_uri.get(&(source, uri.to_string())).cloned()
+    /// Per-URI state (latest payload, counters) for `source` + `uri`.
+    pub fn get_state(&self, source: SourceId, uri: &str) -> Option<&UriState> {
+        self.by_uri[source.index()].get(uri)
     }
 
-    /// Retrieves up to `limit` most recent `EventMeta` in chronological order.
+    /// Latest redacted payload for `source` + `uri` (a cheap reference-count clone).
+    pub fn current(&self, source: SourceId, uri: &str) -> Option<Arc<Value>> {
+        self.get_state(source, uri).map(|s| Arc::clone(&s.current))
+    }
+
+    /// Up to `limit` most recent `EventMeta` in chronological order.
     pub fn get_recent_meta(&self, limit: usize) -> Vec<EventMeta> {
         let start = self.events.len().saturating_sub(limit);
-        self.events.iter().skip(start).map(|e| e.meta.clone()).collect()
+        self.events.range(start..).map(|e| e.meta.clone()).collect()
     }
 
-    /// Returns the current game phase, if known.
+    pub fn latest_event_id(&self) -> u64 {
+        self.events.back().map_or(0, |e| e.meta.id)
+    }
+
     pub fn phase(&self) -> Option<GamePhase> {
         self.phase.clone()
     }
 
     /// Sets or overrides the current game phase.
     pub fn set_phase(&mut self, phase: GamePhase) {
-        self.phase = Some(phase.clone());
-        let _ = self.phase_tx.send(phase);
+        if self.phase.as_ref() != Some(&phase) {
+            self.phase = Some(phase);
+            self.state_revision += 1;
+            self.signal.bump();
+        }
     }
 
-    /// Returns the current event rate (events/second).
+    /// Current event rate (events/second).
     pub fn current_rate(&self) -> f32 {
-        let now_sec = (SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            / 1000) as i64;
-        self.rate_counter.current_rate(now_sec)
+        self.rate_counter.current_rate(now_ms() / 1000)
     }
 
-    /// Returns the 60 data points representing rate over the last 60 seconds.
-    pub fn rate_history(&self) -> Vec<u32> {
-        let now_sec = (SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            / 1000) as i64;
-        self.rate_counter.history_60s(now_sec)
-    }
-
-    /// Returns `(events_total, bytes_total)` for a source.
+    /// `(events_total, bytes_total)` for a source.
     pub fn source_stats(&self, source: SourceId) -> (u64, u64) {
-        self.source_stats.get(&source).copied().unwrap_or((0, 0))
+        self.source_stats[source.index()]
     }
 
-    /// Subscribes to game phase changes.
-    pub fn subscribe_phase(&self) -> broadcast::Receiver<GamePhase> {
-        self.phase_tx.subscribe()
+    /// Bumped whenever the event history changes (insert while capturing, clear, mode switch).
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
-    /// Returns the number of events currently stored.
+    /// Bumped only when a projected payload or the game phase actually changed.
+    pub fn state_revision(&self) -> u64 {
+        self.state_revision
+    }
+
     pub fn len(&self) -> usize {
         self.events.len()
     }
 
-    /// Returns true if no events are stored.
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
     }
 
-    /// Clears the stored event history ring buffer.
+    /// Clears the event history (per-URI state is kept).
     pub fn clear_events(&mut self) {
         self.events.clear();
+        self.history_bytes = 0;
+        self.revision += 1;
+        self.signal.bump();
     }
+}
+
+fn uri_is_phase(source: SourceId, uri: &str) -> bool {
+    source == SourceId::LeagueClient && uri == GAMEFLOW_PHASE_URI
 }
 
 #[cfg(test)]
@@ -322,151 +399,115 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn test_insert_event_and_retrieve() {
-        let vault = SecretVault::new();
-        let (mut store, mut rx) = EventStore::new();
-
-        let payload1 = json!({ "name": "Summoner1", "level": 30 });
-        let meta1 = store.insert_event(
-            SourceId::LeagueClient,
-            EventKind::Create,
-            "/lol-summoner/v1/current-summoner".to_string(),
-            payload1.clone(),
-            &vault,
-        );
-
-        assert_eq!(meta1.id, 1);
-        assert_eq!(meta1.source, SourceId::LeagueClient);
-        assert_eq!(meta1.kind, EventKind::Create);
-        assert!(!meta1.has_secrets);
-
-        // Check batcher receiver received the event
-        let recv_meta = rx.try_recv().expect("expected event on batcher channel");
-        assert_eq!(recv_meta, meta1);
-
-        // Check get_event
-        let stored1 = store.get_event(1).expect("event 1 should exist");
-        assert_eq!(stored1.meta, meta1);
-        assert_eq!(stored1.payload, payload1);
-        assert_eq!(stored1.previous_payload, None);
-
-        // Insert second event on same URI
-        let payload2 = json!({ "name": "Summoner1", "level": 31 });
-        let meta2 = store.insert_event(
+    fn insert(store: &mut EventStore, uri: &str, payload: Value) -> EventMeta {
+        store.insert_event(
             SourceId::LeagueClient,
             EventKind::Update,
-            "/lol-summoner/v1/current-summoner".to_string(),
-            payload2.clone(),
-            &vault,
-        );
-
-        assert_eq!(meta2.id, 2);
-        let stored2 = store.get_event(2).expect("event 2 should exist");
-        assert_eq!(stored2.previous_payload, Some(payload1.clone()));
-        assert_eq!(stored2.payload, payload2);
-
-        // Check by_uri state
-        let uri_state = store
-            .get_state(SourceId::LeagueClient, "/lol-summoner/v1/current-summoner")
-            .expect("uri state should exist");
-        assert_eq!(uri_state.count, 2);
-        assert_eq!(uri_state.previous, Some(payload1));
-        assert_eq!(uri_state.current, payload2);
+            uri.to_string(),
+            payload,
+            &SecretVault::new(),
+        )
     }
 
     #[test]
-    fn test_insert_with_secrets_redacted() {
-        let vault = SecretVault::new();
-        let (mut store, _rx) = EventStore::new();
+    fn insert_shares_payloads_between_state_and_history() {
+        let mut store = EventStore::default();
+        let uri = "/lol-summoner/v1/current-summoner";
+        let first = json!({ "name": "Summoner1", "level": 30 });
+        let second = json!({ "name": "Summoner1", "level": 31 });
 
-        let payload = json!({
-            "token": "sensitive_session_token_12345",
-            "account": { "username": "player1" }
-        });
+        let meta1 = insert(&mut store, uri, first.clone());
+        assert_eq!((meta1.id, meta1.has_secrets), (1, false));
+        let stored1 = store.get_event(1).expect("event 1 should exist");
+        assert_eq!(*stored1.payload, first);
+        assert!(stored1.previous_payload.is_none());
 
+        insert(&mut store, uri, second.clone());
+        let stored2 = store.get_event(2).expect("event 2 should exist");
+        assert_eq!(*stored2.payload, second);
+        assert!(Arc::ptr_eq(stored2.previous_payload.as_ref().unwrap(), &stored1.payload));
+
+        let state = store.get_state(SourceId::LeagueClient, uri).unwrap();
+        assert_eq!(state.count, 2);
+        assert!(Arc::ptr_eq(&state.current, &stored2.payload));
+        assert_eq!(*store.current(SourceId::LeagueClient, uri).unwrap(), second);
+    }
+
+    #[test]
+    fn secrets_are_redacted_before_storage() {
+        let mut store = EventStore::default();
         let meta = store.insert_event(
             SourceId::RiotClient,
             EventKind::Update,
             "/rso-auth/v1/authorization".to_string(),
-            payload,
-            &vault,
+            json!({ "token": "sensitive_session_token_12345", "account": { "username": "player1" } }),
+            &SecretVault::new(),
         );
-
         assert!(meta.has_secrets);
         let stored = store.get_event(meta.id).unwrap();
-        assert!(stored.payload.get("token").unwrap().get("$secret").is_some());
+        assert!(stored.payload["token"].get("$secret").is_some());
     }
 
     #[test]
-    fn test_phase_automatic_update() {
-        let vault = SecretVault::new();
-        let (mut store, _rx) = EventStore::new();
-        let mut phase_rx = store.subscribe_phase();
-
+    fn phase_follows_gameflow_events() {
+        let mut store = EventStore::default();
         assert_eq!(store.phase(), None);
 
-        // Insert phase string
-        store.insert_event(
-            SourceId::LeagueClient,
-            EventKind::Update,
-            "/lol-gameflow/v1/gameflow-phase".to_string(),
-            json!("Lobby"),
-            &vault,
-        );
+        insert(&mut store, GAMEFLOW_PHASE_URI, json!("Lobby"));
+        assert_eq!(store.phase().unwrap().phase, "Lobby");
 
-        let phase = store.phase().expect("phase should be set");
-        assert_eq!(phase.phase, "Lobby");
-
-        let emitted = phase_rx.try_recv().expect("phase event should be emitted");
-        assert_eq!(emitted.phase, "Lobby");
-
-        // Insert phase object
-        store.insert_event(
-            SourceId::LeagueClient,
-            EventKind::Update,
-            "/lol-gameflow/v1/gameflow-phase".to_string(),
-            json!({ "phase": "ChampSelect" }),
-            &vault,
-        );
-
-        let phase2 = store.phase().expect("phase should be updated");
-        assert_eq!(phase2.phase, "ChampSelect");
-
-        let emitted2 = phase_rx.try_recv().expect("phase event should be emitted");
-        assert_eq!(emitted2.phase, "ChampSelect");
+        insert(&mut store, GAMEFLOW_PHASE_URI, json!({ "phase": "ChampSelect" }));
+        assert_eq!(store.phase().unwrap().phase, "ChampSelect");
     }
 
     #[test]
-    fn test_ring_buffer_fifo_eviction() {
-        let vault = SecretVault::new();
-        let (batcher_tx, _batcher_rx) = mpsc::unbounded_channel();
-        let (phase_tx, _phase_rx) = broadcast::channel(16);
-        let mut store = EventStore::with_channels(5, batcher_tx, phase_tx);
-
+    fn history_is_bounded_by_count_and_bytes() {
+        let mut store = EventStore::with_limits(5, u64::MAX, ChangeSignal::new());
         for i in 1..=8 {
-            store.insert_event(
-                SourceId::LeagueClient,
-                EventKind::Update,
-                format!("/uri/{}", i),
-                json!({ "i": i }),
-                &vault,
-            );
+            insert(&mut store, &format!("/uri/{i}"), json!({ "i": i }));
         }
-
         assert_eq!(store.len(), 5);
-        // Events 1, 2, 3 should have been evicted
-        assert!(store.get_event(1).is_none());
-        assert!(store.get_event(2).is_none());
         assert!(store.get_event(3).is_none());
-        // Events 4, 5, 6, 7, 8 should exist
         assert!(store.get_event(4).is_some());
-        assert!(store.get_event(8).is_some());
+        let recent: Vec<u64> = store.get_recent_meta(3).iter().map(|m| m.id).collect();
+        assert_eq!(recent, [6, 7, 8]);
 
-        let recent = store.get_recent_meta(3);
-        assert_eq!(recent.len(), 3);
-        assert_eq!(recent[0].id, 6);
-        assert_eq!(recent[1].id, 7);
-        assert_eq!(recent[2].id, 8);
+        let mut store = EventStore::with_limits(1000, 100, ChangeSignal::new());
+        for i in 0..20 {
+            insert(&mut store, "/big", json!({ "blob": "x".repeat(40), "i": i }));
+        }
+        assert!(store.len() <= 2, "byte budget must evict old payloads");
+        assert_eq!(store.latest_event_id(), 20);
+    }
+
+    #[test]
+    fn projection_only_mode_keeps_just_projected_state() {
+        let signal = ChangeSignal::new();
+        let mut store = EventStore::new(signal.clone());
+        insert(&mut store, "/lol-chat/v1/conversations", json!([1, 2, 3]));
+        insert(&mut store, "/lol-lobby/v2/lobby", json!({ "partyId": "a" }));
+        store.set_capture(false);
+
+        assert!(store.is_empty());
+        assert!(store.get_state(SourceId::LeagueClient, "/lol-chat/v1/conversations").is_none());
+        assert!(store.current(SourceId::LeagueClient, "/lol-lobby/v2/lobby").is_some());
+        assert!(!store.wants(SourceId::LeagueClient, "/lol-chat/v1/me"));
+        assert!(store.wants(SourceId::LeagueClient, "/lol-lobby/v2/lobby"));
+
+        // Irrelevant traffic is counted but neither stored nor signalled.
+        let (rev, state_rev) = (signal.revision(), store.state_revision());
+        insert(&mut store, "/lol-chat/v1/me", json!({ "availability": "chat" }));
+        assert_eq!(store.source_stats(SourceId::LeagueClient).0, 3);
+        assert!(store.get_state(SourceId::LeagueClient, "/lol-chat/v1/me").is_none());
+        assert_eq!((signal.revision(), store.state_revision()), (rev, state_rev));
+
+        // Re-sending an identical projected payload is not a change either.
+        insert(&mut store, "/lol-lobby/v2/lobby", json!({ "partyId": "a" }));
+        assert_eq!((signal.revision(), store.state_revision()), (rev, state_rev));
+
+        insert(&mut store, "/lol-lobby/v2/lobby", json!({ "partyId": "b" }));
+        assert_eq!(store.state_revision(), state_rev + 1);
+        assert!(signal.revision() > rev);
+        assert!(store.is_empty(), "no history outside capture mode");
     }
 }

@@ -1,6 +1,6 @@
 ---
-name: Hypatia — Pit-Wall Chronometer
-description: Racing pit-wall telemetry aesthetic for League of Legends desktop companion, Telemetry Lab, and LAN mobile remote.
+name: Hypatia — Observatory Chronometer
+description: A calm, read-only observation instrument for League of Legends: desktop companion, mini widget, Observatory (advanced view), and LAN mobile remote.
 colors:
   shell: "#0b0d11"
   ground: "#0f1116"
@@ -25,7 +25,7 @@ colors:
 typography:
   specimen:
     fontFamily: "Barlow Condensed, Overpass, sans-serif"
-    fontSize: "96px"
+    fontSize: "88px"
     fontWeight: 800
     lineHeight: 0.92
     letterSpacing: "-0.02em"
@@ -36,6 +36,11 @@ typography:
     lineHeight: 0.95
     letterSpacing: "-0.02em"
   score:
+    fontFamily: "Barlow Condensed, Overpass, sans-serif"
+    fontSize: "56px"
+    fontWeight: 800
+    lineHeight: 1.0
+  score-mobile:
     fontFamily: "Barlow Condensed, Overpass, sans-serif"
     fontSize: "46px"
     fontWeight: 800
@@ -83,13 +88,21 @@ rounded:
   md: "6px"
   round: "9999px"
 spacing:
+  xxs: "2px"
   xs: "4px"
   sm: "8px"
-  md: "14px"
-  lg: "20px"
+  md: "12px"
+  lg: "16px"
+  xl: "20px"
+motion:
+  fast: "110ms ease-out"
+  base: "180ms ease-out"
+  slow: "240ms ease-out"
+  tick: "1000ms linear"
+  pulse: "650ms ease-out x2"
 components:
   button-primary:
-    backgroundColor: "{colors.signal}"
+    backgroundColor: "{colors.plate}"
     textColor: "{colors.on-plate}"
     rounded: "{rounded.sm}"
     height: "30px"
@@ -119,13 +132,15 @@ components:
     padding: "0 8px"
 ---
 
-# Design System: Hypatia — Pit-Wall Chronometer
+# Design System: Hypatia — Observatory Chronometer
 
 ## Overview
 
-**Creative North Star: "Pit-Wall Chronometer"**
+**Creative North Star: "Observatory Chronometer"**
 
-Hypatia frames every stage of a League of Legends match — idle standby, lobby lane setup, queue countdown, Champion Select, active :2999 game telemetry, and post-match summary — as a compact motorsport timing wall. Unhurried carbon panels establish a calm, low-glare backdrop on second monitors, reserving pure inverted ivory plates and crisp amber timing signals strictly for moments that demand immediate player attention.
+Hypatia is named after the Alexandrian astronomer: an instrument that observes and never touches. It frames every stage of a League of Legends match — idle standby, lobby, queue, ready check, Champion Select, the live game, and the post-match summary — as a quiet observation instrument with one running clock. Unhurried carbon panels keep a calm, low-glare backdrop on a second monitor; amber appears only when the player must act, and it gets louder as time runs out.
+
+The product name always travels with its descriptor: **Hypatia · LoL companion** (FR: *compagnon LoL*). The advanced view is the **Observatory** (FR: *Observatoire*); player-facing copy avoids motorsport and "telemetry" vocabulary.
 
 Both the desktop native shell (`MainWindow` and `MiniWidget` in Slint) and the mobile LAN remote (`remote_ui.html`) speak one visual grammar built around three structural anchors: a persistent workspace rail separating mode navigation and Riot process health from phase telemetry, a single specimen-scale condensed timing clock or score, and a clean 1px grid with zero artificial drop shadows or decorative gradients.
 
@@ -140,7 +155,7 @@ Both the desktop native shell (`MainWindow` and `MiniWidget` in Slint) and the m
 The Night printing pairs deep neutral carbon layers with warm pit-wall amber signals (`#f5b400`) and saturated Summoner's Rift team/lane inks; the Day printing adapts identically onto `#efece3` paper and `#faf8f2` plates (`#b87300` amber signal).
 
 ### Primary
-- **Pit-Wall Amber** (`#f5b400` Night / `#b87300` Day): Reserved strictly for active navigation highlight borders/dots, active turn spotlights, demo mode indicators, primary CTAs, and live phase marker fill.
+- **Signal Amber** (`#f5b400` Night / `#b87300` Day): Urgency only — the player's own pick/ban turn, a ready check, the lock-in button during that turn, a countdown at 10 s or less, an incoming swap, and the current phase node in the ticker.
 - **Amber Text** (`#ffd24d` Night / `#8a5600` Day): High-contrast amber text used on dark or soft-tinted plates where `#f5b400` alone would lose contrast at small body sizes.
 
 ### Secondary
@@ -149,7 +164,7 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 - **Live Telemetry Green** (`#45c47f` Night / `#1e7f48` Day): Riot source connection status (`LCU`, `Riot Client`, `Live :2999`), paired WebSocket dots, and Ready Check `ACCEPT` CTA.
 
 ### Neutral
-- **Carbon Shell** (`#0b0d11` Night / `#e5e1d6` Day): Left `196px` workspace rail and mobile sticky topbar/bottom dock.
+- **Carbon Shell** (`#0b0d11` Night / `#e5e1d6` Day): Left `216px` workspace rail and mobile sticky topbar/bottom dock.
 - **Primary Ground** (`#0f1116` Night / `#efece3` Day): Phase canvas background and roundel core fill.
 - **Viewport Backdrop** (`#090b0f` Night / `#dfdacf` Day): Recessed code/JSON inspector well and text input wells.
 - **Instrument Panel** (`#161922` Night / `#faf8f2` Day): Default card surface, telemetry stream container, and scoreboard rows.
@@ -158,7 +173,9 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 - **Primary Ink & Muted Ink** (`#edeff4` / `#9ca3b5` Night; `#14171f` / `#555a66` Day): Readable foreground ink and secondary copy.
 
 ### Named Rules
-**The Signal Restraint Rule.** Pit-Wall Amber never appears simultaneously as passive decoration on non-interactive cards; it belongs only to active navigation state, the active phase node, or the player's current turn/CTA.
+**The Signal Restraint Rule.** Amber means "act now". It never marks a selected toggle, a filter, an active nav item, the player's own row, a victory, or a demo badge. Selection is quiet: `panel-raised` fill with a 1px `text` border; a panel's single main action is an ivory `plate` fill. The phase plate is a quiet `panel` by default and turns amber only for the player's turn or a ready check.
+
+**The Urgency Ramp Rule.** A countdown is `text` above 10 s, `signal-text` from 10 s, and `danger` at 5 s or less, with a 3px bar beneath it draining linearly each second. Counting-up clocks (queue time, game time) never escalate.
 
 **The Lane-Team Separation Rule.** Lane colors (`#e3b341`, `#45c47f`, `#b07cf0`, `#ef8bb5`) draw only metro tracks and role roundels, while Team Blue and Team Red own champions, objectives, towers, and bans.
 
@@ -171,8 +188,9 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 **Character:** Compressed telemetry numerals and urgent plate headlines cut vertical height cleanly against calm humanist prose and rigid JSON/URI inspection columns.
 
 ### Hierarchy
-- **Specimen** (`800`, `88px–96px` desktop / `56px` mobile, `-1px` tracking): Single large countdown or final KDA figure on active phase headers.
-- **Display Score** (`800`, `56px` desktop / `46px` mobile / `30px` mini-widget): Live team kill comparisons in `ScoreSpecimen`.
+- **Specimen** (`800`, `88px` desktop / `64px` compact and mini widget / `56px` mobile, `-1px` tracking): The one running clock, or the final KDA, on each phase header.
+- **Display Score** (`800`, `56px` desktop / `46px` mobile / `32px` mini widget): Live team kill comparisons in `ScoreSpecimen`.
+- **Timer** (`800`, `32px`): Secondary clocks such as the mini widget game time.
 - **Headline / Title** (`800`, `22px–26px`, uppercase condensed in panel headers): Attention plates, modal headers, and mobile section headings.
 - **Body** (`600`, `14px`): Primary status copy, summoner/champion rows, and descriptions.
 - **Label / Mono** (`700`, `11px`, tabular figures): Clock timestamps, HTTP endpoints, JSON payloads, badges, and source ports.
@@ -184,13 +202,15 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 
 ## Layout
 
-Desktop uses a split horizontal shell: a fixed `196px` left workspace rail housing Hypatia branding, mode switches (`Companion`, `Telemetry Lab`, `Mobile Remote`, `Mini Widget`), optional 6-phase demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and `Night`/`Day` controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter).
+Desktop uses a split horizontal shell: a fixed `216px` left workspace rail (scrollable when the window is short) housing Hypatia branding with its descriptor, mode switches (`Companion`, `Observatory`, `Mobile Remote`, `Mini Widget`, `Performance`), optional demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and EN/FR and Night/Day controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter). Every gap and padding comes from the spacing scale (`Space.xxs` 2 to `Space.xl` 20).
 
-When Telemetry Lab opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with sticky topbar (`52px`) and sticky thumb-zone bottom action dock.
+The **mini widget** (360px, always on top) follows the phase: a quiet plate with the queue or ready-check clock between games; in Champion Select the turn plate, a 64px countdown and the five allied slots; in game the score with a running clock, the player's status, a ten-portrait strip with dead players faded and their respawn seconds, a 140px tower map beside the objectives, and recent events.
+
+When Telemetry Lab opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with a sticky topbar and a fixed thumb-zone bottom dock. The dock carries the phase's tabs and its one main action (Accept with a separate Decline below, Lock/Ban during your turn). Every tap target is at least `44px` (demo chips excepted); re-rendering on a state push keeps the scroll position.
 
 ## Elevation & Depth
 
-Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only the non-pushing Mobile Remote QR pairing overlay dims the background canvas with `#090b0faa` scrim so attention stays centered on the QR frame without reflowing underlying screens.
+Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only the pairing and Performance sheets dim the canvas, with the themed `scrim` token (Night `#090b0fb3`, Day `#14171f73`); both close on backdrop click or Esc.
 
 ### Named Rules
 **The Full-Perimeter 1px Rule.** Highlighted rows and alerts distinguish themselves through background tint (`signal-soft`, `danger-soft`, `green-soft`), leading icons/roundels, and `1px` full-perimeter borders — never thick (>1px) left or right accent stripes.
@@ -202,23 +222,34 @@ All interactive controls, inputs, status chips, and tabs share a crisp `4px` (`r
 ## Components
 
 ### Buttons
-- **Primary Signal Action:** `1px` `signal` border and fill (`#f5b400` / `#b87300`) with dark contrast ink (`#0f1116`), `4px` radius (`30px` desktop, `48px` mobile, `58px` full-width `ACCEPT MATCH`).
-- **Secondary Action:** `panel` fill, `1px` `rule-strong` border, transitions background cleanly (`110ms ease-out`) to `panel-raised` on hover, and renders an explicit `2px` `#f5b400` outer focus ring on keyboard focus.
+- **Primary Action:** ivory `plate` fill with `on-plate` ink, `4px` radius, one per panel. On mobile the lock/ban button during your turn is the one amber button (`on-signal` ink, `48px`), and `ACCEPT MATCH` is `live-green` (`58px`).
+- **Toggle (selected):** `panel-raised` fill, `1px` `text` border, label weight 800.
+- **Secondary Action:** `panel` fill, `1px` `rule` border, fading (`110ms ease-out`) to `panel-raised` on hover, with a `2px` `focus` outer ring on keyboard focus.
 
 ### Navigation & Phase Ticker
-- **Left Rail Item (`RailNavItem`):** `36px` height, `4px` radius, left `16×16` vector `Path` icon (`2px` stroke), active pill tinted with `signal-soft` and `1px` `signal` perimeter.
-- **Phase Ticker (`PhaseLine`):** Five horizontal milestones (`LOBBY`, `QUEUE`, `CHAMP SELECT`, `IN GAME`, `RESULTS`), `2px` connecting rail transitioning to `signal` up to current phase.
-- **Mobile 4-Tab Bar:** Equal-width grid inside `shell` border frame (`Pick`, `Skins`, `Loadout`, `Team`) with no ordinal `1 ·` / `2 ·` numbering.
+- **Left Rail Item (`RailNavItem`):** `36px` height, `4px` radius, left `16×16` vector `Path` icon (`2px` stroke); active state is a `panel-raised` fill, `rule-strong` border and `text`-colored icon.
+- **Phase Ticker (`PhaseLine`):** Five milestones (`LOBBY`, `QUEUE`, `CHAMPIONS`, `LIVE`, `RESULTS`; FR `SALON`, `FILE`, `CHAMPIONS`, `EN JEU`, `RÉSULTATS`), a `2px` rail filling to `signal` up to the current phase over `240ms`.
+- **Mobile Tab Bar:** Equal-width grid in the bottom dock (`Pick`, `Skins`, `Loadout`, `Team` in draft; `Allies`, `Enemies` in game); the active tab is an ivory plate.
 
 ### Cards & Telemetry Rows
 - **Roster & Player Rows:** Single-row `1px` `panel` containers (`50px–70px` tall) pairing a circular lane `Roundel` (`Top`/`Jgl`/`Mid`/`Bot`/`Sup`), team-colored `ChampPlate`, name + status subtitle, and right-aligned tabular telemetry figures (`Overpass Mono`).
 - **Line Map (`LineMap`):** Three lane paths plus optional dashed jungle corridor on a `400×400` grid; standing vs fallen tower nodes and non-overlapping staggered ally labels (`Bot` positioned above track, `Support` below track).
 - **Telemetry JSON Inspector:** Scrollable recessed `backdrop` pane hosting copy-selectable `read-only` monospace text (`Overpass Mono`, `11px`) with JSON / Structural Diff / Previous views and secret reveal toggle.
 
+## Motion
+
+Motion marks a change of state that matters to the player; nothing loops and nothing decorates.
+
+- **Turn start:** the phase plate fades to amber (`180ms`) and a 2px ring around it fades out twice (`650ms` x2), then holds still. On mobile the spotlight card's outline does the same.
+- **Countdown:** the urgency ramp colors fade over `240ms`; the drain bar moves linearly over each `1s` tick. Clocks are extrapolated locally between Riot events (desktop: a 250ms Slint timer; mobile: a 250ms interval), so they never freeze.
+- **Rows and plates:** the acting row's tint fades in and out (`180ms`); a player who dies fades to 45% (`240ms`).
+- **Phase ticker:** connector and node fill over `240ms`. Whole screens never crossfade.
+- **Reduced motion:** `Theme.motion` is false when Windows "Show animations" is off, when *Reduce motion* is on in the Performance sheet, or with `--reduce-motion`; every duration then becomes 0. The mobile page honors `prefers-reduced-motion`.
+
 ## Do's and Don'ts
 
 ### Do:
-- **Do** highlight active picks, incoming ready checks, and selected tabs cleanly using `signal-soft` fills plus `1px` full-perimeter borders.
+- **Do** highlight the acting pick and incoming ready checks with `signal-soft` fills plus `1px` full-perimeter borders; highlight selected tabs and toggles quietly.
 - **Do** use `Overpass Mono` with tabular numerals for every countdown, HTTP path, byte size, port, and KDA readout.
 - **Do** keep all functional labels, port indicators, and chip texts at `>= 11px` across both desktop and mobile targets.
 - **Do** bundle and serve font files offline inside desktop assets and local Axum `/fonts/*` routes.

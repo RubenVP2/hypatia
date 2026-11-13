@@ -5,3 +5,10 @@ members = [
     "crates/core",
     "crates/desktop",
 ]
+
+# Small, fast release binary: whole-program optimisation, no unwinding tables or symbols.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

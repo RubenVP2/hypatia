@@ -1,8 +1,7 @@
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use hypatia_shared::{ProcessInfo, SourceId};
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
-use tracing::debug;
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 const RIOT_KEYWORDS: &[&str] = &["riot", "league", "valorant", "vgc", "vgtray"];
 
@@ -130,66 +129,69 @@ pub fn classify_source(name: &str) -> Option<SourceId> {
     None
 }
 
-/// Scans the operating system processes, filtering Riot-related processes and extracting
-/// process info as well as LeagueClientUx command-line arguments.
+/// Lists Riot-related processes and extracts the LeagueClientUx command-line arguments.
+///
+/// Pass 1 refreshes only the process table (names), which is a single cheap system call.
+/// Pass 2 queries details for the handful of Riot processes: the command line once per
+/// process, plus CPU / memory / executable path when `detailed` is set.
 pub fn scan_processes(
     sys: &mut System,
+    detailed: bool,
 ) -> (Vec<ProcessInfo>, Option<LeagueClientArgs>) {
-    sys.refresh_processes_specifics(
-        ProcessesToUpdate::All,
-        true,
-        ProcessRefreshKind::everything(),
-    );
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
 
-    let mut riot_processes = Vec::new();
+    let riot_pids: Vec<Pid> = sys
+        .processes()
+        .iter()
+        .filter(|(_, proc)| is_riot_process(&proc.name().to_string_lossy()))
+        .map(|(pid, _)| *pid)
+        .collect();
+    if riot_pids.is_empty() {
+        return (Vec::new(), None);
+    }
+
+    let mut kind = ProcessRefreshKind::nothing().with_cmd(UpdateKind::OnlyIfNotSet);
+    if detailed {
+        kind = kind
+            .with_cpu()
+            .with_memory()
+            .with_exe(UpdateKind::OnlyIfNotSet);
+    }
+    sys.refresh_processes_specifics(ProcessesToUpdate::Some(&riot_pids), false, kind);
+
+    let mut riot_processes = Vec::with_capacity(riot_pids.len());
     let mut lcu_args: Option<LeagueClientArgs> = None;
 
-    for (pid, proc) in sys.processes() {
-        let name_os = proc.name();
-        let name = name_os.to_string_lossy().to_string();
-
-        if !is_riot_process(&name) {
+    for pid in &riot_pids {
+        let Some(proc) = sys.process(*pid) else {
             continue;
-        }
+        };
+        let name = proc.name().to_string_lossy().into_owned();
 
-        let source = classify_source(&name);
-        let pid_u32 = pid.as_u32();
-        let exe = proc.exe().map(|p| p.to_string_lossy().to_string());
-        let started = proc.start_time() as i64;
-        let cpu = proc.cpu_usage();
-        let mem_bytes = proc.memory();
-
-        // Check if this is the main LeagueClientUx (not helper or render sub-process)
+        // The main LeagueClientUx process (not a helper / renderer) carries the credentials.
         let lower_name = name.to_ascii_lowercase();
         if lower_name.contains("leagueclientux")
             && !lower_name.contains("helper")
             && !lower_name.contains("render")
         {
-            let cmd = proc.cmd();
-            let parsed = parse_lcu_args(cmd);
+            let parsed = parse_lcu_args(proc.cmd());
             if parsed.remoting_auth_token.is_some() || parsed.app_port.is_some() {
-                debug!(
-                    "Discovered main LeagueClientUx args for PID {}: {:?}",
-                    pid_u32, parsed
-                );
                 lcu_args = Some(parsed);
             }
         }
 
         riot_processes.push(ProcessInfo {
-            pid: pid_u32,
+            pid: pid.as_u32(),
+            source: classify_source(&name),
+            exe: proc.exe().map(|p| p.to_string_lossy().into_owned()),
+            started: proc.start_time() as i64,
+            cpu: proc.cpu_usage(),
+            mem_bytes: proc.memory(),
             name,
-            exe,
-            started,
-            cpu,
-            mem_bytes,
-            source,
         });
     }
 
-    // Sort deterministically by PID
     riot_processes.sort_by_key(|p| p.pid);
-
     (riot_processes, lcu_args)
 }
 
@@ -238,7 +240,7 @@ mod tests {
     #[test]
     fn test_scan_processes_does_not_panic() {
         let mut sys = System::new();
-        let (procs, _lcu_args) = scan_processes(&mut sys);
+        let (procs, _lcu_args) = scan_processes(&mut sys, true);
         // On machine with running Riot processes, procs should contain them
         for proc in procs {
             assert!(is_riot_process(&proc.name));

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -11,8 +12,8 @@ use serde_json::Value;
 use tracing::{debug, warn};
 
 use crate::discovery::DiscoveryManager;
-use crate::redaction::SecretVault;
 use crate::riot_http::ReadOnlyRiotClient;
+use crate::signal::ChangeSignal;
 
 const MAX_MEM_ENTRIES: usize = 512;
 const RETRY_COOLDOWN_TRANSIENT: Duration = Duration::from_secs(20);
@@ -22,6 +23,9 @@ const RETRY_COOLDOWN_NOT_FOUND: Duration = Duration::from_secs(300);
 /// and metadata JSONs. 100% local: only talks to `127.0.0.1:{lcu_port}` via `ReadOnlyRiotClient`.
 pub struct GameAssetCache {
     cache_dir: PathBuf,
+    signal: ChangeSignal,
+    metadata_revision: AtomicU64,
+    image_revision: AtomicU64,
     bytes_cache: RwLock<HashMap<String, (Vec<u8>, &'static str)>>,
     disk_paths: RwLock<HashMap<String, PathBuf>>,
     in_flight: Mutex<HashSet<String>>,
@@ -39,14 +43,22 @@ pub struct GameAssetCache {
 
 impl GameAssetCache {
     /// Creates a cache rooted in the user's standard local application cache folder.
-    pub fn new() -> Self {
-        Self::with_dir(default_cache_dir())
+    /// `signal` is bumped whenever an icon or champion metadata becomes available.
+    pub fn new(signal: ChangeSignal) -> Self {
+        Self::with_dir_and_signal(default_cache_dir(), signal)
     }
 
     /// Creates a cache rooted in an explicit directory (primarily for deterministic unit tests).
     pub fn with_dir(cache_dir: PathBuf) -> Self {
+        Self::with_dir_and_signal(cache_dir, ChangeSignal::new())
+    }
+
+    fn with_dir_and_signal(cache_dir: PathBuf, signal: ChangeSignal) -> Self {
         let cache = Self {
             cache_dir,
+            signal,
+            metadata_revision: AtomicU64::new(0),
+            image_revision: AtomicU64::new(0),
             bytes_cache: RwLock::new(HashMap::new()),
             disk_paths: RwLock::new(HashMap::new()),
             in_flight: Mutex::new(HashSet::new()),
@@ -67,6 +79,16 @@ impl GameAssetCache {
 
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
+    }
+
+    /// Bumped each time a newly fetched image lands in the disk cache.
+    pub fn image_revision(&self) -> u64 {
+        self.image_revision.load(Ordering::Relaxed)
+    }
+
+    /// Bumped whenever champion metadata (names, aliases) is (re)loaded.
+    pub fn metadata_revision(&self) -> u64 {
+        self.metadata_revision.load(Ordering::Relaxed)
     }
 
     /// Registers a skin tile path discovered from `/lol-champ-select/v1/skin-carousel-skins`.
@@ -107,7 +129,6 @@ impl GameAssetCache {
         category: &'static str,
         id: i64,
         discovery: &Arc<DiscoveryManager>,
-        vault: &SecretVault,
         client: &ReadOnlyRiotClient,
     ) {
         if !is_valid_asset_id(category, id) {
@@ -116,7 +137,7 @@ impl GameAssetCache {
         if self.cached_image_path(category, id).is_some() {
             return;
         }
-        let Some((port, password)) = resolve_live_lcu_creds(discovery, vault) else {
+        let Some((port, password)) = resolve_live_lcu_creds(discovery) else {
             return;
         };
 
@@ -145,10 +166,9 @@ impl GameAssetCache {
     pub fn trigger_metadata_sync(
         self: &Arc<Self>,
         discovery: &Arc<DiscoveryManager>,
-        vault: &SecretVault,
         client: &ReadOnlyRiotClient,
     ) {
-        let Some((port, password)) = resolve_live_lcu_creds(discovery, vault) else {
+        let Some((port, password)) = resolve_live_lcu_creds(discovery) else {
             return;
         };
         if let Ok(guard) = self.meta_synced_port.try_lock() {
@@ -186,10 +206,9 @@ impl GameAssetCache {
     pub async fn ensure_metadata_synced(
         &self,
         discovery: &DiscoveryManager,
-        vault: &SecretVault,
         client: &ReadOnlyRiotClient,
     ) {
-        let Some((port, password)) = resolve_live_lcu_creds(discovery, vault) else {
+        let Some((port, password)) = resolve_live_lcu_creds(discovery) else {
             return;
         };
         let _ = self
@@ -203,7 +222,6 @@ impl GameAssetCache {
         category: &str,
         id: i64,
         discovery: &DiscoveryManager,
-        vault: &SecretVault,
         client: &ReadOnlyRiotClient,
     ) -> Option<(&'static str, Vec<u8>)> {
         if !is_valid_asset_id(category, id) {
@@ -230,7 +248,7 @@ impl GameAssetCache {
         if self.is_in_cooldown(&key) {
             return None;
         }
-        let (port, password) = resolve_live_lcu_creds(discovery, vault)?;
+        let (port, password) = resolve_live_lcu_creds(discovery)?;
         let _ = self
             .ensure_metadata_synced_with_creds(port, &password, client)
             .await;
@@ -321,6 +339,8 @@ impl GameAssetCache {
                         self.disk_paths.write().unwrap().insert(key.clone(), path);
                         self.put_mem_cache(key.clone(), bytes.clone(), mime);
                         self.failed_until.lock().unwrap().remove(&key);
+                        self.image_revision.fetch_add(1, Ordering::Relaxed);
+                        self.signal.bump();
                         return Some((mime, bytes));
                     } else {
                         debug!("Skipping non-PNG/JPEG payload from LCU {}", lcu_path);
@@ -471,6 +491,9 @@ impl GameAssetCache {
                 if !catalog.is_empty() {
                     *self.champ_catalog.write().unwrap() = catalog;
                 }
+                drop((names, keys, paths));
+                self.metadata_revision.fetch_add(1, Ordering::Relaxed);
+                self.signal.bump();
             }
             "summoner-spells.json" => {
                 let Some(arr) = json.as_array() else { return; };
@@ -546,12 +569,6 @@ impl GameAssetCache {
             .lock()
             .unwrap()
             .insert(key.to_string(), Instant::now() + ttl);
-    }
-}
-
-impl Default for GameAssetCache {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -696,21 +713,14 @@ fn is_valid_asset_id(category: &str, id: i64) -> bool {
     }
 }
 
-fn resolve_live_lcu_creds(discovery: &DiscoveryManager, vault: &SecretVault) -> Option<(u16, String)> {
+fn resolve_live_lcu_creds(discovery: &DiscoveryManager) -> Option<(u16, String)> {
     if discovery.is_demo_override() {
         return None;
     }
-    if let Some(src) = discovery.get_source(SourceId::LeagueClient) {
-        if let (Some(port), Some(cred)) = (src.port, src.credential) {
-            if let Some(pwd) = vault.reveal(cred.id) {
-                return Some((port, pwd));
-            }
-        }
-    }
-    let args = discovery.lcu_args()?;
-    let port = args.app_port?;
-    let token = args.remoting_auth_token?;
-    Some((port, token))
+    discovery.credentials(SourceId::LeagueClient).or_else(|| {
+        let args = discovery.lcu_args()?;
+        Some((args.app_port?, args.remoting_auth_token?))
+    })
 }
 
 fn fallback_spell_paths(id: i64) -> &'static [&'static str] {
@@ -899,10 +909,9 @@ mod tests {
         let disk_path = cache.cached_image_path("champion", 103).unwrap();
         assert!(disk_path.ends_with("103.png"));
 
-        let vault = SecretVault::new();
-        let (disc, _) = DiscoveryManager::new_demo(vault.clone());
+        let disc = DiscoveryManager::new_demo(crate::redaction::SecretVault::new(), ChangeSignal::new());
         let client = ReadOnlyRiotClient::new();
-        let fetched = cache.get_or_fetch_bytes("champion", 103, &disc, &vault, &client).await;
+        let fetched = cache.get_or_fetch_bytes("champion", 103, &disc, &client).await;
         assert_eq!(fetched, Some(("image/png", png_bytes)));
 
         let _ = std::fs::remove_dir_all(&dir);

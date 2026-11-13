@@ -292,6 +292,9 @@ pub struct RemoteRuneTree {
 pub struct RemoteChampSelectState {
     pub sub_phase: String,
     pub time_left_sec: i64,
+    /// Full length of the current timer phase in seconds (0 when unknown).
+    #[serde(default)]
+    pub total_time_sec: i64,
     pub queue_type: String,
     pub local_cell_id: i64,
     pub assigned_position: String,

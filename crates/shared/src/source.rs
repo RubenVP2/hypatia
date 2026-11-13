@@ -11,6 +11,15 @@ pub enum SourceId {
     System,
 }
 
+impl SourceId {
+    pub const COUNT: usize = 4;
+
+    /// Dense index for per-source arrays.
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+}
+
 impl fmt::Display for SourceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

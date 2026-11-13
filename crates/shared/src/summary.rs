@@ -137,6 +137,9 @@ impl ChampSelectAlly {
 pub struct ChampSelectSummary {
     pub sub_phase: String,
     pub time_left_sec: i64,
+    /// Full length of the current timer phase, in seconds (0 when the LCU omits it).
+    #[serde(default)]
+    pub total_time_sec: i64,
     pub queue_type: String,
     pub is_ranked_solo_anonymized: bool,
     pub my_team: Vec<ChampSelectAlly>,
@@ -804,8 +807,13 @@ fn extract_champ_select_summary(
         .and_then(|t| t.get("adjustedTimeLeftInPhase"))
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
-    // LCU reports milliseconds (>500) whereas demo fixtures use whole seconds.
-    let time_left_sec = if raw_time > 500 { raw_time / 1000 } else { raw_time };
+    // The LCU (and the demo fixtures, which mirror it) report milliseconds. Round up so
+    // "0" only shows once the phase has really expired.
+    let time_left_sec = (raw_time.max(0) + 999) / 1000;
+    let total_time_sec = timer
+        .and_then(|t| t.get("totalTimeInPhase"))
+        .and_then(|v| v.as_i64())
+        .map_or(0, |ms| (ms.max(0) + 999) / 1000);
     let local_cell_id = cs
         .get("localPlayerCellId")
         .and_then(|v| v.as_i64())
@@ -995,6 +1003,7 @@ fn extract_champ_select_summary(
         local_action,
         sub_phase,
         time_left_sec,
+        total_time_sec,
         queue_type,
         is_ranked_solo_anonymized: any_anonymized,
         my_team,
@@ -1475,7 +1484,7 @@ mod tests {
             Lang::Fr,
         );
         let p = snap.champ_select.unwrap();
-        assert_eq!(p.time_left_sec, 28);
+        assert_eq!(p.time_left_sec, 29);
         assert_eq!(p.queue_type, "");
         assert!(p.is_ranked_solo_anonymized);
         assert_eq!(p.local_cell_id, 1);

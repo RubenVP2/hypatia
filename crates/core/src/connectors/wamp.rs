@@ -1,17 +1,23 @@
-use std::sync::{Arc, RwLock};
+use std::borrow::Cow;
 use std::time::Duration;
 
 use base64::prelude::*;
 use futures_util::{SinkExt, StreamExt};
-use hypatia_shared::{EventKind, ServerMsg, SourceId};
-use tokio::sync::broadcast;
+use hypatia_shared::{EventKind, SourceId};
+use serde::Deserialize;
+use serde_json::value::RawValue;
+use serde_json::Value;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::Message;
 
-use crate::catalog::{spawn_catalog_discovery, CatalogStore};
-use crate::discovery::DiscoveryManager;
-use crate::redaction::SecretVault;
-use crate::riot_http::ReadOnlyRiotClient;
-use crate::store::EventStore;
+use super::ConnectorContext;
+use crate::catalog::spawn_catalog_discovery;
+use crate::store::projected_uris;
+
+const ALL_EVENTS_TOPIC: &str = "OnJsonApiEvent";
+const WAMP_SUBSCRIBE: u8 = 5;
+const WAMP_UNSUBSCRIBE: u8 = 6;
+const WAMP_EVENT: u8 = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WampTarget {
@@ -19,341 +25,230 @@ pub struct WampTarget {
     pub password: String,
 }
 
-/// Retrieves the connection target (port and revealed password) for a source from DiscoveryManager.
-pub fn get_wamp_target(
-    source_id: SourceId,
-    discovery: &DiscoveryManager,
-    vault: &SecretVault,
-) -> Option<WampTarget> {
-    let source = discovery.get_source(source_id)?;
-    let port = source.port?;
-    let cred = source.credential?;
-    let password = vault.reveal(cred.id)?;
+fn wamp_target(source: SourceId, ctx: &ConnectorContext) -> Option<WampTarget> {
+    if ctx.discovery.is_demo_override()
+        || (source == SourceId::RiotClient && !ctx.flags.riot_client())
+    {
+        return None;
+    }
+    let (port, password) = ctx.discovery.credentials(source)?;
     Some(WampTarget { port, password })
 }
 
-/// Parses and processes an incoming WAMP message string from Riot/League Client.
-pub fn handle_wamp_message(
-    source: SourceId,
-    text: &str,
-    store: &Arc<RwLock<EventStore>>,
-    vault: &SecretVault,
-) {
-    handle_wamp_message_with_catalog(source, text, store, vault, None, None);
+/// WAMP topic carrying events for one resource, e.g.
+/// `/lol-gameflow/v1/gameflow-phase` -> `OnJsonApiEvent_lol-gameflow_v1_gameflow-phase`.
+pub fn topic_for_uri(uri: &str) -> String {
+    format!("{ALL_EVENTS_TOPIC}{}", uri.replace('/', "_"))
 }
 
-/// Parses and processes an incoming WAMP message string from Riot/League Client,
-/// updating the event store and optionally the catalog store.
-pub fn handle_wamp_message_with_catalog(
-    source: SourceId,
-    text: &str,
-    store: &Arc<RwLock<EventStore>>,
-    vault: &SecretVault,
-    catalog: Option<&Arc<RwLock<CatalogStore>>>,
-    ws_broadcast_tx: Option<&broadcast::Sender<ServerMsg>>,
-) {
-    if text.trim().is_empty() {
+/// `[8, "<topic>", {"uri": ..., "eventType": ..., "data": ...}]`
+#[derive(Deserialize)]
+struct EventFrame<'a>(
+    u8,
+    #[serde(borrow)] Cow<'a, str>,
+    #[serde(borrow)] JsonApiEvent<'a>,
+);
+
+#[derive(Deserialize)]
+struct JsonApiEvent<'a> {
+    #[serde(borrow)]
+    uri: Cow<'a, str>,
+    #[serde(borrow, default, rename = "eventType")]
+    event_type: Option<Cow<'a, str>>,
+    /// Left unparsed until we know the event is worth keeping.
+    #[serde(borrow, default)]
+    data: Option<&'a RawValue>,
+}
+
+/// Processes one WAMP text frame from the Riot / League client.
+///
+/// The envelope is parsed without materialising the payload; the payload itself is only parsed
+/// when the store retains it (a projected resource, or any resource while capturing).
+pub fn handle_wamp_message(source: SourceId, text: &str, ctx: &ConnectorContext) {
+    let Ok(EventFrame(opcode, topic, event)) = serde_json::from_str::<EventFrame>(text) else {
+        return;
+    };
+    if opcode != WAMP_EVENT || !topic.starts_with(ALL_EVENTS_TOPIC) {
         return;
     }
+    let raw = event.data.map_or("null", RawValue::get);
+    tracing::trace!("{source}: {topic} {} ({} bytes)", event.uri, raw.len());
 
-    let parsed: serde_json::Value = match serde_json::from_str(text) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::trace!("{}: WAMP text not JSON: {:?} in '{}'", source, e, text);
+    {
+        let mut store = ctx.store.write().unwrap();
+        if !store.wants(source, &event.uri) {
+            store.record_skipped(source, raw.len() as u64);
             return;
         }
-    };
-
-    let array = match parsed.as_array() {
-        Some(a) => a,
-        None => {
-            tracing::trace!("{}: WAMP message is not an array", source);
-            return;
-        }
-    };
-
-    if array.len() < 3 {
-        tracing::trace!("{}: WAMP array too short: {:?}", source, array);
-        return;
     }
 
-    // Opcode must be 8 (EVENT)
-    if array[0].as_i64() != Some(8) {
-        tracing::trace!("{}: WAMP opcode is not 8: {:?}", source, array[0]);
-        return;
-    }
-
-    let event_name = array[1].as_str().unwrap_or_default();
-    if event_name != "OnJsonApiEvent" {
-        tracing::trace!("{}: WAMP event is not OnJsonApiEvent: {}", source, event_name);
-        return;
-    }
-
-    let payload_obj = &array[2];
-    let uri = match payload_obj.get("uri").and_then(|u| u.as_str()) {
-        Some(u) => u.to_string(),
-        None => {
-            tracing::trace!("{}: WAMP payload missing uri", source);
-            return;
-        }
-    };
-
-    let event_type = payload_obj
-        .get("eventType")
-        .and_then(|t| t.as_str())
-        .unwrap_or("Update");
-
-    let kind = match event_type.to_ascii_lowercase().as_str() {
-        "create" => EventKind::Create,
-        "delete" => EventKind::Delete,
+    let kind = match event.event_type.as_deref() {
+        Some(t) if t.eq_ignore_ascii_case("create") => EventKind::Create,
+        Some(t) if t.eq_ignore_ascii_case("delete") => EventKind::Delete,
         _ => EventKind::Update,
     };
+    let data: Value = serde_json::from_str(raw).unwrap_or(Value::Null);
+    let uri = event.uri.into_owned();
+    let meta = ctx
+        .store
+        .write()
+        .unwrap()
+        .insert_event(source, kind, uri, data, &ctx.vault);
+    ctx.observe(source, &meta.uri, meta.size as u64);
+}
 
-    let data = payload_obj
-        .get("data")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
-
-    let meta = {
-        let mut guard = store.write().unwrap();
-        guard.insert_event(source, kind, uri.clone(), data, vault)
-    };
-
-    if let Some(cat) = catalog {
-        let changed = cat
-            .write()
-            .unwrap()
-            .record_observed(source, "GET", &uri, meta.size as u64);
-        if changed {
-            if let Some(tx) = ws_broadcast_tx {
-                let _ = tx.send(ServerMsg::CatalogChanged { source });
+/// Seeds the store with read-only GET snapshots of every projected resource.
+async fn bootstrap_source_state(source: SourceId, target: &WampTarget, ctx: &ConnectorContext) {
+    for path in projected_uris(source) {
+        match ctx.client.get(target.port, Some(&target.password), path).await {
+            Ok((status, _, body)) if status.is_success() => {
+                tracing::debug!("{source}: bootstrapped {path}");
+                ctx.store.write().unwrap().insert_event(
+                    source,
+                    EventKind::Update,
+                    (*path).to_string(),
+                    body,
+                    &ctx.vault,
+                );
             }
+            Ok((status, _, _)) => tracing::debug!("{source}: bootstrap {path} returned {status}"),
+            Err(e) => tracing::debug!("{source}: bootstrap {path} failed: {e:?}"),
         }
     }
 }
 
-/// Initial bootstrap on live connection: fetches initial read-only GET snapshots to seed store state.
-async fn bootstrap_source_state(
-    source_id: SourceId,
-    port: u16,
-    password: &str,
-    store: &Arc<RwLock<EventStore>>,
-    vault: &SecretVault,
-) {
-    let client = match reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(2))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::debug!("{}: bootstrap client build error: {:?}", source_id, e);
-            return;
+type WampStream = tokio_tungstenite::WebSocketStream<
+    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+>;
+
+async fn send_wamp(ws: &mut WampStream, opcode: u8, topic: &str) -> anyhow::Result<()> {
+    let frame = serde_json::json!([opcode, topic]).to_string();
+    ws.send(Message::Text(frame.into())).await?;
+    Ok(())
+}
+
+/// Subscribes either to the complete event stream (`full`) or only to the projected resources,
+/// undoing the previous subscription set (`previous`) first.
+async fn switch_subscription(
+    ws: &mut WampStream,
+    source: SourceId,
+    previous: Option<bool>,
+    full: bool,
+) -> anyhow::Result<()> {
+    let focused: Vec<String> = projected_uris(source).iter().map(|u| topic_for_uri(u)).collect();
+    match previous {
+        Some(true) => send_wamp(ws, WAMP_UNSUBSCRIBE, ALL_EVENTS_TOPIC).await?,
+        Some(false) => {
+            for topic in &focused {
+                send_wamp(ws, WAMP_UNSUBSCRIBE, topic).await?;
+            }
         }
-    };
-
-    let auth = format!("Basic {}", BASE64_STANDARD.encode(format!("riot:{}", password)));
-    let paths: &[&str] = match source_id {
-        SourceId::LeagueClient => &[
-            "/lol-gameflow/v1/gameflow-phase",
-            "/lol-summoner/v1/current-summoner",
-            "/lol-ranked/v1/current-ranked-stats",
-            "/lol-lobby/v2/lobby",
-            "/lol-matchmaking/v1/search",
-            "/lol-matchmaking/v1/ready-check",
-            "/lol-champ-select/v1/session",
-            "/lol-champ-select/v1/pickable-champion-ids",
-            "/lol-champ-select/v1/bannable-champion-ids",
-            "/lol-champ-select/v1/skin-carousel-skins",
-            "/lol-perks/v1/pages",
-        ],
-        SourceId::RiotClient => &["/chat/v4/presences"],
-        _ => &[],
-    };
-
-    for path in paths {
-        let url = format!("https://127.0.0.1:{}{}", port, path);
-        match client.get(&url).header("Authorization", &auth).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                if let Ok(json_val) = resp.json::<serde_json::Value>().await {
-                    tracing::info!("{}: bootstrapped {}", source_id, path);
-                    let mut guard = store.write().unwrap();
-                    guard.insert_event(
-                        source_id,
-                        EventKind::Update,
-                        (*path).to_string(),
-                        json_val,
-                        vault,
-                    );
-                }
-            }
-            Ok(resp) => {
-                tracing::debug!("{}: bootstrap {} returned {}", source_id, path, resp.status());
-            }
-            Err(e) => {
-                tracing::debug!("{}: bootstrap {} request failed: {:?}", source_id, path, e);
-            }
+        None => {}
+    }
+    if full {
+        send_wamp(ws, WAMP_SUBSCRIBE, ALL_EVENTS_TOPIC).await?;
+    } else {
+        for topic in &focused {
+            send_wamp(ws, WAMP_SUBSCRIBE, topic).await?;
         }
     }
+    Ok(())
 }
 
 /// Connects to a WAMP server and processes messages until disconnection or target change.
 async fn connect_and_listen(
-    source_id: SourceId,
+    source: SourceId,
     target: &WampTarget,
-    discovery: &DiscoveryManager,
-    store: &Arc<RwLock<EventStore>>,
-    vault: &SecretVault,
-    catalog: Option<&Arc<RwLock<CatalogStore>>>,
-    client: Option<&ReadOnlyRiotClient>,
-    ws_broadcast_tx: Option<&broadcast::Sender<ServerMsg>>,
+    ctx: &ConnectorContext,
 ) -> anyhow::Result<()> {
     let mut builder = native_tls::TlsConnector::builder();
     builder.danger_accept_invalid_certs(true);
-    let tls = builder.build()?;
-    let connector = tokio_tungstenite::Connector::NativeTls(tls);
+    let connector = tokio_tungstenite::Connector::NativeTls(builder.build()?);
 
-    let url = format!("wss://127.0.0.1:{}/", target.port);
-    let mut req = url.into_client_request()?;
-    let auth = format!("Basic {}", BASE64_STANDARD.encode(format!("riot:{}", target.password)));
+    let mut req = format!("wss://127.0.0.1:{}/", target.port).into_client_request()?;
+    let auth = format!(
+        "Basic {}",
+        BASE64_STANDARD.encode(format!("riot:{}", target.password))
+    );
     req.headers_mut().insert("Authorization", auth.parse()?);
-    req.headers_mut().insert("Sec-WebSocket-Protocol", "wamp".parse()?);
+    req.headers_mut()
+        .insert("Sec-WebSocket-Protocol", "wamp".parse()?);
 
-    let (mut ws_stream, _) = tokio_tungstenite::connect_async_tls_with_config(
-        req,
-        None,
-        false,
-        Some(connector),
-    )
-    .await?;
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async_tls_with_config(req, None, false, Some(connector)).await?;
+    tracing::info!("{source}: connected to WAMP WebSocket on port {}", target.port);
 
-    tracing::info!("{}: Connected to WAMP WebSocket on port {}", source_id, target.port);
-
-    // Bootstrap initial state when connecting to LeagueClient or RiotClient
-    if matches!(source_id, SourceId::LeagueClient | SourceId::RiotClient) {
-        bootstrap_source_state(source_id, target.port, &target.password, store, vault).await;
-    }
-
-    // Spawn catalog discovery for this source if catalog and client are provided
-    if let (Some(cat), Some(cli), Some(tx)) = (catalog, client, ws_broadcast_tx) {
-        spawn_catalog_discovery(
-            source_id,
-            target.port,
-            Some(target.password.clone()),
-            cat.clone(),
-            cli.clone(),
-            tx.clone(),
-        );
-    }
-
-    // Subscribe to all json api events: [5, "OnJsonApiEvent"]
-    let sub = serde_json::json!([5, "OnJsonApiEvent"]).to_string();
-    ws_stream
-        .send(tokio_tungstenite::tungstenite::Message::Text(sub.into()))
-        .await?;
+    // Subscribe before bootstrapping so no update can slip between the two.
+    let mut full_stream: Option<bool> = None;
+    let mut housekeeping = tokio::time::interval(Duration::from_millis(1000));
 
     loop {
-        // Periodically verify target credentials haven't changed in discovery
-        let current_target = get_wamp_target(source_id, discovery, vault);
-        if current_target.as_ref() != Some(target) {
-            tracing::info!("{}: WAMP target changed or disappeared, disconnecting", source_id);
-            break;
-        }
-
         tokio::select! {
-            msg = ws_stream.next() => {
-                match msg {
-                    Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) => {
-                        handle_wamp_message_with_catalog(source_id, &text, store, vault, catalog, ws_broadcast_tx);
+            _ = housekeeping.tick() => {
+                if wamp_target(source, ctx).as_ref() != Some(target) {
+                    tracing::info!("{source}: WAMP target changed or disappeared, disconnecting");
+                    return Ok(());
+                }
+                // Telemetry Lab open: full firehose. Closed: only what the projection reads.
+                let want_full = ctx.flags.telemetry();
+                if full_stream != Some(want_full) {
+                    switch_subscription(&mut ws, source, full_stream, want_full).await?;
+                    if full_stream.is_none() {
+                        bootstrap_source_state(source, target, ctx).await;
                     }
-                    Some(Ok(tokio_tungstenite::tungstenite::Message::Ping(payload))) => {
-                        let _ = ws_stream.send(tokio_tungstenite::tungstenite::Message::Pong(payload)).await;
-                    }
-                    Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_))) => {
-                        tracing::info!("{}: WAMP connection closed by server", source_id);
-                        break;
-                    }
-                    Some(Err(e)) => {
-                        return Err(anyhow::anyhow!("WebSocket error: {:?}", e));
-                    }
-                    None => {
-                        return Err(anyhow::anyhow!("WebSocket stream terminated unexpectedly"));
-                    }
-                    _ => {}
+                    full_stream = Some(want_full);
+                }
+                if ctx.flags.endpoint_catalog() {
+                    spawn_catalog_discovery(
+                        source,
+                        target.port,
+                        Some(target.password.clone()),
+                        ctx.catalog.clone(),
+                        ctx.client.clone(),
+                        ctx.signal.clone(),
+                    );
                 }
             }
-            _ = tokio::time::sleep(Duration::from_millis(1000)) => {
-                // tick to re-verify credentials
+            msg = ws.next() => match msg {
+                Some(Ok(Message::Text(text))) => handle_wamp_message(source, &text, ctx),
+                Some(Ok(Message::Ping(payload))) => {
+                    let _ = ws.send(Message::Pong(payload)).await;
+                }
+                Some(Ok(Message::Close(_))) => {
+                    tracing::info!("{source}: WAMP connection closed by server");
+                    return Ok(());
+                }
+                Some(Ok(_)) => {}
+                Some(Err(e)) => anyhow::bail!("WebSocket error: {e:?}"),
+                None => anyhow::bail!("WebSocket stream terminated unexpectedly"),
             }
         }
     }
-
-    Ok(())
 }
 
-/// Spawns a background task for connecting to a source's WAMP WebSocket with exponential backoff.
-pub fn spawn_wamp_connector(
-    source_id: SourceId,
-    discovery: Arc<DiscoveryManager>,
-    store: Arc<RwLock<EventStore>>,
-    vault: SecretVault,
-) -> tokio::task::JoinHandle<()> {
-    spawn_wamp_connector_full(source_id, discovery, store, vault, None, None, None)
-}
-
-/// Spawns a background task with full catalog discovery and event recording integration.
-pub fn spawn_wamp_connector_full(
-    source_id: SourceId,
-    discovery: Arc<DiscoveryManager>,
-    store: Arc<RwLock<EventStore>>,
-    vault: SecretVault,
-    catalog: Option<Arc<RwLock<CatalogStore>>>,
-    client: Option<ReadOnlyRiotClient>,
-    ws_broadcast_tx: Option<broadcast::Sender<ServerMsg>>,
-) -> tokio::task::JoinHandle<()> {
+/// Spawns the WAMP connector for `source`, reconnecting with exponential backoff.
+pub fn spawn_wamp_connector(source: SourceId, ctx: ConnectorContext) -> tokio::task::JoinHandle<()> {
+    const INITIAL_BACKOFF: Duration = Duration::from_millis(500);
     tokio::spawn(async move {
-        let mut backoff = Duration::from_millis(500);
+        let mut backoff = INITIAL_BACKOFF;
         let mut last_target: Option<WampTarget> = None;
 
         loop {
-            let target = get_wamp_target(source_id, &discovery, &vault);
-
-            // If target credentials changed, reset backoff
-            if target.is_some() && target != last_target {
-                backoff = Duration::from_millis(500);
-                last_target = target.clone();
+            let Some(target) = wamp_target(source, &ctx) else {
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+                continue;
+            };
+            if last_target.as_ref() != Some(&target) {
+                backoff = INITIAL_BACKOFF;
+                last_target = Some(target.clone());
             }
 
-            let current_target = match target {
-                Some(t) => t,
-                None => {
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
-                    continue;
-                }
-            };
-
-            match connect_and_listen(
-                source_id,
-                &current_target,
-                &discovery,
-                &store,
-                &vault,
-                catalog.as_ref(),
-                client.as_ref(),
-                ws_broadcast_tx.as_ref(),
-            )
-            .await
-            {
-                Ok(()) => {
-                    backoff = Duration::from_millis(500);
-                }
+            match connect_and_listen(source, &target, &ctx).await {
+                Ok(()) => backoff = INITIAL_BACKOFF,
                 Err(e) => {
                     tracing::debug!(
-                        "{}: WAMP disconnect / failure (port {}): {:?}. Next retry in {:?}",
-                        source_id,
-                        current_target.port,
-                        e,
-                        backoff
+                        "{source}: WAMP failure (port {}): {e:?}. Next retry in {backoff:?}",
+                        target.port
                     );
                     tokio::time::sleep(backoff).await;
                     backoff = (backoff * 2).min(Duration::from_secs(10));
@@ -365,71 +260,97 @@ pub fn spawn_wamp_connector_full(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::{Arc, RwLock};
+
     use serde_json::json;
 
-    #[test]
-    fn test_handle_wamp_message_valid() {
+    use super::*;
+    use crate::catalog::CatalogStore;
+    use crate::discovery::DiscoveryManager;
+    use crate::redaction::SecretVault;
+    use crate::riot_http::ReadOnlyRiotClient;
+    use crate::settings::{Flags, Settings};
+    use crate::signal::ChangeSignal;
+    use crate::store::EventStore;
+
+    fn context(telemetry: bool) -> ConnectorContext {
+        let signal = ChangeSignal::new();
         let vault = SecretVault::new();
-        let (store, _rx) = EventStore::new();
-        let store = Arc::new(RwLock::new(store));
+        let flags = Arc::new(Flags::new(&Settings::default()));
+        flags.set_telemetry(telemetry);
+        let mut store = EventStore::new(signal.clone());
+        store.set_capture(telemetry);
+        ConnectorContext {
+            discovery: DiscoveryManager::new_demo(vault.clone(), signal.clone()),
+            store: Arc::new(RwLock::new(store)),
+            catalog: Arc::new(RwLock::new(CatalogStore::new())),
+            vault,
+            client: ReadOnlyRiotClient::new(),
+            flags,
+            signal,
+        }
+    }
 
-        let wamp_msg = json!([
-            8,
+    fn frame(topic: &str, uri: &str, event_type: &str, data: Value) -> String {
+        json!([8, topic, { "data": data, "eventType": event_type, "uri": uri }]).to_string()
+    }
+
+    #[test]
+    fn captures_and_redacts_events_while_telemetry_is_open() {
+        let ctx = context(true);
+        let msg = frame(
             "OnJsonApiEvent",
-            {
-                "data": { "presence": "chat", "token": "secret_12345" },
-                "eventType": "Update",
-                "uri": "/chat/v4/presences"
-            }
-        ])
-        .to_string();
+            "/chat/v4/presences",
+            "Update",
+            json!({ "presence": "chat", "token": "secret_12345" }),
+        );
+        handle_wamp_message(SourceId::RiotClient, &msg, &ctx);
 
-        handle_wamp_message(SourceId::RiotClient, &wamp_msg, &store, &vault);
-
-        let guard = store.read().unwrap();
-        assert_eq!(guard.len(), 1);
-
-        let evt = guard.get_event(1).expect("event 1 should exist");
+        let store = ctx.store.read().unwrap();
+        let evt = store.get_event(1).expect("event 1 should exist");
         assert_eq!(evt.meta.source, SourceId::RiotClient);
         assert_eq!(evt.meta.uri, "/chat/v4/presences");
         assert_eq!(evt.meta.kind, EventKind::Update);
         assert!(evt.meta.has_secrets);
-
-        // Verify token in payload was masked
         assert!(evt.payload["token"].get("$secret").is_some());
+        assert_eq!(ctx.catalog.read().unwrap().len(), 1);
     }
 
     #[test]
-    fn test_handle_wamp_message_opcodes() {
-        let vault = SecretVault::new();
-        let (store, _rx) = EventStore::new();
-        let store = Arc::new(RwLock::new(store));
+    fn ignores_frames_that_are_not_json_api_events() {
+        let ctx = context(true);
+        for msg in [
+            json!([5, "OnJsonApiEvent"]).to_string(),
+            json!([8, "OtherEvent", { "uri": "/test" }]).to_string(),
+            "not json".to_string(),
+            String::new(),
+        ] {
+            handle_wamp_message(SourceId::LeagueClient, &msg, &ctx);
+        }
+        assert!(ctx.store.read().unwrap().is_empty());
 
-        // Non-8 opcode should be ignored
-        let subscribe_msg = json!([5, "OnJsonApiEvent"]).to_string();
-        handle_wamp_message(SourceId::LeagueClient, &subscribe_msg, &store, &vault);
-        assert_eq!(store.read().unwrap().len(), 0);
+        let msg = frame("OnJsonApiEvent", "/lol-lobby/v2/lobby", "Create", json!({ "id": 123 }));
+        handle_wamp_message(SourceId::LeagueClient, &msg, &ctx);
+        let store = ctx.store.read().unwrap();
+        assert_eq!(store.get_event(1).unwrap().meta.kind, EventKind::Create);
+    }
 
-        // Different event name should be ignored
-        let other_msg = json!([8, "OtherEvent", { "uri": "/test" }]).to_string();
-        handle_wamp_message(SourceId::LeagueClient, &other_msg, &store, &vault);
-        assert_eq!(store.read().unwrap().len(), 0);
+    #[test]
+    fn projection_only_mode_keeps_projected_resources_and_skips_the_rest() {
+        let ctx = context(false);
+        let topic = topic_for_uri("/lol-gameflow/v1/gameflow-phase");
+        assert_eq!(topic, "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase");
 
-        // Create event
-        let create_msg = json!([
-            8,
-            "OnJsonApiEvent",
-            {
-                "data": { "id": 123 },
-                "eventType": "Create",
-                "uri": "/lol-lobby/v2/lobby"
-            }
-        ])
-        .to_string();
-        handle_wamp_message(SourceId::LeagueClient, &create_msg, &store, &vault);
-        assert_eq!(store.read().unwrap().len(), 1);
-        let evt = store.read().unwrap().get_event(1).unwrap();
-        assert_eq!(evt.meta.kind, EventKind::Create);
+        let phase = frame(&topic, "/lol-gameflow/v1/gameflow-phase", "Update", json!("Lobby"));
+        handle_wamp_message(SourceId::LeagueClient, &phase, &ctx);
+        let chatter = frame("OnJsonApiEvent", "/lol-chat/v1/me", "Update", json!({ "a": 1 }));
+        handle_wamp_message(SourceId::LeagueClient, &chatter, &ctx);
+
+        let store = ctx.store.read().unwrap();
+        assert_eq!(store.phase().unwrap().phase, "Lobby");
+        assert!(store.get_state(SourceId::LeagueClient, "/lol-chat/v1/me").is_none());
+        assert_eq!(store.source_stats(SourceId::LeagueClient).0, 2);
+        assert!(store.is_empty());
+        assert!(ctx.catalog.read().unwrap().is_empty());
     }
 }

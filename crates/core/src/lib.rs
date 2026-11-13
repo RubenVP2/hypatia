@@ -15,10 +15,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use hypatia_shared::{
-    extract_champ_select_summary_localized, extract_eog_summary, extract_live_board_localized,
-    extract_live_game_summary_localized, extract_lobby_summary_localized,
-    extract_matchmaking_summary, extract_summoner_summary_localized, Lang, ServerMsg, Snapshot,
-    SourceId, SummarySnapshot,
+    project_match, Lang, MatchInputs, ServerMsg, Snapshot, SourceId, SummarySnapshot,
 };
 use tokio::sync::{broadcast, watch};
 use tracing::info;
@@ -219,94 +216,26 @@ impl AppState {
         let allgame_val = live("/liveclientdata/allgamedata");
         let active_val = live("/liveclientdata/activeplayer");
         let events_val = live("/liveclientdata/eventdata");
+        let phase = guard.phase();
+        drop(guard);
 
-        let lang = self.lang();
-        let summoner = extract_summoner_summary_localized(
-            summoner_val.as_ref(),
-            ranked_val.as_ref(),
-            presences_val.as_ref(),
-            lang,
-        );
-        let lobby = extract_lobby_summary_localized(lobby_val.as_ref(), lang);
-        let matchmaking = extract_matchmaking_summary(search_val.as_ref(), ready_val.as_ref());
-        let mut champ_select =
-            extract_champ_select_summary_localized(cs_val.as_ref(), lobby.as_ref(), lang);
-        if let Some(ref mut cs) = champ_select {
-            for ally in &mut cs.my_team {
-                if ally.champion_id == 0 && !ally.champion_name.is_empty() {
-                    ally.champion_id = self.assets.resolve_champion_id(&ally.champion_name);
-                } else if ally.champion_id > 0 && ally.champion_name.starts_with("Champion #") {
-                    ally.champion_name =
-                        self.assets.resolve_champion_name_localized(ally.champion_id, lang);
-                }
-            }
-            for enemy in &mut cs.their_team {
-                if enemy.champion_id == 0 && !enemy.champion_name.is_empty() {
-                    enemy.champion_id = self.assets.resolve_champion_id(&enemy.champion_name);
-                } else if enemy.champion_id > 0 && enemy.champion_name.starts_with("Champion #") {
-                    enemy.champion_name =
-                        self.assets.resolve_champion_name_localized(enemy.champion_id, lang);
-                }
-            }
-            for (name, id) in cs.my_team_bans.iter_mut().zip(cs.my_team_ban_ids.iter_mut()) {
-                if *id == 0 {
-                    *id = self.assets.resolve_champion_id(name);
-                } else if name.starts_with("Champion #") {
-                    *name = self.assets.resolve_champion_name_localized(*id, lang);
-                }
-            }
-            for (name, id) in cs.their_team_bans.iter_mut().zip(cs.their_team_ban_ids.iter_mut()) {
-                if *id == 0 {
-                    *id = self.assets.resolve_champion_id(name);
-                } else if name.starts_with("Champion #") {
-                    *name = self.assets.resolve_champion_name_localized(*id, lang);
-                }
-            }
-        }
-        let mut live_game = extract_live_game_summary_localized(
-            allgame_val.as_ref(),
-            active_val.as_ref(),
-            events_val.as_ref(),
-            lang,
-        );
-        if let Some(ref mut lg) = live_game {
-            for p in &mut lg.players {
-                if p.champion_id == 0 {
-                    p.champion_id = self
-                        .assets
-                        .resolve_champion_id_with_alias(&p.champion_name, &p.champion_alias);
-                }
-            }
-            if lg.active_champion_id == 0 {
-                lg.active_champion_id = lg
-                    .players
-                    .iter()
-                    .find(|p| p.is_self && p.champion_id > 0)
-                    .map(|p| p.champion_id)
-                    .unwrap_or_else(|| self.assets.resolve_champion_id(&lg.active_champion));
-            }
-        }
-        let board = live_game.as_ref().map(|lg| {
-            extract_live_board_localized(allgame_val.as_ref(), events_val.as_ref(), lg, lang)
-        });
-        let mut end_of_game = extract_eog_summary(eog_val.as_ref());
-        if let Some(ref mut eog) = end_of_game {
-            if eog.champion_id == 0 {
-                eog.champion_id = self.assets.resolve_champion_id(&eog.champion_name);
-            }
-        }
-
-        SummarySnapshot {
-            phase: guard.phase(),
+        let inputs = MatchInputs {
+            phase,
             sources,
-            summoner,
-            lobby,
-            matchmaking,
-            champ_select,
-            live_game,
-            board,
-            end_of_game,
-        }
+            summoner: summoner_val.as_ref(),
+            ranked: ranked_val.as_ref(),
+            presences: presences_val.as_ref(),
+            lobby: lobby_val.as_ref(),
+            matchmaking_search: search_val.as_ref(),
+            ready_check: ready_val.as_ref(),
+            champ_select: cs_val.as_ref(),
+            live_allgame: allgame_val.as_ref(),
+            live_active: active_val.as_ref(),
+            live_events: events_val.as_ref(),
+            end_of_game: eog_val.as_ref(),
+        };
+
+        project_match(&inputs, &*self.assets, self.lang())
     }
 
     /// Clears all buffered events in the EventStore.
@@ -543,12 +472,4 @@ pub fn compute_json_diff_localized(
     }
 
     out.join("\n")
-}
-
-/// English wrapper for line-by-line JSON diff.
-pub fn compute_json_diff(
-    prev: Option<&serde_json::Value>,
-    curr: &serde_json::Value,
-) -> String {
-    compute_json_diff_localized(prev, curr, Lang::En)
 }

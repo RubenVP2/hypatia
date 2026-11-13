@@ -11,8 +11,9 @@ use hypatia_core::assets::{load_persisted_or_detect_lang, save_persisted_lang, G
 use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
 use hypatia_core::{compute_json_diff_localized, AppState};
 use hypatia_shared::{
-    spell_name_from_id_localized, ChampSelectSummary, EndOfGameSummary, EventKind, Lane, Lang,
-    LiveBoard, LiveGameSummary, ObjectiveKind, SourceId, SourceStatus, SummarySnapshot,
+    is_champion_placeholder, spell_name_from_id_localized, ChampSelectSummary, EndOfGameSummary,
+    EventKind, Lane, Lang, LiveBoard, LiveGameSummary, ObjectiveKind, Position, SourceId,
+    SourceStatus, SummarySnapshot, SummonerSummary,
 };
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
 use tracing::info;
@@ -65,17 +66,6 @@ struct Cli {
     /// Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
     #[arg(long)]
     phase: Option<String>,
-}
-
-fn lane_index(position: &str) -> i32 {
-    match position.trim().to_ascii_uppercase().as_str() {
-        "TOP" => 0,
-        "JUNGLE" => 1,
-        "MIDDLE" | "MID" => 2,
-        "BOTTOM" | "BOT" => 3,
-        "UTILITY" | "SUPPORT" => 4,
-        _ => -1,
-    }
 }
 
 fn queue_type_label(queue_type: &str, lang: Lang) -> String {
@@ -137,11 +127,7 @@ fn rank_tier_label(tier: &str, lang: Lang) -> &str {
 
 fn champ_initials(name: &str) -> SharedString {
     let trimmed = name.trim();
-    if trimmed.is_empty()
-        || trimmed.starts_with("Selecting")
-        || trimmed.starts_with("Choosing")
-        || trimmed.starts_with("Sélection")
-    {
+    if is_champion_placeholder(trimmed) {
         return SharedString::default();
     }
     let words: Vec<&str> = trimmed
@@ -233,11 +219,7 @@ fn build_ban_entries(
         .enumerate()
         .filter(|(_, b)| !b.trim().is_empty())
         .map(|(i, b)| {
-            let id = ids
-                .get(i)
-                .copied()
-                .filter(|&cid| cid > 0)
-                .unwrap_or_else(|| app_state.assets.resolve_champion_id(b));
+            let id = ids.get(i).copied().filter(|&cid| cid > 0).unwrap_or(0);
             BanEntry {
                 name: SharedString::from(b.as_str()),
                 initials: champ_initials(b),
@@ -295,11 +277,8 @@ fn build_champ_select_view(
     let mut acting_label = None;
 
     for ally in &cs.my_team {
-        let lane = lane_index(&ally.assigned_position);
-        let has_champ = ally.champion_id > 0
-            && !ally.champion_name.is_empty()
-            && !ally.champion_name.starts_with("Selecting")
-            && !ally.champion_name.starts_with("Sélection");
+        let lane = Position::parse(&ally.assigned_position).map_or(-1, Position::desktop_index);
+        let has_champ = ally.has_champion();
         let champ_str = if has_champ {
             ally.champion_name.as_str()
         } else {
@@ -424,11 +403,14 @@ fn build_champ_select_view(
             .to_string()
         }
     });
-    let detail = format!(
-        "{} · {}",
-        queue_type_label(&cs.queue_type, lang),
-        sub_phase_label(&cs.sub_phase, lang)
-    );
+    let q_label = queue_type_label(&cs.queue_type, lang);
+    let s_label = sub_phase_label(&cs.sub_phase, lang);
+    let detail = match (q_label.is_empty(), s_label.is_empty()) {
+        (true, true) => String::new(),
+        (true, false) => s_label,
+        (false, true) => q_label,
+        (false, false) => format!("{q_label} · {s_label}"),
+    };
 
     let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, app_state, loader);
     let their_ban_list =
@@ -469,15 +451,9 @@ fn build_live_view(
 
     for p in &lg.players {
         let mine = (p.team == "ORDER") == b.my_team_is_order;
-        let lane = lane_index(&p.position);
+        let lane = Position::parse(&p.position).map_or(-1, Position::desktop_index);
         let kda_str = format!("{} / {} / {}", p.kills, p.deaths, p.assists);
-        let cid = if p.champion_id > 0 {
-            p.champion_id
-        } else {
-            app_state
-                .assets
-                .resolve_champion_id_with_alias(&p.champion_name, &p.champion_alias)
-        };
+        let cid = p.champion_id;
         if p.is_self {
             self_dead = p.is_dead;
             self_respawn = p.respawn_timer_sec;
@@ -591,10 +567,8 @@ fn build_live_view(
 
     let active_cid = if lg.active_champion_id > 0 {
         lg.active_champion_id
-    } else if self_champion_id > 0 {
-        self_champion_id
     } else {
-        app_state.assets.resolve_champion_id(&lg.active_champion)
+        self_champion_id
     };
 
     LiveView {
@@ -623,11 +597,7 @@ fn build_end_view(
     lang: Lang,
 ) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
-    let cid = if eog.champion_id > 0 {
-        eog.champion_id
-    } else {
-        app_state.assets.resolve_champion_id(&eog.champion_name)
-    };
+    let cid = eog.champion_id;
     let stats = vec![
         StatLine {
             label: SharedString::from("Champion"),
@@ -737,10 +707,12 @@ fn apply_summary_to_windows(
         .lobby
         .as_ref()
         .map(|l| l.queue_name.clone())
+        .filter(|s| !s.is_empty())
         .or_else(|| {
             snap.champ_select
                 .as_ref()
                 .map(|c| queue_type_label(&c.queue_type, lang))
+                .filter(|s| !s.is_empty())
         })
         .unwrap_or_default();
     main_win.set_queue_label(SharedString::from(queue_label));
@@ -750,7 +722,8 @@ fn apply_summary_to_windows(
         let summoner_label = snap
             .summoner
             .as_ref()
-            .map(|s| format!("{}#{}", s.display_name, s.tag_line))
+            .map(SummonerSummary::riot_id)
+            .filter(|s| !s.is_empty())
             .unwrap_or_else(|| lang.pick("Not signed in", "Non connecté").to_string());
         let rank_label = snap
             .summoner
@@ -799,6 +772,7 @@ fn apply_summary_to_windows(
                     .lobby
                     .as_ref()
                     .map(|l| l.queue_name.as_str())
+                    .filter(|s| !s.is_empty())
                     .unwrap_or(lang.pick("Lobby", "Salon"));
                 (
                     if lang.is_fr() {
@@ -896,7 +870,8 @@ fn apply_summary_to_windows(
         let summoner_header_name = snap
             .summoner
             .as_ref()
-            .map(|s| SharedString::from(format!("{}#{}", s.display_name, s.tag_line)))
+            .map(SummonerSummary::riot_id)
+            .map(SharedString::from)
             .unwrap_or_default();
 
         main_win.set_wait(WaitView {
@@ -909,28 +884,20 @@ fn apply_summary_to_windows(
             notes: ModelRc::new(VecModel::from(notes)),
         });
 
-        let self_puuid = snap
-            .summoner
-            .as_ref()
-            .map(|s| s.puuid.as_str())
-            .unwrap_or("");
         let party: Vec<PartyRow> = snap
             .lobby
             .as_ref()
             .map(|l| {
                 l.members
                     .iter()
-                    .enumerate()
-                    .map(|(idx, m)| PartyRow {
+                    .map(|m| PartyRow {
                         name: SharedString::from(m.summoner_name.as_str()),
-                        first_lane: lane_index(m.first_position.as_deref().unwrap_or("")),
-                        second_lane: lane_index(m.second_position.as_deref().unwrap_or("")),
+                        first_lane: Position::parse(m.first_position.as_deref().unwrap_or(""))
+                            .map_or(-1, Position::desktop_index),
+                        second_lane: Position::parse(m.second_position.as_deref().unwrap_or(""))
+                            .map_or(-1, Position::desktop_index),
                         is_leader: m.is_leader,
-                        is_self: m
-                            .puuid
-                            .as_deref()
-                            .map(|p| !self_puuid.is_empty() && p == self_puuid)
-                            .unwrap_or(idx == 0),
+                        is_self: m.is_self,
                     })
                     .collect()
             })

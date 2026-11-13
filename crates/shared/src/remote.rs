@@ -316,11 +316,6 @@ pub struct RemoteChampSelectState {
     pub rune_trees: Vec<RemoteRuneTree>,
 }
 
-/// Static catalog of Summoner's Rift summoner spells (IDs match Riot LCU).
-pub fn default_summoner_spells() -> Vec<RemoteSpellOption> {
-    default_summoner_spells_localized(Lang::En)
-}
-
 /// Localized static catalog of Summoner's Rift summoner spells.
 pub fn default_summoner_spells_localized(lang: Lang) -> Vec<RemoteSpellOption> {
     const SPELLS: &[(i64, &str, &str, &str, &str, &str, &str)] = &[
@@ -430,10 +425,6 @@ pub fn default_summoner_spells_localized(lang: Lang) -> Vec<RemoteSpellOption> {
         .collect()
 }
 
-pub fn spell_name_from_id(spell_id: i64) -> &'static str {
-    spell_name_from_id_localized(spell_id, Lang::En)
-}
-
 pub fn spell_name_from_id_localized(spell_id: i64, lang: Lang) -> &'static str {
     match spell_id {
         1 => lang.pick("Cleanse", "Purge"),
@@ -459,12 +450,7 @@ fn perk_opt(lang: Lang, id: i64, en_n: &'static str, fr_n: &'static str, en_d: &
     }
 }
 
-/// Complete Rune Trees (Precision, Domination, Sorcery, Resolve, Inspiration) with real Riot Perk IDs.
-pub fn default_rune_trees() -> Vec<RemoteRuneTree> {
-    default_rune_trees_localized(Lang::En)
-}
-
-/// Localized Rune Trees with real Riot Perk IDs.
+/// Localized Rune Trees (Precision, Domination, Sorcery, Resolve, Inspiration) with real Riot Perk IDs.
 pub fn default_rune_trees_localized(lang: Lang) -> Vec<RemoteRuneTree> {
     vec![
         RemoteRuneTree {
@@ -596,10 +582,6 @@ pub fn default_rune_trees_localized(lang: Lang) -> Vec<RemoteRuneTree> {
     ]
 }
 
-pub fn rune_style_name(style_id: i64) -> &'static str {
-    rune_style_name_localized(style_id, Lang::En)
-}
-
 pub fn rune_style_name_localized(style_id: i64, lang: Lang) -> &'static str {
     match style_id {
         8000 => lang.pick("Precision", "Précision"),
@@ -609,10 +591,6 @@ pub fn rune_style_name_localized(style_id: i64, lang: Lang) -> &'static str {
         8400 => lang.pick("Resolve", "Volonté"),
         _ => "Runes",
     }
-}
-
-pub fn keystone_name_from_id(perk_id: i64) -> &'static str {
-    keystone_name_from_id_localized(perk_id, Lang::En)
 }
 
 pub fn keystone_name_from_id_localized(perk_id: i64, lang: Lang) -> &'static str {
@@ -637,12 +615,7 @@ pub fn keystone_name_from_id_localized(perk_id: i64, lang: Lang) -> &'static str
     }
 }
 
-/// Built-in recommended rune pages tailored to champion & lane so one tap always works offline.
-pub fn recommended_pages_for(champion_id: i64, position: &str) -> Vec<RemoteRunePage> {
-    recommended_pages_for_localized(champion_id, position, Lang::En)
-}
-
-/// Localized recommended rune pages tailored to champion & lane.
+/// Localized built-in recommended rune pages tailored to champion & lane so one tap always works offline.
 pub fn recommended_pages_for_localized(champion_id: i64, position: &str, lang: Lang) -> Vec<RemoteRunePage> {
     let pos = position.to_ascii_uppercase();
     // Pick sensible primary page based on champion archetype / role
@@ -742,110 +715,6 @@ pub fn recommended_pages_for_localized(champion_id: i64, position: &str, lang: L
     ]
 }
 
-/// Built-in champion catalog with Riot IDs, names, and primary lanes so the mobile
-/// picker and desktop roster always have rich champion names and lane filters.
-pub fn builtin_champion_catalog() -> Vec<RemoteChampionOption> {
-    let entries: &[(i64, &str, &[&str])] = &[
-        (266, "Aatrox", &["TOP"]),
-        (103, "Ahri", &["MIDDLE"]),
-        (84, "Akali", &["MIDDLE", "TOP"]),
-        (12, "Alistar", &["UTILITY"]),
-        (32, "Amumu", &["JUNGLE", "UTILITY"]),
-        (22, "Ashe", &["BOTTOM", "UTILITY"]),
-        (268, "Azir", &["MIDDLE"]),
-        (432, "Bard", &["UTILITY"]),
-        (53, "Blitzcrank", &["UTILITY"]),
-        (63, "Brand", &["UTILITY", "MIDDLE", "JUNGLE"]),
-        (201, "Braum", &["UTILITY"]),
-        (233, "Briar", &["JUNGLE"]),
-        (51, "Caitlyn", &["BOTTOM"]),
-        (164, "Camille", &["TOP"]),
-        (122, "Darius", &["TOP"]),
-        (131, "Diana", &["JUNGLE", "MIDDLE"]),
-        (119, "Draven", &["BOTTOM"]),
-        (245, "Ekko", &["JUNGLE", "MIDDLE"]),
-        (81, "Ezreal", &["BOTTOM"]),
-        (114, "Fiora", &["TOP"]),
-        (3, "Galio", &["MIDDLE", "UTILITY"]),
-        (86, "Garen", &["TOP"]),
-        (79, "Gragas", &["TOP", "JUNGLE", "MIDDLE"]),
-        (104, "Graves", &["JUNGLE"]),
-        (887, "Gwen", &["TOP"]),
-        (910, "Hwei", &["MIDDLE", "UTILITY"]),
-        (39, "Irelia", &["TOP", "MIDDLE"]),
-        (40, "Janna", &["UTILITY"]),
-        (59, "Jarvan IV", &["JUNGLE"]),
-        (24, "Jax", &["TOP", "JUNGLE"]),
-        (126, "Jayce", &["TOP", "MIDDLE"]),
-        (202, "Jhin", &["BOTTOM"]),
-        (222, "Jinx", &["BOTTOM"]),
-        (145, "Kai'Sa", &["BOTTOM"]),
-        (43, "Karma", &["UTILITY", "MIDDLE"]),
-        (141, "Kayn", &["JUNGLE"]),
-        (121, "Kha'Zix", &["JUNGLE"]),
-        (7, "LeBlanc", &["MIDDLE"]),
-        (64, "Lee Sin", &["JUNGLE"]),
-        (89, "Leona", &["UTILITY"]),
-        (876, "Lillia", &["JUNGLE"]),
-        (236, "Lucian", &["BOTTOM"]),
-        (117, "Lulu", &["UTILITY"]),
-        (99, "Lux", &["UTILITY", "MIDDLE"]),
-        (54, "Malphite", &["TOP"]),
-        (21, "Miss Fortune", &["BOTTOM"]),
-        (82, "Mordekaiser", &["TOP"]),
-        (25, "Morgana", &["UTILITY"]),
-        (267, "Nami", &["UTILITY"]),
-        (111, "Nautilus", &["UTILITY"]),
-        (518, "Neeko", &["MIDDLE", "UTILITY"]),
-        (61, "Orianna", &["MIDDLE"]),
-        (516, "Ornn", &["TOP"]),
-        (80, "Pantheon", &["TOP", "MIDDLE", "UTILITY"]),
-        (555, "Pyke", &["UTILITY"]),
-        (497, "Rakan", &["UTILITY"]),
-        (58, "Renekton", &["TOP"]),
-        (92, "Riven", &["TOP"]),
-        (360, "Samira", &["BOTTOM"]),
-        (113, "Sejuani", &["JUNGLE"]),
-        (235, "Senna", &["UTILITY", "BOTTOM"]),
-        (147, "Seraphine", &["UTILITY", "BOTTOM"]),
-        (875, "Sett", &["TOP"]),
-        (35, "Shaco", &["JUNGLE", "UTILITY"]),
-        (98, "Shen", &["TOP"]),
-        (15, "Sivir", &["BOTTOM"]),
-        (901, "Smolder", &["BOTTOM", "MIDDLE"]),
-        (16, "Soraka", &["UTILITY"]),
-        (517, "Sylas", &["MIDDLE"]),
-        (134, "Syndra", &["MIDDLE"]),
-        (412, "Thresh", &["UTILITY"]),
-        (18, "Tristana", &["BOTTOM", "MIDDLE"]),
-        (4, "Twisted Fate", &["MIDDLE"]),
-        (67, "Vayne", &["BOTTOM", "TOP"]),
-        (254, "Vi", &["JUNGLE"]),
-        (234, "Viego", &["JUNGLE"]),
-        (112, "Viktor", &["MIDDLE"]),
-        (106, "Volibear", &["TOP", "JUNGLE"]),
-        (498, "Xayah", &["BOTTOM"]),
-        (157, "Yasuo", &["MIDDLE", "TOP", "BOTTOM"]),
-        (777, "Yone", &["MIDDLE", "TOP"]),
-        (350, "Yuumi", &["UTILITY"]),
-        (154, "Zac", &["JUNGLE"]),
-        (238, "Zed", &["MIDDLE", "JUNGLE"]),
-        (221, "Zeri", &["BOTTOM"]),
-        (142, "Zoe", &["MIDDLE"]),
-    ];
-
-    entries
-        .iter()
-        .map(|(id, name, roles)| RemoteChampionOption {
-            id: *id,
-            name: (*name).to_string(),
-            roles: roles.iter().map(|r| (*r).to_string()).collect(),
-            pickable: true,
-            bannable: true,
-        })
-        .collect()
-}
-
 /// Generates realistic skins for any champion so skin picking works out of the box in Demo mode
 /// and falls back cleanly when LCU carousel skins are not yet loaded.
 pub fn builtin_skins_for_localized(
@@ -924,10 +793,6 @@ pub fn builtin_skins_for_localized(
             }
         })
         .collect()
-}
-
-pub fn builtin_skins_for(champion_id: i64, champion_name: &str, selected_skin_id: i64) -> Vec<RemoteSkinOption> {
-    builtin_skins_for_localized(champion_id, champion_name, selected_skin_id, Lang::En)
 }
 
 #[cfg(test)]

@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use hypatia_shared::{normalize_champion_key, Lang, RemoteChampionOption, SourceId};
+use hypatia_shared::{
+    builtin_champion_roles, is_champion_placeholder, normalize_champion_key,
+    BuiltinChampionCatalog, ChampionLookup, Lang, RemoteChampionOption, SourceId,
+};
 use serde_json::Value;
 use tracing::{debug, warn};
 
@@ -64,48 +67,6 @@ impl GameAssetCache {
 
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
-    }
-
-    /// Resolves a champion ID by name using synced LCU metadata first, then built-in fallback.
-    pub fn resolve_champion_id(&self, name: &str) -> i64 {
-        let key = normalize_champion_key(name);
-        if key.is_empty() {
-            return 0;
-        }
-        if let Some(&id) = self.champ_ids_by_key.read().unwrap().get(&key) {
-            return id;
-        }
-        hypatia_shared::champion_id_from_name(name)
-    }
-
-    /// Resolves a champion ID using display name first, then internal alias (`rawChampionName`).
-    pub fn resolve_champion_id_with_alias(&self, name: &str, alias: &str) -> i64 {
-        let primary = self.resolve_champion_id(name);
-        if primary > 0 || alias.trim().is_empty() {
-            return primary;
-        }
-        self.resolve_champion_id(alias)
-    }
-
-    /// Resolves a champion display name by ID using synced LCU metadata first, then localized built-in fallback.
-    pub fn resolve_champion_name_localized(&self, champion_id: i64, lang: Lang) -> String {
-        if champion_id <= 0 {
-            return lang.pick("Selecting...", "Sélection...").to_string();
-        }
-        if let Some(name) = self.champ_names_by_id.read().unwrap().get(&champion_id) {
-            return name.clone();
-        }
-        hypatia_shared::champion_name_from_id_localized(champion_id, lang)
-    }
-
-    /// Resolves a champion display name by ID using synced LCU metadata first, then built-in fallback.
-    pub fn resolve_champion_name(&self, champion_id: i64) -> String {
-        self.resolve_champion_name_localized(champion_id, Lang::En)
-    }
-
-    /// Returns cached LCU champion catalog merged/available for pick/ban grids, if synced.
-    pub fn synced_champion_catalog(&self) -> Vec<RemoteChampionOption> {
-        self.champ_catalog.read().unwrap().clone()
     }
 
     /// Registers a skin tile path discovered from `/lol-champ-select/v1/skin-carousel-skins`.
@@ -492,7 +453,12 @@ impl GameAssetCache {
                             paths.insert(id, clean);
                         }
                     }
-                    let roles = map_cdragon_roles_to_lanes(entry.get("roles"));
+                    let builtin_roles = builtin_champion_roles(id);
+                    let roles = if !builtin_roles.is_empty() {
+                        builtin_roles.iter().map(|r| (*r).to_string()).collect()
+                    } else {
+                        map_cdragon_roles_to_lanes(entry.get("roles"))
+                    };
                     catalog.push(RemoteChampionOption {
                         id,
                         name: name.to_string(),
@@ -800,6 +766,55 @@ fn map_cdragon_roles_to_lanes(roles_val: Option<&Value>) -> Vec<String> {
     lanes
 }
 
+impl ChampionLookup for GameAssetCache {
+    fn resolve_champion_id(&self, name: &str) -> i64 {
+        if is_champion_placeholder(name) {
+            return 0;
+        }
+        let key = normalize_champion_key(name);
+        if let Some(&id) = self.champ_ids_by_key.read().unwrap().get(&key) {
+            return id;
+        }
+        BuiltinChampionCatalog.resolve_champion_id(name)
+    }
+
+    fn resolve_champion_name_localized(&self, champion_id: i64, lang: Lang) -> String {
+        if champion_id <= 0 {
+            return lang.pick("Selecting...", "Sélection...").to_string();
+        }
+        if let Some(name) = self.champ_names_by_id.read().unwrap().get(&champion_id) {
+            return name.clone();
+        }
+        BuiltinChampionCatalog.resolve_champion_name_localized(champion_id, lang)
+    }
+
+    fn champion_catalog(&self) -> Vec<RemoteChampionOption> {
+        let synced = self.champ_catalog.read().unwrap();
+        if synced.is_empty() {
+            return BuiltinChampionCatalog.champion_catalog();
+        }
+        let mut merged: HashMap<i64, RemoteChampionOption> = BuiltinChampionCatalog
+            .champion_catalog()
+            .into_iter()
+            .map(|c| (c.id, c))
+            .collect();
+        for opt in synced.iter() {
+            merged
+                .entry(opt.id)
+                .and_modify(|existing| {
+                    existing.name = opt.name.clone();
+                    if !opt.roles.is_empty() {
+                        existing.roles = opt.roles.clone();
+                    }
+                })
+                .or_insert_with(|| opt.clone());
+        }
+        let mut out: Vec<RemoteChampionOption> = merged.into_values().collect();
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -854,9 +869,13 @@ mod tests {
         );
         assert_eq!(cache.resolve_champion_id("Test Champ"), 999);
         assert_eq!(cache.resolve_champion_id("TestChamp"), 999);
-        assert_eq!(cache.resolve_champion_name(999), "Test Champ");
+        assert_eq!(cache.resolve_champion_name_localized(999, Lang::En), "Test Champ");
         assert_eq!(cache.resolve_champion_name_localized(0, Lang::En), "Selecting...");
         assert_eq!(cache.resolve_champion_name_localized(0, Lang::Fr), "Sélection...");
+
+        let catalog = cache.champion_catalog();
+        assert!(catalog.iter().any(|c| c.id == 999 && c.roles == vec!["MIDDLE".to_string()]));
+        assert!(catalog.iter().any(|c| c.id == 64 && c.roles == vec!["JUNGLE".to_string()]));
 
         let lang_file = dir.join("nested").join("lang");
         save_lang_to_path(&lang_file, Lang::Fr).unwrap();

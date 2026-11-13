@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::champions::Position;
 use crate::i18n::Lang;
 use crate::summary::LiveGameSummary;
 
@@ -18,12 +19,12 @@ pub enum Lane {
 impl Lane {
     /// Maps a Riot position (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`) to a lane.
     pub fn from_position(position: &str) -> Option<Lane> {
-        match position.to_ascii_uppercase().as_str() {
-            "TOP" => Some(Lane::Top),
-            "JUNGLE" => Some(Lane::Jungle),
-            "MIDDLE" | "MID" => Some(Lane::Mid),
-            "BOTTOM" | "BOT" | "UTILITY" | "SUPPORT" => Some(Lane::Bot),
-            _ => None,
+        match Position::parse(position)? {
+            Position::Top => Some(Lane::Top),
+            Position::Jungle => Some(Lane::Jungle),
+            Position::Mid => Some(Lane::Mid),
+            Position::Bot | Position::Support => Some(Lane::Bot),
+            Position::Fill => None,
         }
     }
 }
@@ -205,15 +206,6 @@ fn objective_article(kind: ObjectiveKind) -> &'static str {
         ObjectiveKind::Grubs => "les",
         _ => "le",
     }
-}
-
-/// Builds the board from the raw Live Client payloads and the extracted summary (defaults to English).
-pub fn extract_live_board(
-    allgame_val: Option<&Value>,
-    events_val: Option<&Value>,
-    live: &LiveGameSummary,
-) -> LiveBoard {
-    extract_live_board_localized(allgame_val, events_val, live, Lang::En)
 }
 
 /// Builds the board from the raw Live Client payloads and the extracted summary in `lang`.
@@ -424,13 +416,14 @@ pub fn extract_live_board_localized(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::champions::{BuiltinChampionCatalog, ChampionLookup};
     use crate::summary::LiveGamePlayerSummary;
     use serde_json::json;
 
     fn player(id: &str, champ: &str, team: &str, pos: &str, kills: u32, is_self: bool) -> LiveGamePlayerSummary {
         LiveGamePlayerSummary {
             riot_id: id.to_string(),
-            champion_id: crate::summary::champion_id_from_name(champ),
+            champion_id: BuiltinChampionCatalog.resolve_champion_id(champ),
             champion_name: champ.to_string(),
             champion_alias: String::new(),
             team: team.to_string(),
@@ -451,7 +444,7 @@ mod tests {
             game_mode: "CLASSIC".into(),
             map_name: "Summoner's Rift".into(),
             game_time_sec: 900.0,
-            active_champion_id: crate::summary::champion_id_from_name("Ahri"),
+            active_champion_id: BuiltinChampionCatalog.resolve_champion_id("Ahri"),
             active_champion: "Ahri".into(),
             level: 10,
             current_gold: 0,
@@ -483,7 +476,7 @@ mod tests {
             {"EventName": "TurretKilled", "EventTime": 700.0, "TurretKilled": "Turret_T2_R_03_A", "KillerName": "Minion_T100L0S1N0001"},
             {"EventName": "DragonKill", "EventTime": 800.0, "DragonType": "Fire", "KillerName": "Ezo", "Stolen": "False"}
         ]});
-        let board = extract_live_board(None, Some(&events), &l);
+        let board = extract_live_board_localized(None, Some(&events), &l, Lang::En);
         assert!(!board.my_team_is_order);
         assert_eq!(board.my_kills(), 4);
         assert_eq!(board.enemy_kills(), 2);

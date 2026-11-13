@@ -1,5 +1,6 @@
 pub mod board;
 pub mod catalog;
+pub mod champions;
 pub mod event;
 pub mod i18n;
 pub mod protocol;
@@ -11,6 +12,7 @@ pub mod system;
 
 pub use board::*;
 pub use catalog::*;
+pub use champions::*;
 pub use event::*;
 pub use i18n::*;
 pub use protocol::*;

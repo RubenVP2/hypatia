@@ -10,34 +10,20 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use base64::prelude::*;
 use hypatia_shared::{
-    builtin_champion_catalog, builtin_skins_for_localized, champion_name_from_id_localized,
-    default_rune_trees_localized, default_summoner_spells_localized,
-    extract_champ_select_summary_localized, extract_live_board_localized,
-    extract_live_game_summary_localized, keystone_name_from_id_localized,
-    queue_name_from_id_localized, recommended_pages_for_localized, rune_style_name_localized,
-    spell_name_from_id_localized, EventKind, Lang, RemoteActiveAction, RemoteChampSelectState,
-    RemoteCommand, RemoteIncomingSwap, RemoteLiveFeedItem, RemoteLiveObjective,
-    RemoteLivePlayer, RemoteLiveState, RemoteLobbyState, RemoteMatchmakingState,
-    RemoteRunePage, RemoteSkinOption, RemoteStateSnapshot, RemoteTeamMember, SourceId,
+    builtin_skins_for_localized, default_rune_trees_localized, default_summoner_spells_localized,
+    keystone_name_from_id_localized, recommended_pages_for_localized, rune_style_name_localized,
+    spell_name_from_id_localized, ChampionLookup, EventKind, Lang, Position,
+    RemoteChampSelectState, RemoteCommand, RemoteIncomingSwap, RemoteLiveFeedItem,
+    RemoteLiveObjective, RemoteLivePlayer, RemoteLiveState, RemoteLobbyState,
+    RemoteMatchmakingState, RemoteRunePage, RemoteSkinOption, RemoteStateSnapshot,
+    RemoteTeamMember, SourceId, SummonerSummary,
 };
 use reqwest::Method;
 use serde_json::{json, Value};
 
 use crate::AppState;
 
-const VALID_POSITIONS: &[&str] = &["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", "FILL"];
 const VALID_STYLES: &[i64] = &[8000, 8100, 8200, 8300, 8400];
-
-fn position_display(pos: &str, lang: Lang) -> &'static str {
-    match pos.trim().to_ascii_uppercase().as_str() {
-        "TOP" => "Top",
-        "JUNGLE" => "Jungle",
-        "MIDDLE" | "MID" => "Mid",
-        "BOTTOM" | "BOT" => "Bot",
-        "UTILITY" | "SUPPORT" => "Support",
-        _ => lang.pick("Fill", "Polyvalent"),
-    }
-}
 
 /// Describes a resolved LCU HTTP mutation produced from a `RemoteCommand`.
 #[derive(Debug, Clone, PartialEq)]
@@ -47,15 +33,7 @@ pub struct ResolvedLcuCall {
     pub body: Option<Value>,
 }
 
-/// Validates a `RemoteCommand` and maps it to its allowlisted LCU endpoint(s).
-pub fn resolve_lcu_command(
-    cmd: &RemoteCommand,
-    editable_page_id: Option<i64>,
-) -> Result<Vec<ResolvedLcuCall>> {
-    resolve_lcu_command_localized(cmd, editable_page_id, Lang::En)
-}
-
-/// Validates a `RemoteCommand` with localized validation errors.
+/// Validates a `RemoteCommand` with localized validation errors and maps it to its allowlisted LCU endpoint(s).
 pub fn resolve_lcu_command_localized(
     cmd: &RemoteCommand,
     editable_page_id: Option<i64>,
@@ -65,14 +43,14 @@ pub fn resolve_lcu_command_localized(
         RemoteCommand::SetLobbyPositions { first, second } => {
             let f = first.trim().to_ascii_uppercase();
             let s = second.trim().to_ascii_uppercase();
-            if !VALID_POSITIONS.contains(&f.as_str()) {
+            if !Position::VALID_LCU_CODES.contains(&f.as_str()) {
                 bail!(
                     "{}: '{}'",
                     lang.pick("Invalid primary position", "Position principale invalide"),
                     first
                 );
             }
-            if !VALID_POSITIONS.contains(&s.as_str()) {
+            if !Position::VALID_LCU_CODES.contains(&s.as_str()) {
                 bail!(
                     "{}: '{}'",
                     lang.pick("Invalid secondary position", "Position secondaire invalide"),
@@ -381,17 +359,6 @@ impl LcuActionClient {
             .build()
             .expect("Failed to initialize LcuActionClient");
         Self { inner }
-    }
-
-    pub async fn execute(
-        &self,
-        port: u16,
-        auth_token: Option<&str>,
-        cmd: &RemoteCommand,
-        editable_page_id: Option<i64>,
-    ) -> Result<Value> {
-        self.execute_localized(port, auth_token, cmd, editable_page_id, Lang::En)
-            .await
     }
 
     pub async fn execute_localized(
@@ -863,7 +830,7 @@ impl DemoRemoteState {
                     "cellId": i,
                     "assignedPosition": self.ally_positions[i],
                     "championId": cid,
-                    "championName": champion_name_from_id_localized(cid, app_state.lang()),
+                    "championName": app_state.assets.resolve_champion_name_localized(cid, app_state.lang()),
                     "summonerId": 1000 + i as u64,
                     "puuid": format!("demo-puuid-{i}"),
                     "summonerName": summoner_names[i],
@@ -964,355 +931,137 @@ impl DemoRemoteState {
 }
 
 /// Builds a complete `RemoteStateSnapshot` from the current `AppState` and `DemoRemoteState`.
+/// Projects the Mobile Remote view from [`AppState::get_summary`] enriched with
+/// remote-only draft controls (pickable/bannable filter, skin carousel, rune pages, alerts).
 pub fn extract_remote_state(
     app_state: &AppState,
     demo_state: &DemoRemoteState,
     alerts: &mut AlertTracker,
 ) -> RemoteStateSnapshot {
     let lang = app_state.lang();
-    let guard = app_state.store.read().unwrap();
-    let lcu = |uri: &str| guard.get_state(SourceId::LeagueClient, uri).map(|u| u.current);
+    let summary = app_state.get_summary();
 
-    let phase = guard
-        .phase()
-        .map(|p| p.phase)
+    let (pickable_val, bannable_val, skins_val, pages_val) = {
+        let guard = app_state.store.read().unwrap();
+        let lcu = |uri: &str| guard.get_state(SourceId::LeagueClient, uri).map(|u| u.current);
+        (
+            lcu("/lol-champ-select/v1/pickable-champion-ids"),
+            lcu("/lol-champ-select/v1/bannable-champion-ids"),
+            lcu("/lol-champ-select/v1/skin-carousel-skins"),
+            lcu("/lol-perks/v1/pages"),
+        )
+    };
+
+    let phase = summary
+        .phase
+        .as_ref()
+        .map(|p| p.phase.clone())
         .unwrap_or_else(|| "None".to_string());
 
-    let summoner_val = lcu("/lol-summoner/v1/current-summoner");
-    let lobby_val = lcu("/lol-lobby/v2/lobby");
-    let search_val = lcu("/lol-matchmaking/v1/search");
-    let ready_val = lcu("/lol-matchmaking/v1/ready-check");
-    let cs_val = lcu("/lol-champ-select/v1/session");
-    let pickable_val = lcu("/lol-champ-select/v1/pickable-champion-ids");
-    let bannable_val = lcu("/lol-champ-select/v1/bannable-champion-ids");
-    let skins_val = lcu("/lol-champ-select/v1/skin-carousel-skins");
-    let pages_val = lcu("/lol-perks/v1/pages");
-    drop(guard);
-
-    let summoner_name = summoner_val
+    let summoner_name = summary
+        .summoner
         .as_ref()
-        .and_then(|s| {
-            let gn = s
-                .get("gameName")
-                .or_else(|| s.get("displayName"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Player");
-            let tag = s.get("tagLine").and_then(|v| v.as_str()).unwrap_or("");
-            if tag.is_empty() {
-                Some(gn.to_string())
-            } else {
-                Some(format!("{gn}#{tag}"))
-            }
-        })
-        .unwrap_or_else(|| "HypatiaObserver#EUW".to_string());
-    let profile_icon_id = summoner_val
+        .map(SummonerSummary::riot_id)
+        .unwrap_or_default();
+    let profile_icon_id = summary
+        .summoner
         .as_ref()
-        .and_then(|s| s.get("profileIconId"))
-        .and_then(|v| v.as_i64())
+        .map(|s| s.profile_icon_id)
         .unwrap_or(0);
 
-    // 1. Lobby state
-    let lobby = lobby_val.as_ref().map(|lv| {
-        let queue_id = lv
-            .get("queueId")
-            .or_else(|| lv.get("gameConfig").and_then(|gc| gc.get("queueId")))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(420);
-        let local_member = lv
-            .get("localMember")
-            .or_else(|| {
-                lv.get("members")
-                    .and_then(|m| m.as_array())
-                    .and_then(|arr| arr.first())
-            });
-        let first_position = local_member
-            .and_then(|m| m.get("firstPositionPreference"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("MIDDLE")
-            .to_uppercase();
-        let second_position = local_member
-            .and_then(|m| m.get("secondPositionPreference"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("TOP")
-            .to_uppercase();
-        let is_leader = local_member
-            .and_then(|m| m.get("isLeader"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-        let member_count = lv
-            .get("members")
-            .and_then(|m| m.as_array())
-            .map(|a| a.len())
-            .unwrap_or(1);
-
-        RemoteLobbyState {
-            queue_id,
-            queue_name: queue_name_from_id_localized(queue_id, lang),
-            first_position,
-            second_position,
-            is_leader,
-            member_count,
-        }
+    // 1. Lobby state (projected via SummarySnapshot)
+    let lobby = summary.lobby.as_ref().map(|l| RemoteLobbyState {
+        queue_id: l.queue_id,
+        queue_name: l.queue_name.clone(),
+        first_position: l.local_first_position.clone().unwrap_or_default(),
+        second_position: l.local_second_position.clone().unwrap_or_default(),
+        is_leader: l.local_is_leader,
+        member_count: l.members.len(),
     });
 
-    // 2. Matchmaking + ReadyCheck state
-    let matchmaking = {
-        let queue_id = search_val
-            .as_ref()
-            .and_then(|s| s.get("queueId"))
-            .and_then(|v| v.as_i64())
-            .or_else(|| lobby.as_ref().map(|l| l.queue_id))
-            .unwrap_or(420);
-        let in_queue = search_val
-            .as_ref()
-            .and_then(|s| s.get("isCurrentlyInQueue"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(phase == "Matchmaking" || phase == "ReadyCheck");
-        let time_in_queue_sec = search_val
-            .as_ref()
-            .and_then(|s| s.get("timeInQueue"))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0) as u32;
-        let estimated_queue_time_sec = search_val
-            .as_ref()
-            .and_then(|s| s.get("estimatedQueueTime"))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(60.0) as u32;
-        let rc_state = ready_val
-            .as_ref()
-            .and_then(|r| r.get("state"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("Invalid");
-        let ready_check_active = phase == "ReadyCheck" || rc_state == "InProgress";
-        let ready_check_timer_sec = ready_val
-            .as_ref()
-            .and_then(|r| r.get("timer"))
-            .and_then(|v| v.as_f64())
-            .map(|f| f as i32)
-            .unwrap_or(10);
-        let player_response = ready_val
-            .as_ref()
-            .and_then(|r| r.get("playerResponse"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("None")
-            .to_string();
+    // 2. Matchmaking + ReadyCheck state (projected via SummarySnapshot)
+    let matchmaking = Some({
+        let mm = summary.matchmaking.as_ref();
+        let queue_name = mm
+            .map(|m| m.queue_name.clone())
+            .filter(|s| !s.is_empty())
+            .or_else(|| lobby.as_ref().map(|l| l.queue_name.clone()))
+            .unwrap_or_default();
+        let in_queue = mm.is_some_and(|m| m.is_currently_in_queue)
+            || phase == "Matchmaking"
+            || phase == "ReadyCheck";
+        let time_in_queue_sec = mm.map(|m| m.time_in_queue_sec as u32).unwrap_or(0);
+        let estimated_queue_time_sec = mm.map(|m| m.estimated_queue_time_sec as u32).unwrap_or(0);
+        let ready_check_active = phase == "ReadyCheck"
+            || mm.and_then(|m| m.ready_check_state.as_deref()) == Some("InProgress");
+        let ready_check_timer_sec = mm.and_then(|m| m.ready_check_timer_sec).unwrap_or(0);
+        let player_response = mm
+            .and_then(|m| m.player_response.clone())
+            .unwrap_or_else(|| "None".to_string());
 
-        Some(RemoteMatchmakingState {
-            queue_name: queue_name_from_id_localized(queue_id, lang),
+        RemoteMatchmakingState {
+            queue_name,
             in_queue,
             time_in_queue_sec,
             estimated_queue_time_sec,
             ready_check_active,
             ready_check_timer_sec,
             player_response,
-        })
-    };
-
-    // 3. Champion Select state
-    let champ_select = cs_val.as_ref().map(|cs| {
-        let base_summary = extract_champ_select_summary_localized(Some(cs), None, lang);
-        let local_cell_id = cs
-            .get("localPlayerCellId")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        let timer = cs.get("timer");
-        let sub_phase = timer
-            .and_then(|t| t.get("phase"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("BAN_PICK")
-            .to_string();
-        let raw_time = timer
-            .and_then(|t| t.get("adjustedTimeLeftInPhase"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(25);
-        // LCU sometimes reports milliseconds (>1000) and demo fixtures report seconds
-        let time_left_sec = if raw_time > 500 { raw_time / 1000 } else { raw_time };
-        let queue_type = cs
-            .get("queueType")
-            .and_then(|v| v.as_str())
-            .unwrap_or("DRAFT_PICK")
-            .to_string();
-
-        // Parse swaps & trades maps by cellId
-        let parse_swap_map = |key: &str| -> std::collections::HashMap<i64, (i64, String)> {
-            let mut map = std::collections::HashMap::new();
-            if let Some(arr) = cs.get(key).and_then(|v| v.as_array()) {
-                for item in arr {
-                    if let (Some(id), Some(cell_id)) = (
-                        item.get("id").and_then(|v| v.as_i64()),
-                        item.get("cellId").and_then(|v| v.as_i64()),
-                    ) {
-                        let state = item
-                            .get("state")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("AVAILABLE")
-                            .to_string();
-                        map.insert(cell_id, (id, state));
-                    }
-                }
-            }
-            map
-        };
-
-        let pos_swaps = parse_swap_map("positionSwaps");
-        let pick_swaps = parse_swap_map("swaps");
-        let trades = parse_swap_map("trades");
-
-        // Parse actions to find local player's active or pending action and acting teammate
-        let mut active_action: Option<RemoteActiveAction> = None;
-        let mut cell_acting: std::collections::HashMap<i64, String> =
-            std::collections::HashMap::new();
-
-        if let Some(turns) = cs.get("actions").and_then(|v| v.as_array()) {
-            for turn in turns {
-                if let Some(actions) = turn.as_array() {
-                    for act in actions {
-                        let actor_cell = act
-                            .get("actorCellId")
-                            .and_then(|v| v.as_i64())
-                            .unwrap_or(-1);
-                        let action_id = act.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let action_type = act
-                            .get("type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("pick")
-                            .to_string();
-                        let completed = act
-                            .get("completed")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
-                        let in_progress = act
-                            .get("isInProgress")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
-                        let champ_id = act
-                            .get("championId")
-                            .and_then(|v| v.as_i64())
-                            .unwrap_or(0);
-
-                        if in_progress && !completed {
-                            cell_acting.insert(actor_cell, action_type.clone());
-                        }
-
-                        if actor_cell == local_cell_id {
-                            // Prefer the in-progress action, or the next uncompleted action
-                            let should_take = match &active_action {
-                                None => true,
-                                Some(prev) => {
-                                    (in_progress && !prev.is_my_turn)
-                                        || (!completed && prev.completed)
-                                }
-                            };
-                            if should_take {
-                                active_action = Some(RemoteActiveAction {
-                                    action_id,
-                                    action_type,
-                                    champion_id: champ_id,
-                                    champion_name: if champ_id > 0 {
-                                        champion_name_from_id_localized(champ_id, lang)
-                                    } else {
-                                        String::new()
-                                    },
-                                    completed,
-                                    is_my_turn: in_progress && !completed,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
         }
+    });
 
-        let mut assigned_position = "MIDDLE".to_string();
-        let mut spell1_id = 4;
-        let mut spell2_id = 14;
-        let mut selected_skin_id = 0;
-        let mut local_champ_id = 0;
-        let mut my_team = Vec::new();
+    // 3. Champion Select state (projected via SummarySnapshot + remote-only pickable/skins/runes)
+    let champ_select = summary.champ_select.as_ref().map(|cs| {
+        let self_ally = cs.my_team.iter().find(|m| m.is_self);
+        let assigned_position = self_ally
+            .map(|m| m.assigned_position.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "FILL".to_string());
+        let spell1_id = self_ally.map(|m| m.spell1_id).unwrap_or(0);
+        let spell2_id = self_ally.map(|m| m.spell2_id).unwrap_or(0);
+        let selected_skin_id = self_ally.map(|m| m.selected_skin_id).unwrap_or(0);
+        let local_champ_id = self_ally.map(|m| m.champion_id).unwrap_or(0);
+        let my_pos_label = Position::parse(&assigned_position)
+            .unwrap_or(Position::Fill)
+            .display_label(lang);
+
         let mut incoming_swaps = Vec::new();
-
-        if let Some(arr) = cs.get("myTeam").and_then(|v| v.as_array()) {
-            for (idx, m) in arr.iter().enumerate() {
-                let cell_id = m
-                    .get("cellId")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(idx as i64);
-                let pos = m
-                    .get("assignedPosition")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(match idx {
-                        0 => "TOP",
-                        1 => "JUNGLE",
-                        2 => "MIDDLE",
-                        3 => "BOTTOM",
-                        _ => "UTILITY",
-                    })
-                    .to_uppercase();
-                let cid = m
-                    .get("championId")
-                    .or_else(|| m.get("championPickIntent"))
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-                let cname = if cid > 0 {
-                    m.get("championName")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| champion_name_from_id_localized(cid, lang))
+        let my_team: Vec<RemoteTeamMember> = cs
+            .my_team
+            .iter()
+            .map(|ally| {
+                let champ_name = if ally.has_champion() {
+                    ally.champion_name.clone()
                 } else {
                     String::new()
                 };
-                let sname = m
-                    .get("summonerName")
-                    .or_else(|| m.get("gameName"))
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("{} {}", lang.pick("Ally", "Allié"), idx + 1));
-                let s1 = m.get("spell1Id").and_then(|v| v.as_i64()).unwrap_or(4);
-                let s2 = m.get("spell2Id").and_then(|v| v.as_i64()).unwrap_or(14);
-                let skin = m
-                    .get("selectedSkinId")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-                let is_self = cell_id == local_cell_id;
-                if is_self {
-                    assigned_position = pos.clone();
-                    spell1_id = s1;
-                    spell2_id = s2;
-                    selected_skin_id = skin;
-                    local_champ_id = cid;
-                }
-
-                let p_swap = pos_swaps.get(&cell_id).cloned();
-                let o_swap = pick_swaps.get(&cell_id).cloned();
-                let c_trade = trades.get(&cell_id).cloned();
-
-                if let Some((id, ref st)) = p_swap {
+                if let (Some(id), Some(ref st)) = (ally.position_swap_id, &ally.position_swap_state) {
                     if st == "RECEIVED" {
-                        let my_pos = position_display(&assigned_position, lang);
-                        let their_pos = position_display(&pos, lang);
+                        let their_pos = Position::parse(&ally.assigned_position)
+                            .unwrap_or(Position::Fill)
+                            .display_label(lang);
                         incoming_swaps.push(RemoteIncomingSwap {
                             id,
                             kind: "position".to_string(),
-                            caller_name: sname.clone(),
+                            caller_name: ally.summoner_name.clone(),
                             detail: if lang.is_fr() {
                                 format!(
-                                    "veut échanger vers votre poste {my_pos} (actuellement {their_pos})"
+                                    "veut échanger vers votre poste {my_pos_label} (actuellement {their_pos})"
                                 )
                             } else {
-                                format!("wants to swap for your {my_pos} (currently {their_pos})")
+                                format!(
+                                    "wants to swap for your {my_pos_label} (currently {their_pos})"
+                                )
                             },
                         });
                     }
                 }
-                if let Some((id, ref st)) = o_swap {
+                if let (Some(id), Some(ref st)) = (ally.pick_swap_id, &ally.pick_swap_state) {
                     if st == "RECEIVED" {
                         incoming_swaps.push(RemoteIncomingSwap {
                             id,
                             kind: "pick_order".to_string(),
-                            caller_name: sname.clone(),
+                            caller_name: ally.summoner_name.clone(),
                             detail: lang
                                 .pick(
                                     "wants to swap pick order with you",
@@ -1322,17 +1071,17 @@ pub fn extract_remote_state(
                         });
                     }
                 }
-                if let Some((id, ref st)) = c_trade {
+                if let (Some(id), Some(ref st)) = (ally.trade_id, &ally.trade_state) {
                     if st == "RECEIVED" {
-                        let champ_label = if cname.is_empty() {
+                        let champ_label = if champ_name.is_empty() {
                             lang.pick("Ally", "Allié")
                         } else {
-                            &cname
+                            &champ_name
                         };
                         incoming_swaps.push(RemoteIncomingSwap {
                             id,
                             kind: "champion".to_string(),
-                            caller_name: sname.clone(),
+                            caller_name: ally.summoner_name.clone(),
                             detail: format!(
                                 "{} ({champ_label})",
                                 lang.pick("wants to trade champions", "veut échanger de champion")
@@ -1341,29 +1090,28 @@ pub fn extract_remote_state(
                     }
                 }
 
-                let acting_type = cell_acting.get(&cell_id).cloned();
-                my_team.push(RemoteTeamMember {
-                    cell_id,
-                    assigned_position: pos,
-                    champion_id: cid,
-                    champion_name: cname,
-                    summoner_name: sname,
-                    spell1_id: s1,
-                    spell2_id: s2,
-                    is_self,
-                    is_acting: acting_type.is_some(),
-                    acting_type,
-                    position_swap_id: p_swap.as_ref().map(|x| x.0),
-                    position_swap_state: p_swap.map(|x| x.1),
-                    pick_swap_id: o_swap.as_ref().map(|x| x.0),
-                    pick_swap_state: o_swap.map(|x| x.1),
-                    trade_id: c_trade.as_ref().map(|x| x.0),
-                    trade_state: c_trade.map(|x| x.1),
-                });
-            }
-        }
+                RemoteTeamMember {
+                    cell_id: ally.cell_id,
+                    assigned_position: ally.assigned_position.clone(),
+                    champion_id: ally.champion_id,
+                    champion_name: champ_name,
+                    summoner_name: ally.summoner_name.clone(),
+                    spell1_id: ally.spell1_id,
+                    spell2_id: ally.spell2_id,
+                    is_self: ally.is_self,
+                    is_acting: ally.acting_type.is_some(),
+                    acting_type: ally.acting_type.clone(),
+                    position_swap_id: ally.position_swap_id,
+                    position_swap_state: ally.position_swap_state.clone(),
+                    pick_swap_id: ally.pick_swap_id,
+                    pick_swap_state: ally.pick_swap_state.clone(),
+                    trade_id: ally.trade_id,
+                    trade_state: ally.trade_state.clone(),
+                }
+            })
+            .collect();
 
-        // Filter pickable / bannable champions if LCU reported explicit lists
+        // Filter pickable / bannable champions using synced/builtin ChampionLookup catalog
         let pickable_ids: Option<Vec<i64>> = pickable_val
             .as_ref()
             .and_then(|v| v.as_array())
@@ -1373,16 +1121,7 @@ pub fn extract_remote_state(
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|x| x.as_i64()).collect());
 
-        let mut champions = builtin_champion_catalog();
-        let synced_catalog = app_state.assets.synced_champion_catalog();
-        if !synced_catalog.is_empty() {
-            for extra in synced_catalog {
-                if !champions.iter().any(|c| c.id == extra.id) {
-                    champions.push(extra);
-                }
-            }
-            champions.sort_by(|a, b| a.name.cmp(&b.name));
-        }
+        let mut champions = app_state.assets.champion_catalog();
         for c in &mut champions {
             if let Some(ref pids) = pickable_ids {
                 if !pids.is_empty() {
@@ -1400,21 +1139,14 @@ pub fn extract_remote_state(
         let champ_for_skins = if local_champ_id > 0 {
             local_champ_id
         } else {
-            active_action
-                .as_ref()
-                .map(|a| a.champion_id)
-                .unwrap_or(0)
+            cs.local_action.as_ref().map(|a| a.champion_id).unwrap_or(0)
         };
         let available_skins: Vec<RemoteSkinOption> = skins_val
             .as_ref()
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter(|s| {
-                        s.get("unlocked")
-                            .and_then(|u| u.as_bool())
-                            .unwrap_or(true)
-                    })
+                    .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
                     .filter_map(|s| {
                         let id = s.get("id")?.as_i64()?;
                         let name = s.get("name")?.as_str()?.to_string();
@@ -1443,7 +1175,7 @@ pub fn extract_remote_state(
                 builtin_skins_for_localized(champ_for_skins, &cname, selected_skin_id, lang)
             });
 
-        // Rune pages from LCU `/lol-perks/v1/pages` or demo state
+        // Rune pages from LCU `/lol-perks/v1/pages` (or DemoRemoteState in demo mode)
         let rune_pages: Vec<RemoteRunePage> = pages_val
             .as_ref()
             .and_then(|v| v.as_array())
@@ -1491,6 +1223,9 @@ pub fn extract_remote_state(
             })
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| {
+                if !app_state.is_demo_active() {
+                    return Vec::new();
+                }
                 demo_state
                     .rune_pages
                     .iter()
@@ -1523,56 +1258,22 @@ pub fn extract_remote_state(
         let recommended_rune_pages =
             recommended_pages_for_localized(champ_for_skins, &assigned_position, lang);
 
-        let my_team_bans = base_summary
-            .as_ref()
-            .map(|b| b.my_team_bans.clone())
-            .unwrap_or_default();
-        let their_team_bans = base_summary
-            .as_ref()
-            .map(|b| b.their_team_bans.clone())
-            .unwrap_or_default();
-        let my_team_ban_ids = my_team_bans
-            .iter()
-            .enumerate()
-            .map(|(i, n)| {
-                let id = base_summary
-                    .as_ref()
-                    .and_then(|b| b.my_team_ban_ids.get(i).copied())
-                    .unwrap_or(0);
-                if id > 0 { id } else { app_state.assets.resolve_champion_id(n) }
-            })
-            .collect();
-        let their_team_ban_ids = their_team_bans
-            .iter()
-            .enumerate()
-            .map(|(i, n)| {
-                let id = base_summary
-                    .as_ref()
-                    .and_then(|b| b.their_team_ban_ids.get(i).copied())
-                    .unwrap_or(0);
-                if id > 0 { id } else { app_state.assets.resolve_champion_id(n) }
-            })
-            .collect();
-
         RemoteChampSelectState {
-            sub_phase,
-            time_left_sec,
-            queue_type,
-            local_cell_id,
+            sub_phase: cs.sub_phase.clone(),
+            time_left_sec: cs.time_left_sec,
+            queue_type: cs.queue_type.clone(),
+            local_cell_id: cs.local_cell_id,
             assigned_position,
-            active_action,
+            active_action: cs.local_action.clone(),
             spell1_id,
             spell2_id,
             selected_skin_id,
             my_team,
-            their_team: base_summary
-                .as_ref()
-                .map(|b| b.their_team.clone())
-                .unwrap_or_default(),
-            my_team_bans,
-            their_team_bans,
-            my_team_ban_ids,
-            their_team_ban_ids,
+            their_team: cs.their_team.clone(),
+            my_team_bans: cs.my_team_bans.clone(),
+            their_team_bans: cs.their_team_bans.clone(),
+            my_team_ban_ids: cs.my_team_ban_ids.clone(),
+            their_team_ban_ids: cs.their_team_ban_ids.clone(),
             incoming_swaps,
             champions,
             available_skins,
@@ -1625,16 +1326,15 @@ pub fn extract_remote_state(
                     };
                     let title = if act.action_type == "ban" {
                         lang.pick("Your turn to BAN!", "À vous de bannir !").to_string()
-                    } else if lang.is_fr() {
-                        format!(
-                            "À vous de choisir ({}) !",
-                            position_display(&cs.assigned_position, lang)
-                        )
                     } else {
-                        format!(
-                            "Your turn to PICK ({})!",
-                            position_display(&cs.assigned_position, lang)
-                        )
+                        let pos = Position::parse(&cs.assigned_position)
+                            .unwrap_or(Position::Fill)
+                            .display_label(lang);
+                        if lang.is_fr() {
+                            format!("À vous de choisir ({pos}) !")
+                        } else {
+                            format!("Your turn to PICK ({pos})!")
+                        }
                     };
                     let s1 = spell_name_from_id_localized(cs.spell1_id, lang);
                     let s2 = spell_name_from_id_localized(cs.spell2_id, lang);
@@ -1655,65 +1355,30 @@ pub fn extract_remote_state(
         }
     }
 
+    // 5. Live Game + Board state (projected via SummarySnapshot)
     let live_game = if phase == "InProgress" {
-        let live_guard = app_state.store.read().unwrap();
-        let live = |uri: &str| {
-            live_guard
-                .get_state(SourceId::LiveGame, uri)
-                .map(|u| u.current)
-        };
-        let allgame_val = live("/liveclientdata/allgamedata");
-        let active_val = live("/liveclientdata/activeplayer");
-        let events_val = live("/liveclientdata/eventdata");
-        drop(live_guard);
-        extract_live_game_summary_localized(
-            allgame_val.as_ref(),
-            active_val.as_ref(),
-            events_val.as_ref(),
-            lang,
-        )
-        .map(|lg| {
-            let board = extract_live_board_localized(
-                allgame_val.as_ref(),
-                events_val.as_ref(),
-                &lg,
-                lang,
-            );
+        summary.live_game.map(|lg| {
+            let board = summary.board.unwrap_or_default();
             let clock_sec = lg.game_time_sec.max(0.0).round() as u32;
             let clock = format!("{:02}:{:02}", clock_sec / 60, clock_sec % 60);
             let my_team_name = lg
                 .players
                 .iter()
                 .find(|p| p.is_self)
-                .map(|p| p.team.clone())
-                .unwrap_or_else(|| "ORDER".to_string());
-            let map_player = |p: &hypatia_shared::LiveGamePlayerSummary| {
-                let lane = match p.position.to_ascii_uppercase().as_str() {
-                    "TOP" => "TOP",
-                    "JUNGLE" => "JGL",
-                    "MIDDLE" | "MID" => "MID",
-                    "BOTTOM" | "BOT" => "BOT",
-                    "UTILITY" | "SUPPORT" => "SUP",
-                    _ => "FLEX",
-                };
-                let champion_id = if p.champion_id > 0 {
-                    p.champion_id
-                } else {
-                    app_state
-                        .assets
-                        .resolve_champion_id_with_alias(&p.champion_name, &p.champion_alias)
-                };
-                RemoteLivePlayer {
-                    lane: lane.to_string(),
-                    champion_id,
-                    champion: p.champion_name.clone(),
-                    level: p.level,
-                    kda: format!("{}/{}/{}", p.kills, p.deaths, p.assists),
-                    cs: p.creep_score,
-                    is_self: p.is_self,
-                    dead: p.is_dead,
-                    respawn_sec: p.respawn_timer_sec.ceil() as i32,
-                }
+                .map(|p| p.team.as_str())
+                .unwrap_or("ORDER");
+            let map_player = |p: &hypatia_shared::LiveGamePlayerSummary| RemoteLivePlayer {
+                lane: Position::parse(&p.position)
+                    .map_or("FLEX", Position::short_tag)
+                    .to_string(),
+                champion_id: p.champion_id,
+                champion: p.champion_name.clone(),
+                level: p.level,
+                kda: format!("{}/{}/{}", p.kills, p.deaths, p.assists),
+                cs: p.creep_score,
+                is_self: p.is_self,
+                dead: p.is_dead,
+                respawn_sec: p.respawn_timer_sec.ceil() as i32,
             };
             let allies: Vec<RemoteLivePlayer> = lg
                 .players
@@ -1766,15 +1431,6 @@ pub fn extract_remote_state(
                 })
                 .collect();
 
-            let active_champion_id = if lg.active_champion_id > 0 {
-                lg.active_champion_id
-            } else {
-                allies
-                    .iter()
-                    .find(|p| p.is_self && p.champion_id > 0)
-                    .map(|p| p.champion_id)
-                    .unwrap_or_else(|| app_state.assets.resolve_champion_id(&lg.active_champion))
-            };
             RemoteLiveState {
                 game_mode: lg.game_mode,
                 clock,
@@ -1782,7 +1438,7 @@ pub fn extract_remote_state(
                 enemy_kills: board.enemy_kills(),
                 my_towers,
                 enemy_towers,
-                active_champion_id,
+                active_champion_id: lg.active_champion_id,
                 active_champion: lg.active_champion,
                 level: lg.level,
                 current_gold: lg.current_gold,
@@ -1821,26 +1477,30 @@ mod tests {
 
     #[test]
     fn test_resolve_allowlist_valid_commands() {
-        let calls = resolve_lcu_command(&RemoteCommand::AcceptReadyCheck, None).unwrap();
+        let calls =
+            resolve_lcu_command_localized(&RemoteCommand::AcceptReadyCheck, None, Lang::En)
+                .unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].method, Method::POST);
         assert_eq!(calls[0].path, "/lol-matchmaking/v1/ready-check/accept");
 
-        let hover = resolve_lcu_command(
+        let hover = resolve_lcu_command_localized(
             &RemoteCommand::HoverChampion {
                 action_id: 7,
                 champion_id: 103,
             },
             None,
+            Lang::En,
         )
         .unwrap();
         assert_eq!(hover[0].method, Method::PATCH);
         assert_eq!(hover[0].path, "/lol-champ-select/v1/session/actions/7");
         assert_eq!(hover[0].body, Some(json!({"championId": 103})));
 
-        let swap = resolve_lcu_command(
+        let swap = resolve_lcu_command_localized(
             &RemoteCommand::RequestPositionSwap { swap_id: 3 },
             None,
+            Lang::En,
         )
         .unwrap();
         assert_eq!(swap[0].method, Method::POST);
@@ -1852,30 +1512,33 @@ mod tests {
 
     #[test]
     fn test_resolve_rejects_invalid_inputs() {
-        assert!(resolve_lcu_command(
+        assert!(resolve_lcu_command_localized(
             &RemoteCommand::SetLobbyPositions {
                 first: "MIDDLE".into(),
                 second: "MIDDLE".into()
             },
-            None
+            None,
+            Lang::En,
         )
         .is_err());
 
-        assert!(resolve_lcu_command(
+        assert!(resolve_lcu_command_localized(
             &RemoteCommand::HoverChampion {
                 action_id: -1,
                 champion_id: 103
             },
-            None
+            None,
+            Lang::En,
         )
         .is_err());
 
-        assert!(resolve_lcu_command(
+        assert!(resolve_lcu_command_localized(
             &RemoteCommand::SetSummonerSpells {
                 spell1_id: 4,
                 spell2_id: 4
             },
-            None
+            None,
+            Lang::En,
         )
         .is_err());
 
@@ -1904,9 +1567,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_extract_remote_state_tracks_language() {
+    async fn test_extract_remote_state_tracks_language_swaps_and_phases() {
         let app = AppState::start_with_lang(true, 2.0, Lang::En);
-        let demo = DemoRemoteState::default();
+        let mut demo = DemoRemoteState::default();
         demo.sync_to_store(&app);
         let mut alerts = AlertTracker::default();
 
@@ -1914,7 +1577,58 @@ mod tests {
         assert_eq!(en.lang, Lang::En);
         assert_eq!(en.lobby.as_ref().unwrap().queue_name, "Ranked Solo/Duo");
         assert_eq!(en.champ_select.as_ref().unwrap().available_spells[0].name, "Flash");
+        assert_eq!(alerts.last_kind.as_deref(), Some("your_ban"));
 
+        // Incoming swap in ChampSelect triggers alert with caller's true local position
+        demo.apply_command(&app, &RemoteCommand::DemoSimulateIncomingSwap)
+            .unwrap();
+        let with_swap = extract_remote_state(&app, &demo, &mut alerts);
+        assert!(!with_swap
+            .champ_select
+            .as_ref()
+            .unwrap()
+            .incoming_swaps
+            .is_empty());
+        assert_eq!(alerts.last_kind.as_deref(), Some("incoming_swap"));
+
+        // Live InProgress phase derives board, K/D/A, and short lane tags via shared projection
+        demo.apply_command(
+            &app,
+            &RemoteCommand::DemoSetPhase {
+                phase: "InProgress".to_string(),
+            },
+        )
+        .unwrap();
+        {
+            let mut store = app.store.write().unwrap();
+            store.insert_event(
+                SourceId::LiveGame,
+                EventKind::Poll,
+                "/liveclientdata/allgamedata".to_string(),
+                json!({
+                    "gameData": {"gameMode": "CLASSIC", "gameTime": 612.0},
+                    "activePlayer": {"riotId": "HypatiaObserver#EUW", "level": 11, "currentGold": 1450},
+                    "allPlayers": [
+                        {"riotId": "HypatiaObserver#EUW", "championName": "Ahri", "team": "ORDER", "position": "MIDDLE", "level": 11},
+                        {"riotId": "Ally#EUW", "championName": "Lee Sin", "team": "ORDER", "position": "JUNGLE", "level": 10}
+                    ]
+                }),
+                &app.vault,
+            );
+        }
+        let live_remote = extract_remote_state(&app, &demo, &mut alerts);
+        let lg = live_remote.live_game.expect("expected live game projection");
+        assert!(lg.allies.iter().any(|p| p.lane == "JGL"));
+        assert!(lg.allies.iter().any(|p| p.lane == "MID"));
+
+        // Language toggle propagates cleanly through projected names & spells
+        demo.apply_command(
+            &app,
+            &RemoteCommand::DemoSetPhase {
+                phase: "ChampSelect".to_string(),
+            },
+        )
+        .unwrap();
         app.set_lang(Lang::Fr);
         let fr = extract_remote_state(&app, &demo, &mut alerts);
         assert_eq!(fr.lang, Lang::Fr);

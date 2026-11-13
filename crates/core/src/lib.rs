@@ -15,14 +15,15 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use hypatia_shared::{
-    extract_champ_select_summary, extract_eog_summary, extract_live_board,
-    extract_live_game_summary, extract_lobby_summary, extract_matchmaking_summary,
-    extract_summoner_summary, ServerMsg, Snapshot, SourceId, SummarySnapshot,
+    extract_champ_select_summary_localized, extract_eog_summary, extract_live_board_localized,
+    extract_live_game_summary_localized, extract_lobby_summary_localized,
+    extract_matchmaking_summary, extract_summoner_summary_localized, Lang, ServerMsg, Snapshot,
+    SourceId, SummarySnapshot,
 };
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 use tracing::info;
 
-use crate::assets::GameAssetCache;
+use crate::assets::{load_persisted_or_detect_lang, GameAssetCache};
 use crate::batcher::spawn_batcher;
 use crate::catalog::CatalogStore;
 use crate::connectors::{spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector_full};
@@ -45,12 +46,18 @@ pub struct AppState {
     pub demo_remote: Arc<RwLock<DemoRemoteState>>,
     pub is_demo: bool,
     demo_spawned: Arc<AtomicBool>,
+    lang_tx: watch::Sender<Lang>,
 }
 
 impl AppState {
     /// Starts discovery, the event store and every connector (or the synthetic
-    /// generator in demo mode). Must be called from inside a Tokio runtime.
+    /// generator in demo mode) using persisted or OS-detected language. Must be called from a Tokio runtime.
     pub fn start(demo: bool, demo_rate: f32) -> Self {
+        Self::start_with_lang(demo, demo_rate, load_persisted_or_detect_lang())
+    }
+
+    /// Starts Hypatia core with an explicit initial UI/API language.
+    pub fn start_with_lang(demo: bool, demo_rate: f32, initial_lang: Lang) -> Self {
         let vault = SecretVault::new();
         let (discovery, _snapshot_rx) = if demo {
             info!("Demo mode activated (synthetic data, rate: {:.1} evt/s)", demo_rate);
@@ -69,6 +76,7 @@ impl AppState {
         let catalog = Arc::new(RwLock::new(CatalogStore::new()));
         let demo_remote = Arc::new(RwLock::new(DemoRemoteState::default()));
         let demo_spawned = Arc::new(AtomicBool::new(demo));
+        let (lang_tx, _lang_rx) = watch::channel(initial_lang);
 
         spawn_batcher(event_rx, store.clone(), discovery.clone(), ws_broadcast_tx.clone());
 
@@ -121,7 +129,30 @@ impl AppState {
             demo_remote,
             is_demo: demo,
             demo_spawned,
+            lang_tx,
         }
+    }
+
+    /// Returns the active display/protocol language.
+    pub fn lang(&self) -> Lang {
+        *self.lang_tx.borrow()
+    }
+
+    /// Updates the active language and notifies subscribers (such as the mobile remote server).
+    pub fn set_lang(&self, lang: Lang) {
+        let _ = self.lang_tx.send_if_modified(|cur| {
+            if *cur == lang {
+                false
+            } else {
+                *cur = lang;
+                true
+            }
+        });
+    }
+
+    /// Subscribes to live language changes.
+    pub fn subscribe_lang(&self) -> watch::Receiver<Lang> {
+        self.lang_tx.subscribe()
     }
 
     /// Returns whether synthetic Demo mode is currently active.
@@ -189,43 +220,55 @@ impl AppState {
         let active_val = live("/liveclientdata/activeplayer");
         let events_val = live("/liveclientdata/eventdata");
 
-        let summoner =
-            extract_summoner_summary(summoner_val.as_ref(), ranked_val.as_ref(), presences_val.as_ref());
-        let lobby = extract_lobby_summary(lobby_val.as_ref());
+        let lang = self.lang();
+        let summoner = extract_summoner_summary_localized(
+            summoner_val.as_ref(),
+            ranked_val.as_ref(),
+            presences_val.as_ref(),
+            lang,
+        );
+        let lobby = extract_lobby_summary_localized(lobby_val.as_ref(), lang);
         let matchmaking = extract_matchmaking_summary(search_val.as_ref(), ready_val.as_ref());
-        let mut champ_select = extract_champ_select_summary(cs_val.as_ref(), lobby.as_ref());
+        let mut champ_select =
+            extract_champ_select_summary_localized(cs_val.as_ref(), lobby.as_ref(), lang);
         if let Some(ref mut cs) = champ_select {
             for ally in &mut cs.my_team {
                 if ally.champion_id == 0 && !ally.champion_name.is_empty() {
                     ally.champion_id = self.assets.resolve_champion_id(&ally.champion_name);
                 } else if ally.champion_id > 0 && ally.champion_name.starts_with("Champion #") {
-                    ally.champion_name = self.assets.resolve_champion_name(ally.champion_id);
+                    ally.champion_name =
+                        self.assets.resolve_champion_name_localized(ally.champion_id, lang);
                 }
             }
             for enemy in &mut cs.their_team {
                 if enemy.champion_id == 0 && !enemy.champion_name.is_empty() {
                     enemy.champion_id = self.assets.resolve_champion_id(&enemy.champion_name);
                 } else if enemy.champion_id > 0 && enemy.champion_name.starts_with("Champion #") {
-                    enemy.champion_name = self.assets.resolve_champion_name(enemy.champion_id);
+                    enemy.champion_name =
+                        self.assets.resolve_champion_name_localized(enemy.champion_id, lang);
                 }
             }
             for (name, id) in cs.my_team_bans.iter_mut().zip(cs.my_team_ban_ids.iter_mut()) {
                 if *id == 0 {
                     *id = self.assets.resolve_champion_id(name);
                 } else if name.starts_with("Champion #") {
-                    *name = self.assets.resolve_champion_name(*id);
+                    *name = self.assets.resolve_champion_name_localized(*id, lang);
                 }
             }
             for (name, id) in cs.their_team_bans.iter_mut().zip(cs.their_team_ban_ids.iter_mut()) {
                 if *id == 0 {
                     *id = self.assets.resolve_champion_id(name);
                 } else if name.starts_with("Champion #") {
-                    *name = self.assets.resolve_champion_name(*id);
+                    *name = self.assets.resolve_champion_name_localized(*id, lang);
                 }
             }
         }
-        let mut live_game =
-            extract_live_game_summary(allgame_val.as_ref(), active_val.as_ref(), events_val.as_ref());
+        let mut live_game = extract_live_game_summary_localized(
+            allgame_val.as_ref(),
+            active_val.as_ref(),
+            events_val.as_ref(),
+            lang,
+        );
         if let Some(ref mut lg) = live_game {
             for p in &mut lg.players {
                 if p.champion_id == 0 {
@@ -243,9 +286,9 @@ impl AppState {
                     .unwrap_or_else(|| self.assets.resolve_champion_id(&lg.active_champion));
             }
         }
-        let board = live_game
-            .as_ref()
-            .map(|lg| extract_live_board(allgame_val.as_ref(), events_val.as_ref(), lg));
+        let board = live_game.as_ref().map(|lg| {
+            extract_live_board_localized(allgame_val.as_ref(), events_val.as_ref(), lg, lang)
+        });
         let mut end_of_game = extract_eog_summary(eog_val.as_ref());
         if let Some(ref mut eog) = end_of_game {
             if eog.champion_id == 0 {
@@ -284,12 +327,23 @@ impl AppState {
         source_id: SourceId,
         path: &str,
     ) -> Result<(u16, serde_json::Value, u64), String> {
+        let lang = self.lang();
         let clean_path = path.trim();
         if !clean_path.starts_with('/') {
-            return Err("Path must start with '/' (e.g. /lol-summoner/v1/current-summoner)".to_string());
+            return Err(lang
+                .pick(
+                    "Path must start with '/' (e.g. /lol-summoner/v1/current-summoner)",
+                    "Le chemin doit commencer par '/' (ex. /lol-summoner/v1/current-summoner)",
+                )
+                .to_string());
         }
         if source_id == SourceId::System {
-            return Err("Cannot execute HTTP GET against System source".to_string());
+            return Err(lang
+                .pick(
+                    "Cannot execute HTTP GET on System source",
+                    "Impossible d'exécuter un HTTP GET sur la source Système",
+                )
+                .to_string());
         }
 
         // If in demo mode (or if source is not live but we have cached demo state), serve from store/synthetic
@@ -303,7 +357,7 @@ impl AppState {
                     "demo": true,
                     "source": source_id.to_string(),
                     "path": clean_path,
-                    "note": "Synthetic demo response for GET tester"
+                    "note": lang.pick("Synthetic demo response for GET tester", "Réponse de démonstration synthétique pour le testeur GET")
                 })
             });
             let meta = {
@@ -338,7 +392,12 @@ impl AppState {
                 let pwd = cred.and_then(|c| self.vault.reveal(c.id));
                 match (port, pwd) {
                     (Some(p), Some(pwd)) => (p, Some(pwd)),
-                    _ => return Err("RiotClient is not running or lockfile credentials are unavailable".to_string()),
+                    _ => return Err(lang
+                        .pick(
+                            "RiotClient is not running or lockfile credentials unavailable",
+                            "RiotClient n'est pas en cours d'exécution ou les identifiants du lockfile sont indisponibles",
+                        )
+                        .to_string()),
                 }
             }
             SourceId::LeagueClient => {
@@ -348,7 +407,12 @@ impl AppState {
                 let pwd = cred.and_then(|c| self.vault.reveal(c.id));
                 match (port, pwd) {
                     (Some(p), Some(pwd)) => (p, Some(pwd)),
-                    _ => return Err("LeagueClient (LCU) is not running or lockfile credentials are unavailable".to_string()),
+                    _ => return Err(lang
+                        .pick(
+                            "LeagueClient (LCU) is not running or lockfile credentials unavailable",
+                            "LeagueClient (LCU) n'est pas en cours d'exécution ou les identifiants du lockfile sont indisponibles",
+                        )
+                        .to_string()),
                 }
             }
             SourceId::LiveGame => (2999, None),
@@ -359,7 +423,7 @@ impl AppState {
             .riot_client
             .get(port, auth_password.as_deref(), clean_path)
             .await
-            .map_err(|e| format!("GET request failed: {}", e))?;
+            .map_err(|e| format!("{}: {}", lang.pick("GET request failed", "Échec de la requête GET"), e))?;
 
         let meta = {
             let mut guard = self.store.write().unwrap();
@@ -393,15 +457,21 @@ impl AppState {
 }
 
 /// Computes a human-readable line-by-line JSON diff between an optional previous JSON value
-/// and a current JSON value.
-pub fn compute_json_diff(
+/// and a current JSON value in the requested language.
+pub fn compute_json_diff_localized(
     prev: Option<&serde_json::Value>,
     curr: &serde_json::Value,
+    lang: Lang,
 ) -> String {
     let curr_pretty = serde_json::to_string_pretty(curr).unwrap_or_else(|_| "{}".to_string());
     let Some(prev_val) = prev else {
         return format!(
-            "--- (no previous state for this URI — initial snapshot)\n+++ current\n{}",
+            "{}\n{}\n{}",
+            lang.pick(
+                "--- (no previous state for this URI — initial snapshot)",
+                "--- (aucun état précédent pour cette URI — instantané initial)",
+            ),
+            lang.pick("+++ current", "+++ actuel"),
             curr_pretty
                 .lines()
                 .map(|l| format!("+ {}", l))
@@ -410,7 +480,14 @@ pub fn compute_json_diff(
         );
     };
     if prev_val == curr {
-        return format!("(No field changes between previous and current payload)\n\n{}", curr_pretty);
+        return format!(
+            "{}\n\n{}",
+            lang.pick(
+                "(No changes between previous and current payload)",
+                "(Aucune modification entre le payload précédent et l'actuel)",
+            ),
+            curr_pretty
+        );
     }
 
     let prev_pretty = serde_json::to_string_pretty(prev_val).unwrap_or_else(|_| "{}".to_string());
@@ -418,8 +495,8 @@ pub fn compute_json_diff(
     let curr_lines: Vec<&str> = curr_pretty.lines().collect();
 
     let mut out = Vec::new();
-    out.push("--- previous payload".to_string());
-    out.push("+++ current payload".to_string());
+    out.push(lang.pick("--- previous payload", "--- payload précédent").to_string());
+    out.push(lang.pick("+++ current payload", "+++ payload actuel").to_string());
 
     let max_len = prev_lines.len().max(curr_lines.len());
     let mut i = 0;
@@ -466,4 +543,12 @@ pub fn compute_json_diff(
     }
 
     out.join("\n")
+}
+
+/// English wrapper for line-by-line JSON diff.
+pub fn compute_json_diff(
+    prev: Option<&serde_json::Value>,
+    curr: &serde_json::Value,
+) -> String {
+    compute_json_diff_localized(prev, curr, Lang::En)
 }

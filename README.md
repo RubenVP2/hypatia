@@ -3,7 +3,7 @@
 > **Local League of Legends companion — Pit-Wall Chronometer desktop app, second-monitor mini widget, toggleable Telemetry Observatory, and opt-in Mobile Remote accessibility controller.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.4.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Slint](https://img.shields.io/badge/UI-Slint%201.18-purple.svg)](https://slint.dev)
 
@@ -13,7 +13,7 @@
 
 **Hypatia** is a self-contained native desktop companion written in **Rust** and **Slint**. It automatically discovers and follows your local Riot Games and League of Legends client services:
 
-- **Main Window (`MainWindow`)**: Phase-aware Pit-Wall Chronometer view for Lobby, Queue, Ready Check, Champion Select (team line roster, lane diagram, enemy picks & bans), Live Game (team score, tower status map, objective ramp, event feed), and End of Game. Supports **Dark (Night)** and **Light (Day)** themes.
+- **Main Window (`MainWindow`)**: Phase-aware Pit-Wall Chronometer view for Lobby, Queue, Ready Check, Champion Select (team line roster, lane diagram, enemy picks & bans), Live Game (team score, tower status map, objective ramp, event feed), and End of Game. Supports **Dark (Night)** and **Light (Day)** themes, as well as live **EN | FR** language switching (auto-detected from the OS on first launch, persisted locally, and synchronized with Mobile Remote).
 - **Toggleable Telemetry Observatory (`Telemetry` button / `--telemetry`)**: Can be turned **ON or OFF** at any time from the top bar and displayed **Side-by-Side (alongside the companion view)** or **Full Screen**:
   1. **Live Telemetry Stream**: Real-time WAMP (`OnJsonApiEvent`) and LiveClient (`:2999`) event stream with source/kind filters, pause/resume, **JSON Payload Inspector**, **Previous vs Current State Diff**, and **Secret Reveal**.
   2. **API Endpoints & GET Tester**: Interactive OpenAPI / `/help` catalog for LCU, Riot Client, and Live Game (`:2999`) with an integrated read-only `GET` runner.
@@ -71,6 +71,7 @@ Usage: hypatia [OPTIONS]
 Options:
       --demo                   Start in demo mode with synthetic event streams
       --demo-rate <DEMO_RATE>  Demo events generated per second [default: 2.0]
+      --lang <LANG>            Interface language override (en or fr)
       --telemetry              Start with the League of Legends Telemetry Observatory open
       --remote                 Start with Mobile Remote server enabled and QR code visible
       --no-remote              Disable automatic startup of the Mobile Remote server

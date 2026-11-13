@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Lang;
 use crate::summary::ChampSelectEnemy;
 
 /// Strict, closed allowlist of user-initiated commands accepted by the Mobile Remote.
@@ -102,6 +103,8 @@ pub enum RemoteCommand {
 pub struct RemoteStateSnapshot {
     pub phase: String,
     pub is_demo: bool,
+    #[serde(default)]
+    pub lang: Lang,
     pub alert_seq: u64,
     pub alert_kind: Option<String>,
     pub alert_title: Option<String>,
@@ -315,263 +318,339 @@ pub struct RemoteChampSelectState {
 
 /// Static catalog of Summoner's Rift summoner spells (IDs match Riot LCU).
 pub fn default_summoner_spells() -> Vec<RemoteSpellOption> {
-    vec![
-        RemoteSpellOption {
-            id: 4,
-            name: "Flash".to_string(),
-            key: "F".to_string(),
-            cooldown: "300s".to_string(),
-            description: "Blink a short distance toward your cursor.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 14,
-            name: "Ignite".to_string(),
-            key: "I".to_string(),
-            cooldown: "180s".to_string(),
-            description: "Ignites target enemy champion for true damage and Grievous Wounds.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 12,
-            name: "Teleport".to_string(),
-            key: "T".to_string(),
-            cooldown: "360s".to_string(),
-            description: "Channel to teleport to an allied structure, minion, or ward.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 11,
-            name: "Smite".to_string(),
-            key: "S".to_string(),
-            cooldown: "15s".to_string(),
-            description: "Deals true damage to a monster or minion. Required for Junglers.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 7,
-            name: "Heal".to_string(),
-            key: "H".to_string(),
-            cooldown: "240s".to_string(),
-            description: "Restores health and grants movement speed to you and a nearby ally.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 21,
-            name: "Barrier".to_string(),
-            key: "B".to_string(),
-            cooldown: "180s".to_string(),
-            description: "Shields your champion from damage for 2.5 seconds.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 3,
-            name: "Exhaust".to_string(),
-            key: "E".to_string(),
-            cooldown: "210s".to_string(),
-            description: "Slows target enemy champion and reduces their damage dealt by 35%.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 6,
-            name: "Ghost".to_string(),
-            key: "G".to_string(),
-            cooldown: "240s".to_string(),
-            description: "Gain movement speed and ignore unit collision for 15 seconds.".to_string(),
-        },
-        RemoteSpellOption {
-            id: 1,
-            name: "Cleanse".to_string(),
-            key: "C".to_string(),
-            cooldown: "210s".to_string(),
-            description: "Removes all disables (excluding suppression and airborne) and summoner spell debuffs.".to_string(),
-        },
-    ]
+    default_summoner_spells_localized(Lang::En)
+}
+
+/// Localized static catalog of Summoner's Rift summoner spells.
+pub fn default_summoner_spells_localized(lang: Lang) -> Vec<RemoteSpellOption> {
+    const SPELLS: &[(i64, &str, &str, &str, &str, &str, &str)] = &[
+        (
+            4,
+            "Flash",
+            "Saut éclair",
+            "F",
+            "S",
+            "300s",
+            "Blink a short distance toward your cursor.",
+        ),
+        (
+            14,
+            "Ignite",
+            "Embrasement",
+            "I",
+            "E",
+            "180s",
+            "Ignites target enemy champion for true damage and Grievous Wounds.",
+        ),
+        (
+            12,
+            "Teleport",
+            "Téléportation",
+            "T",
+            "T",
+            "360s",
+            "Channel to teleport to an allied structure, minion, or ward.",
+        ),
+        (
+            11,
+            "Smite",
+            "Châtiment",
+            "S",
+            "C",
+            "15s",
+            "Deals true damage to a monster or minion. Required for Junglers.",
+        ),
+        (
+            7,
+            "Heal",
+            "Soins",
+            "H",
+            "So",
+            "240s",
+            "Restores health and grants movement speed to you and a nearby ally.",
+        ),
+        (
+            21,
+            "Barrier",
+            "Barrière",
+            "B",
+            "B",
+            "180s",
+            "Shields your champion from damage for 2.5 seconds.",
+        ),
+        (
+            3,
+            "Exhaust",
+            "Fatigue",
+            "E",
+            "F",
+            "210s",
+            "Slows target enemy champion and reduces their damage dealt by 35%.",
+        ),
+        (
+            6,
+            "Ghost",
+            "Fantôme",
+            "G",
+            "Fa",
+            "240s",
+            "Gain movement speed and ignore unit collision for 15 seconds.",
+        ),
+        (
+            1,
+            "Cleanse",
+            "Purge",
+            "C",
+            "P",
+            "210s",
+            "Removes all disables (excluding suppression and airborne) and summoner spell debuffs.",
+        ),
+    ];
+    let fr_descs: &[&str] = &[
+        "Téléporte votre champion sur une courte distance vers votre curseur.",
+        "Enflamme un champion ennemi, infligeant des dégâts bruts et Hémorragie.",
+        "Canalise pour vous téléporter vers une structure, un sbire ou une balise alliée.",
+        "Inflige des dégâts bruts à un monstre ou un sbire. Requis pour la jungle.",
+        "Rend des PV et confère un bonus de vitesse à vous et à un allié proche.",
+        "Protège votre champion des dégâts pendant 2,5 secondes.",
+        "Ralentit le champion ennemi ciblé et réduit ses dégâts infligés de 35 %.",
+        "Augmente la vitesse de déplacement et ignore les collisions pendant 15 secondes.",
+        "Dissipe toutes les entraves (hors neutralisation et projection) et sorts d'invocateur.",
+    ];
+    SPELLS
+        .iter()
+        .zip(fr_descs.iter())
+        .map(|(&(id, en_n, fr_n, en_k, fr_k, cd, en_d), &fr_d)| RemoteSpellOption {
+            id,
+            name: lang.pick(en_n, fr_n).to_string(),
+            key: lang.pick(en_k, fr_k).to_string(),
+            cooldown: cd.to_string(),
+            description: lang.pick(en_d, fr_d).to_string(),
+        })
+        .collect()
 }
 
 pub fn spell_name_from_id(spell_id: i64) -> &'static str {
+    spell_name_from_id_localized(spell_id, Lang::En)
+}
+
+pub fn spell_name_from_id_localized(spell_id: i64, lang: Lang) -> &'static str {
     match spell_id {
-        1 => "Cleanse",
-        3 => "Exhaust",
-        4 => "Flash",
-        6 => "Ghost",
-        7 => "Heal",
-        11 => "Smite",
-        12 => "Teleport",
-        13 => "Clarity",
-        14 => "Ignite",
-        21 => "Barrier",
-        32 => "Mark",
-        _ => "Spell",
+        1 => lang.pick("Cleanse", "Purge"),
+        3 => lang.pick("Exhaust", "Fatigue"),
+        4 => lang.pick("Flash", "Saut éclair"),
+        6 => lang.pick("Ghost", "Fantôme"),
+        7 => lang.pick("Heal", "Soins"),
+        11 => lang.pick("Smite", "Châtiment"),
+        12 => lang.pick("Teleport", "Téléportation"),
+        13 => lang.pick("Clarity", "Clarté"),
+        14 => lang.pick("Ignite", "Embrasement"),
+        21 => lang.pick("Barrier", "Barrière"),
+        32 => lang.pick("Mark", "Marquage"),
+        _ => lang.pick("Spell", "Sort"),
+    }
+}
+
+fn perk_opt(lang: Lang, id: i64, en_n: &'static str, fr_n: &'static str, en_d: &'static str, fr_d: &'static str) -> RemotePerkOption {
+    RemotePerkOption {
+        id,
+        name: lang.pick(en_n, fr_n).to_string(),
+        short_desc: lang.pick(en_d, fr_d).to_string(),
     }
 }
 
 /// Complete Rune Trees (Precision, Domination, Sorcery, Resolve, Inspiration) with real Riot Perk IDs.
 pub fn default_rune_trees() -> Vec<RemoteRuneTree> {
+    default_rune_trees_localized(Lang::En)
+}
+
+/// Localized Rune Trees with real Riot Perk IDs.
+pub fn default_rune_trees_localized(lang: Lang) -> Vec<RemoteRuneTree> {
     vec![
         RemoteRuneTree {
             id: 8000,
-            name: "Precision".to_string(),
-            tagline: "Improved attacks and sustained damage".to_string(),
+            name: rune_style_name_localized(8000, lang).to_string(),
+            tagline: lang.pick("Improved attacks and sustained damage", "Attaques améliorées et dégâts soutenus").to_string(),
             keystones: vec![
-                RemotePerkOption { id: 8005, name: "Press the Attack".into(), short_desc: "3 hits expose target".into() },
-                RemotePerkOption { id: 8008, name: "Lethal Tempo".into(), short_desc: "Attack speed on hit".into() },
-                RemotePerkOption { id: 8021, name: "Fleet Footwork".into(), short_desc: "Energized heal + speed".into() },
-                RemotePerkOption { id: 8010, name: "Conqueror".into(), short_desc: "Stacking adaptive force + heal".into() },
+                perk_opt(lang, 8005, "Press the Attack", "Attaque soutenue", "3 hits expose target", "3 attaques exposent la cible"),
+                perk_opt(lang, 8008, "Lethal Tempo", "Tempo mortel", "Attack speed on hit", "Vitesse d'attaque à l'impact"),
+                perk_opt(lang, 8021, "Fleet Footwork", "Jeu de jambes", "Energized heal + speed", "Soin énergisé + vitesse"),
+                perk_opt(lang, 8010, "Conqueror", "Conquérant", "Stacking adaptive force + heal", "Force adaptative cumulable + soin"),
             ],
             slot1: vec![
-                RemotePerkOption { id: 9101, name: "Absorb Life".into(), short_desc: "Killing targets heals".into() },
-                RemotePerkOption { id: 9111, name: "Triumph".into(), short_desc: "Takedowns restore 10% missing HP".into() },
-                RemotePerkOption { id: 8009, name: "Presence of Mind".into(), short_desc: "Restore mana/energy on takedown".into() },
+                perk_opt(lang, 9101, "Absorb Life", "Absorption vitale", "Killing targets heals", "Éliminer une cible vous soigne"),
+                perk_opt(lang, 9111, "Triumph", "Triomphe", "Takedowns restore 10% missing HP", "Les éliminations rendent 10 % des PV manquants"),
+                perk_opt(lang, 8009, "Presence of Mind", "Présence d'esprit", "Restore mana/energy on takedown", "Rend du mana/énergie sur élimination"),
             ],
             slot2: vec![
-                RemotePerkOption { id: 9104, name: "Legend: Alacrity".into(), short_desc: "Takedowns grant attack speed".into() },
-                RemotePerkOption { id: 9105, name: "Legend: Haste".into(), short_desc: "Takedowns grant basic ability haste".into() },
-                RemotePerkOption { id: 9103, name: "Legend: Bloodline".into(), short_desc: "Takedowns grant life steal".into() },
+                perk_opt(lang, 9104, "Legend: Alacrity", "Légende : alacrité", "Takedowns grant attack speed", "Vitesse d'attaque par élimination"),
+                perk_opt(lang, 9105, "Legend: Haste", "Légende : accélération", "Takedowns grant basic ability haste", "Accélération de compétence par élimination"),
+                perk_opt(lang, 9103, "Legend: Bloodline", "Légende : sangsue", "Takedowns grant life steal", "Vol de vie par élimination"),
             ],
             slot3: vec![
-                RemotePerkOption { id: 8014, name: "Coup de Grace".into(), short_desc: "Bonus damage to low HP enemies".into() },
-                RemotePerkOption { id: 8017, name: "Cut Down".into(), short_desc: "Bonus damage to high HP enemies".into() },
-                RemotePerkOption { id: 8299, name: "Last Stand".into(), short_desc: "Bonus damage while low HP".into() },
+                perk_opt(lang, 8014, "Coup de Grace", "Coup de grâce", "Bonus damage to low HP enemies", "Dégâts bonus aux ennemis affaiblis"),
+                perk_opt(lang, 8017, "Cut Down", "Abattage", "Bonus damage to high HP enemies", "Dégâts bonus contre les cibles résistantes"),
+                perk_opt(lang, 8299, "Last Stand", "Baroud d'honneur", "Bonus damage while low HP", "Dégâts bonus quand vos PV sont bas"),
             ],
         },
         RemoteRuneTree {
             id: 8100,
-            name: "Domination".to_string(),
-            tagline: "Burst damage and target access".to_string(),
+            name: rune_style_name_localized(8100, lang).to_string(),
+            tagline: lang.pick("Burst damage and target access", "Dégâts explosifs et accès aux cibles").to_string(),
             keystones: vec![
-                RemotePerkOption { id: 8112, name: "Electrocute".into(), short_desc: "3 separate hits deal burst damage".into() },
-                RemotePerkOption { id: 8128, name: "Dark Harvest".into(), short_desc: "Damage low HP champs for souls".into() },
-                RemotePerkOption { id: 9923, name: "Hail of Blades".into(), short_desc: "110% attack speed for 3 attacks".into() },
+                perk_opt(lang, 8112, "Electrocute", "Électrocution", "3 separate hits deal burst damage", "3 coups distincts infligent un burst"),
+                perk_opt(lang, 8128, "Dark Harvest", "Moisson noire", "Damage low HP champs for souls", "Récolte des âmes sur cibles faibles"),
+                perk_opt(lang, 9923, "Hail of Blades", "Déluge de lames", "110% attack speed for 3 attacks", "+110 % vitesse d'attaque sur 3 coups"),
             ],
             slot1: vec![
-                RemotePerkOption { id: 8126, name: "Cheap Shot".into(), short_desc: "True damage to impaired targets".into() },
-                RemotePerkOption { id: 8139, name: "Taste of Blood".into(), short_desc: "Heal when damaging an enemy".into() },
-                RemotePerkOption { id: 8143, name: "Sudden Impact".into(), short_desc: "Bonus damage after dash/stealth".into() },
+                perk_opt(lang, 8126, "Cheap Shot", "Coup bas", "True damage to impaired targets", "Dégâts bruts sur cibles entravées"),
+                perk_opt(lang, 8139, "Taste of Blood", "Goût du sang", "Heal when damaging an enemy", "Soigne en blessant un ennemi"),
+                perk_opt(lang, 8143, "Sudden Impact", "Ruée offensive", "Bonus damage after dash/stealth", "Dégâts bonus après ruée ou furtivité"),
             ],
             slot2: vec![
-                RemotePerkOption { id: 8136, name: "Zombie Ward".into(), short_desc: "Takedowns on wards spawn allied wards".into() },
-                RemotePerkOption { id: 8120, name: "Ghost Poro".into(), short_desc: "Expired wards leave a Ghost Poro".into() },
-                RemotePerkOption { id: 8138, name: "Eyeball Collection".into(), short_desc: "Stacking adaptive force on takedowns".into() },
+                perk_opt(lang, 8136, "Zombie Ward", "Balise zombie", "Takedowns on wards spawn allied wards", "Détruire une balise crée une balise alliée"),
+                perk_opt(lang, 8120, "Ghost Poro", "Poro fantôme", "Expired wards leave a Ghost Poro", "Les balises expirées laissent un Poro fantôme"),
+                perk_opt(lang, 8138, "Eyeball Collection", "Arracheur d'œil", "Stacking adaptive force on takedowns", "Force adaptative cumulée sur élimination"),
             ],
             slot3: vec![
-                RemotePerkOption { id: 8135, name: "Treasure Hunter".into(), short_desc: "Bonus gold on unique takedowns".into() },
-                RemotePerkOption { id: 8105, name: "Relentless Hunter".into(), short_desc: "Out-of-combat movement speed".into() },
-                RemotePerkOption { id: 8106, name: "Ultimate Hunter".into(), short_desc: "Ultimate ability haste stacks".into() },
+                perk_opt(lang, 8135, "Treasure Hunter", "Chasseur de trésors", "Bonus gold on unique takedowns", "Or bonus sur éliminations uniques"),
+                perk_opt(lang, 8105, "Relentless Hunter", "Chasseur acharné", "Out-of-combat movement speed", "Vitesse de déplacement hors combat"),
+                perk_opt(lang, 8106, "Ultimate Hunter", "Chasseur ultime", "Ultimate ability haste stacks", "Accélération d'ultime cumulable"),
             ],
         },
         RemoteRuneTree {
             id: 8200,
-            name: "Sorcery".to_string(),
-            tagline: "Empowered abilities and resource manipulation".to_string(),
+            name: rune_style_name_localized(8200, lang).to_string(),
+            tagline: lang.pick("Empowered abilities and resource manipulation", "Compétences renforcées et gestion des ressources").to_string(),
             keystones: vec![
-                RemotePerkOption { id: 8214, name: "Summon Aery".into(), short_desc: "Damage enemies or shield allies".into() },
-                RemotePerkOption { id: 8229, name: "Arcane Comet".into(), short_desc: "Ability hits hurl a comet".into() },
-                RemotePerkOption { id: 8230, name: "Phase Rush".into(), short_desc: "3 hits grant burst of speed".into() },
+                perk_opt(lang, 8214, "Summon Aery", "Invocation d'Aery", "Damage enemies or shield allies", "Blesse les ennemis ou protège les alliés"),
+                perk_opt(lang, 8229, "Arcane Comet", "Comète arcanique", "Ability hits hurl a comet", "Vos sorts lancent une comète"),
+                perk_opt(lang, 8230, "Phase Rush", "Rush phasique", "3 hits grant burst of speed", "3 coups donnent un boost de vitesse"),
             ],
             slot1: vec![
-                RemotePerkOption { id: 8224, name: "Nullifying Orb".into(), short_desc: "Magic shield at low HP".into() },
-                RemotePerkOption { id: 8226, name: "Manaflow Band".into(), short_desc: "+250 max mana and regen".into() },
-                RemotePerkOption { id: 8275, name: "Nimbus Cloak".into(), short_desc: "Speed after Summoner Spell".into() },
+                perk_opt(lang, 8224, "Nullifying Orb", "Orbe anti-magie", "Magic shield at low HP", "Bouclier magique à PV faibles"),
+                perk_opt(lang, 8226, "Manaflow Band", "Ruban de mana", "+250 max mana and regen", "+250 mana max et régénération"),
+                perk_opt(lang, 8275, "Nimbus Cloak", "Manteau nuageux", "Speed after Summoner Spell", "Vitesse après sort d'invocateur"),
             ],
             slot2: vec![
-                RemotePerkOption { id: 8210, name: "Transcendence".into(), short_desc: "Ability haste + cooldown refund".into() },
-                RemotePerkOption { id: 8234, name: "Celerity".into(), short_desc: "Movement speed bonuses amplified".into() },
-                RemotePerkOption { id: 8233, name: "Absolute Focus".into(), short_desc: "Adaptive force above 70% HP".into() },
+                perk_opt(lang, 8210, "Transcendence", "Transcendance", "Ability haste + cooldown refund", "Accélération + réduction des délais"),
+                perk_opt(lang, 8234, "Celerity", "Célérité", "Movement speed bonuses amplified", "Bonus de vitesse de déplacement amplifiés"),
+                perk_opt(lang, 8233, "Absolute Focus", "Concentration absolue", "Adaptive force above 70% HP", "Force adaptative au-dessus de 70 % PV"),
             ],
             slot3: vec![
-                RemotePerkOption { id: 8237, name: "Scorch".into(), short_desc: "Abilities burn enemies in lane".into() },
-                RemotePerkOption { id: 8232, name: "Waterwalking".into(), short_desc: "Speed and force in the river".into() },
-                RemotePerkOption { id: 8236, name: "Gathering Storm".into(), short_desc: "Scaling adaptive force every 10m".into() },
+                perk_opt(lang, 8237, "Scorch", "Brûlure", "Abilities burn enemies in lane", "Les sorts brûlent les ennemis en voie"),
+                perk_opt(lang, 8232, "Waterwalking", "Marche sur l'eau", "Speed and force in the river", "Vitesse et force dans la rivière"),
+                perk_opt(lang, 8236, "Gathering Storm", "Tempête menaçante", "Scaling adaptive force every 10m", "Force adaptative croissante chaque 10 min"),
             ],
         },
         RemoteRuneTree {
             id: 8400,
-            name: "Resolve".to_string(),
-            tagline: "Durability and crowd control".to_string(),
+            name: rune_style_name_localized(8400, lang).to_string(),
+            tagline: lang.pick("Durability and crowd control", "Durabilité et contrôle de foule").to_string(),
             keystones: vec![
-                RemotePerkOption { id: 8437, name: "Grasp of the Undying".into(), short_desc: "Every 4s in combat heal + max HP".into() },
-                RemotePerkOption { id: 8439, name: "Aftershock".into(), short_desc: "Immobilizing grants resists + burst".into() },
-                RemotePerkOption { id: 8465, name: "Guardian".into(), short_desc: "Shield nearby allies on damage".into() },
+                perk_opt(lang, 8437, "Grasp of the Undying", "Poigne de l'immortel", "Every 4s in combat heal + max HP", "Soin + PV max toutes les 4s en combat"),
+                perk_opt(lang, 8439, "Aftershock", "Après-coup", "Immobilizing grants resists + burst", "Immobiliser confère résistances + explosion"),
+                perk_opt(lang, 8465, "Guardian", "Gardien", "Shield nearby allies on damage", "Bouclier sur allié proche subissant des dégâts"),
             ],
             slot1: vec![
-                RemotePerkOption { id: 8446, name: "Demolish".into(), short_desc: "Charge powerful attack vs towers".into() },
-                RemotePerkOption { id: 8463, name: "Font of Life".into(), short_desc: "Impairing enemies heals allies".into() },
-                RemotePerkOption { id: 8401, name: "Shield Bash".into(), short_desc: "Shields grant resists + bonus hit".into() },
+                perk_opt(lang, 8446, "Demolish", "Démolition", "Charge powerful attack vs towers", "Charge une attaque puissante sur tourelles"),
+                perk_opt(lang, 8463, "Font of Life", "Fontaine de vie", "Impairing enemies heals allies", "Entraver un ennemi soigne les alliés"),
+                perk_opt(lang, 8401, "Shield Bash", "Coup de bouclier", "Shields grant resists + bonus hit", "Bouclier confère résistances + coup bonus"),
             ],
             slot2: vec![
-                RemotePerkOption { id: 8429, name: "Conditioning".into(), short_desc: "Bonus Armor and MR at 12m".into() },
-                RemotePerkOption { id: 8444, name: "Second Wind".into(), short_desc: "Regenerate HP after taking poke".into() },
-                RemotePerkOption { id: 8473, name: "Bone Plating".into(), short_desc: "Reduce damage from 3 combo hits".into() },
+                perk_opt(lang, 8429, "Conditioning", "Conditionnement", "Bonus Armor and MR at 12m", "Armure et RM bonus à 12 min"),
+                perk_opt(lang, 8444, "Second Wind", "Second souffle", "Regenerate HP after taking poke", "Régénère des PV après avoir subi des dégâts"),
+                perk_opt(lang, 8473, "Bone Plating", "Plaque d'os", "Reduce damage from 3 combo hits", "Réduit les dégâts de 3 coups rapides"),
             ],
             slot3: vec![
-                RemotePerkOption { id: 8451, name: "Overgrowth".into(), short_desc: "Permanent max HP from nearby minions".into() },
-                RemotePerkOption { id: 8453, name: "Revitalize".into(), short_desc: "5% stronger heals and shields".into() },
-                RemotePerkOption { id: 8242, name: "Unflinching".into(), short_desc: "Bonus Armor/MR when CC'd".into() },
+                perk_opt(lang, 8451, "Overgrowth", "Surcroissance", "Permanent max HP from nearby minions", "PV max permanents près des sbires"),
+                perk_opt(lang, 8453, "Revitalize", "Revitalisation", "5% stronger heals and shields", "Soins et boucliers 5 % plus efficaces"),
+                perk_opt(lang, 8242, "Unflinching", "Inébranlable", "Bonus Armor/MR when CC'd", "Armure/RM bonus sous contrôle de foule"),
             ],
         },
         RemoteRuneTree {
             id: 8300,
-            name: "Inspiration".to_string(),
-            tagline: "Creative tools and rule bending".to_string(),
+            name: rune_style_name_localized(8300, lang).to_string(),
+            tagline: lang.pick("Creative tools and rule bending", "Outils créatifs et détournement des règles").to_string(),
             keystones: vec![
-                RemotePerkOption { id: 8351, name: "Glacial Augment".into(), short_desc: "Immobilizing creates slow rays".into() },
-                RemotePerkOption { id: 8360, name: "Unsealed Spellbook".into(), short_desc: "Swap Summoner Spells in game".into() },
-                RemotePerkOption { id: 8369, name: "First Strike".into(), short_desc: "Bonus damage + gold when striking first".into() },
+                perk_opt(lang, 8351, "Glacial Augment", "Optimisation glaciale", "Immobilizing creates slow rays", "Immobiliser crée des rayons ralentissants"),
+                perk_opt(lang, 8360, "Unsealed Spellbook", "Grimoire déchaîné", "Swap Summoner Spells in game", "Changez de sort d'invocateur en partie"),
+                perk_opt(lang, 8369, "First Strike", "Premier coup", "Bonus damage + gold when striking first", "Dégâts bonus + or en frappant le premier"),
             ],
             slot1: vec![
-                RemotePerkOption { id: 8306, name: "Hextech Flashtraption".into(), short_desc: "Channel Flash while on cooldown".into() },
-                RemotePerkOption { id: 8304, name: "Magical Footwear".into(), short_desc: "Free boots with +10 move speed".into() },
-                RemotePerkOption { id: 8321, name: "Cash Back".into(), short_desc: "6% gold back on Legendary items".into() },
+                perk_opt(lang, 8306, "Hextech Flashtraption", "Canaliportation Hextech", "Channel Flash while on cooldown", "Canalise un Saut éclair en récupération"),
+                perk_opt(lang, 8304, "Magical Footwear", "Chaussures magiques", "Free boots with +10 move speed", "Bottes gratuites avec +10 vitesse"),
+                perk_opt(lang, 8321, "Cash Back", "Remboursement", "6% gold back on Legendary items", "6 % d'or rendu par objet légendaire"),
             ],
             slot2: vec![
-                RemotePerkOption { id: 8313, name: "Triple Tonic".into(), short_desc: "Elixirs at levels 3, 6, and 9".into() },
-                RemotePerkOption { id: 8352, name: "Time Warp Tonic".into(), short_desc: "Immediate potion restoration".into() },
-                RemotePerkOption { id: 8345, name: "Biscuit Delivery".into(), short_desc: "Receive 3 sustain biscuits".into() },
+                perk_opt(lang, 8313, "Triple Tonic", "Triple tonique", "Elixirs at levels 3, 6, and 9", "Élixirs aux niveaux 3, 6 et 9"),
+                perk_opt(lang, 8352, "Time Warp Tonic", "Philtre de chronodistorsion", "Immediate potion restoration", "Soin instantané via les potions"),
+                perk_opt(lang, 8345, "Biscuit Delivery", "Livraison de biscuits", "Receive 3 sustain biscuits", "Reçoit 3 biscuits de régénération"),
             ],
             slot3: vec![
-                RemotePerkOption { id: 8347, name: "Cosmic Insight".into(), short_desc: "+18 Summoner Spell & Item Haste".into() },
-                RemotePerkOption { id: 8410, name: "Approach Velocity".into(), short_desc: "Bonus speed toward impaired enemies".into() },
-                RemotePerkOption { id: 8316, name: "Jack Of All Trades".into(), short_desc: "Haste and force per unique stat".into() },
+                perk_opt(lang, 8347, "Cosmic Insight", "Savoir cosmique", "+18 Summoner Spell & Item Haste", "+18 accélération sorts & objets"),
+                perk_opt(lang, 8410, "Approach Velocity", "Vitesse d'approche", "Bonus speed toward impaired enemies", "Vitesse bonus vers ennemis entravés"),
+                perk_opt(lang, 8316, "Jack Of All Trades", "Touche-à-tout", "Haste and force per unique stat", "Accélération et force par stat unique"),
             ],
         },
     ]
 }
 
 pub fn rune_style_name(style_id: i64) -> &'static str {
+    rune_style_name_localized(style_id, Lang::En)
+}
+
+pub fn rune_style_name_localized(style_id: i64, lang: Lang) -> &'static str {
     match style_id {
-        8000 => "Precision",
+        8000 => lang.pick("Precision", "Précision"),
         8100 => "Domination",
-        8200 => "Sorcery",
+        8200 => lang.pick("Sorcery", "Sorcellerie"),
         8300 => "Inspiration",
-        8400 => "Resolve",
+        8400 => lang.pick("Resolve", "Volonté"),
         _ => "Runes",
     }
 }
 
 pub fn keystone_name_from_id(perk_id: i64) -> &'static str {
+    keystone_name_from_id_localized(perk_id, Lang::En)
+}
+
+pub fn keystone_name_from_id_localized(perk_id: i64, lang: Lang) -> &'static str {
     match perk_id {
-        8005 => "Press the Attack",
-        8008 => "Lethal Tempo",
-        8021 => "Fleet Footwork",
-        8010 => "Conqueror",
-        8112 => "Electrocute",
-        8128 => "Dark Harvest",
-        9923 => "Hail of Blades",
-        8214 => "Summon Aery",
-        8229 => "Arcane Comet",
-        8230 => "Phase Rush",
-        8437 => "Grasp of the Undying",
-        8439 => "Aftershock",
-        8465 => "Guardian",
-        8351 => "Glacial Augment",
-        8360 => "Unsealed Spellbook",
-        8369 => "First Strike",
-        _ => "Custom Keystone",
+        8005 => lang.pick("Press the Attack", "Attaque soutenue"),
+        8008 => lang.pick("Lethal Tempo", "Tempo mortel"),
+        8021 => lang.pick("Fleet Footwork", "Jeu de jambes"),
+        8010 => lang.pick("Conqueror", "Conquérant"),
+        8112 => lang.pick("Electrocute", "Électrocution"),
+        8128 => lang.pick("Dark Harvest", "Moisson noire"),
+        9923 => lang.pick("Hail of Blades", "Déluge de lames"),
+        8214 => lang.pick("Summon Aery", "Invocation d'Aery"),
+        8229 => lang.pick("Arcane Comet", "Comète arcanique"),
+        8230 => lang.pick("Phase Rush", "Rush phasique"),
+        8437 => lang.pick("Grasp of the Undying", "Poigne de l'immortel"),
+        8439 => lang.pick("Aftershock", "Après-coup"),
+        8465 => lang.pick("Guardian", "Gardien"),
+        8351 => lang.pick("Glacial Augment", "Optimisation glaciale"),
+        8360 => lang.pick("Unsealed Spellbook", "Grimoire déchaîné"),
+        8369 => lang.pick("First Strike", "Premier coup"),
+        _ => lang.pick("Custom Keystone", "Rune fondamentale"),
     }
 }
 
 /// Built-in recommended rune pages tailored to champion & lane so one tap always works offline.
 pub fn recommended_pages_for(champion_id: i64, position: &str) -> Vec<RemoteRunePage> {
+    recommended_pages_for_localized(champion_id, position, Lang::En)
+}
+
+/// Localized recommended rune pages tailored to champion & lane.
+pub fn recommended_pages_for_localized(champion_id: i64, position: &str, lang: Lang) -> Vec<RemoteRunePage> {
     let pos = position.to_ascii_uppercase();
     // Pick sensible primary page based on champion archetype / role
-    let (primary_name, p_style, s_style, perks) = match (champion_id, pos.as_str()) {
+    let (en_name, fr_name, p_style, s_style, perks) = match (champion_id, pos.as_str()) {
         // Mages / Mid assassins (Ahri, Lux, Orianna, Syndra, Viktor, etc.)
         (103 | 238 | 7 | 99 | 61 | 134 | 112 | 518 | 142 | 4, _) => (
             "Burst & Roam (Electrocute)",
+            "Burst & Décalage (Électrocution)",
             8100,
             8200,
             vec![8112, 8139, 8138, 8106, 8226, 8210, 5008, 5008, 5001],
@@ -579,6 +658,7 @@ pub fn recommended_pages_for(champion_id: i64, position: &str) -> Vec<RemoteRune
         // Fighters / Bruisers (Aatrox, Darius, Garen, Lee Sin, Viego, Yasuo, Yone, Riven, Camille, Jax)
         (266 | 122 | 86 | 64 | 234 | 157 | 777 | 92 | 164 | 24 | 233, _) => (
             "Sustained Skirmish (Conqueror)",
+            "Escarmouche prolongée (Conquérant)",
             8000,
             8400,
             vec![8010, 9111, 9105, 8299, 8444, 8451, 5005, 5008, 5001],
@@ -586,6 +666,7 @@ pub fn recommended_pages_for(champion_id: i64, position: &str) -> Vec<RemoteRune
         // Marksmen (Jinx, Kai'Sa, Vayne, Ezreal, Caitlyn, Ashe, Jhin, Lucian)
         (222 | 145 | 67 | 81 | 51 | 22 | 202 | 236, _) | (_, "BOTTOM" | "BOT") => (
             "Marksman DPS (Lethal Tempo)",
+            "Tireur DPS (Tempo mortel)",
             8000,
             8200,
             vec![8008, 9101, 9103, 8014, 8234, 8236, 5005, 5008, 5001],
@@ -593,24 +674,28 @@ pub fn recommended_pages_for(champion_id: i64, position: &str) -> Vec<RemoteRune
         // Tank / Engage Supports & Top Tanks (Thresh, Leona, Nautilus, Blitzcrank, Ornn, Malphite, Shen)
         (412 | 89 | 111 | 53 | 516 | 54 | 98, _) | (_, "UTILITY" | "SUPPORT") => (
             "Engage & Frontline (Aftershock)",
+            "Engagement & Frontline (Après-coup)",
             8400,
             8300,
             vec![8439, 8463, 8473, 8242, 8345, 8347, 5007, 5001, 5001],
         ),
         (_, "TOP") => (
             "Top Lane Duelist (Grasp)",
+            "Duelliste Top (Poigne)",
             8400,
             8000,
             vec![8437, 8446, 8444, 8451, 9111, 9104, 5005, 5008, 5001],
         ),
         (_, "JUNGLE") => (
             "Jungle Tempo (Conqueror)",
+            "Tempo Jungle (Conquérant)",
             8000,
             8300,
             vec![8010, 9111, 9104, 8014, 8304, 8347, 5005, 5008, 5001],
         ),
         _ => (
             "All-Round Mage (Arcane Comet)",
+            "Mage polyvalent (Comète arcanique)",
             8200,
             8300,
             vec![8229, 8226, 8210, 8237, 8345, 8347, 5008, 5008, 5001],
@@ -620,36 +705,36 @@ pub fn recommended_pages_for(champion_id: i64, position: &str) -> Vec<RemoteRune
     vec![
         RemoteRunePage {
             id: -1,
-            name: primary_name.to_string(),
+            name: lang.pick(en_name, fr_name).to_string(),
             primary_style_id: p_style,
-            primary_style_name: rune_style_name(p_style).to_string(),
+            primary_style_name: rune_style_name_localized(p_style, lang).to_string(),
             sub_style_id: s_style,
-            sub_style_name: rune_style_name(s_style).to_string(),
-            keystone_name: keystone_name_from_id(perks[0]).to_string(),
+            sub_style_name: rune_style_name_localized(s_style, lang).to_string(),
+            keystone_name: keystone_name_from_id_localized(perks[0], lang).to_string(),
             selected_perk_ids: perks,
             current: false,
             is_preset: true,
         },
         RemoteRunePage {
             id: -2,
-            name: "Poke & Scaling (Arcane Comet)".to_string(),
+            name: lang.pick("Poke & Scaling (Arcane Comet)", "Poke & Scaling (Comète arcanique)").to_string(),
             primary_style_id: 8200,
-            primary_style_name: "Sorcery".to_string(),
+            primary_style_name: rune_style_name_localized(8200, lang).to_string(),
             sub_style_id: 8300,
-            sub_style_name: "Inspiration".to_string(),
-            keystone_name: "Arcane Comet".to_string(),
+            sub_style_name: rune_style_name_localized(8300, lang).to_string(),
+            keystone_name: keystone_name_from_id_localized(8229, lang).to_string(),
             selected_perk_ids: vec![8229, 8226, 8210, 8236, 8345, 8347, 5008, 5008, 5001],
             current: false,
             is_preset: true,
         },
         RemoteRunePage {
             id: -3,
-            name: "Safe Lane Sustain (Fleet Footwork)".to_string(),
+            name: lang.pick("Safe Lane Sustain (Fleet Footwork)", "Tenue de voie sûre (Jeu de jambes)").to_string(),
             primary_style_id: 8000,
-            primary_style_name: "Precision".to_string(),
+            primary_style_name: rune_style_name_localized(8000, lang).to_string(),
             sub_style_id: 8400,
-            sub_style_name: "Resolve".to_string(),
-            keystone_name: "Fleet Footwork".to_string(),
+            sub_style_name: rune_style_name_localized(8400, lang).to_string(),
+            keystone_name: keystone_name_from_id_localized(8021, lang).to_string(),
             selected_perk_ids: vec![8021, 9101, 9104, 8014, 8444, 8451, 5005, 5008, 5001],
             current: false,
             is_preset: true,
@@ -763,67 +848,71 @@ pub fn builtin_champion_catalog() -> Vec<RemoteChampionOption> {
 
 /// Generates realistic skins for any champion so skin picking works out of the box in Demo mode
 /// and falls back cleanly when LCU carousel skins are not yet loaded.
-pub fn builtin_skins_for(champion_id: i64, champion_name: &str, selected_skin_id: i64) -> Vec<RemoteSkinOption> {
+pub fn builtin_skins_for_localized(
+    champion_id: i64,
+    champion_name: &str,
+    selected_skin_id: i64,
+    lang: Lang,
+) -> Vec<RemoteSkinOption> {
     if champion_id <= 0 {
         return Vec::new();
     }
     let base = champion_id * 1000;
     let current = if selected_skin_id > 0 { selected_skin_id } else { base };
-    let themes = match champion_id {
+    let themes: Vec<(i64, &str, &str)> = match champion_id {
         103 => vec![
-            (base, "Classic Ahri"),
-            (base + 1, "Dynasty Ahri"),
-            (base + 4, "Popstar Ahri"),
-            (base + 14, "Star Guardian Ahri"),
-            (base + 27, "Spirit Blossom Ahri"),
-            (base + 42, "Coven Ahri"),
-            (base + 85, "Immortalized Legend Ahri"),
+            (base, "Classic Ahri", "Ahri classique"),
+            (base + 1, "Dynasty Ahri", "Ahri dynastique"),
+            (base + 4, "Popstar Ahri", "Popstar Ahri"),
+            (base + 14, "Star Guardian Ahri", "Ahri gardienne des étoiles"),
+            (base + 27, "Spirit Blossom Ahri", "Ahri fleur spirituelle"),
+            (base + 42, "Coven Ahri", "Ahri congrégation des sorcières"),
+            (base + 85, "Immortalized Legend Ahri", "Ahri légende immortalisée"),
         ],
         64 => vec![
-            (base, "Classic Lee Sin"),
-            (base + 4, "Muay Thai Lee Sin"),
-            (base + 11, "God Fist Lee Sin"),
-            (base + 27, "Storm Dragon Lee Sin"),
-            (base + 51, "Heavenscale Lee Sin"),
+            (base, "Classic Lee Sin", "Lee Sin classique"),
+            (base + 4, "Muay Thai Lee Sin", "Lee Sin muay thaï"),
+            (base + 11, "God Fist Lee Sin", "Lee Sin poing divin"),
+            (base + 27, "Storm Dragon Lee Sin", "Lee Sin dragon des tempêtes"),
+            (base + 51, "Heavenscale Lee Sin", "Lee Sin écaille divine"),
         ],
         222 => vec![
-            (base, "Classic Jinx"),
-            (base + 4, "Star Guardian Jinx"),
-            (base + 13, "PROJECT: Jinx"),
-            (base + 29, "Arcane Fractured Jinx"),
-            (base + 37, "Battle Cat Jinx"),
+            (base, "Classic Jinx", "Jinx classique"),
+            (base + 4, "Star Guardian Jinx", "Jinx gardienne des étoiles"),
+            (base + 13, "PROJECT: Jinx", "PROJET : Jinx"),
+            (base + 29, "Arcane Fractured Jinx", "Jinx fracturée d'Arcane"),
+            (base + 37, "Battle Cat Jinx", "Jinx chat de combat"),
         ],
         266 => vec![
-            (base, "Classic Aatrox"),
-            (base + 7, "Blood Moon Aatrox"),
-            (base + 9, "Odyssey Aatrox"),
-            (base + 21, "DRX Aatrox"),
-            (base + 30, "Primordian Aatrox"),
+            (base, "Classic Aatrox", "Aatrox classique"),
+            (base + 7, "Blood Moon Aatrox", "Aatrox lune de sang"),
+            (base + 9, "Odyssey Aatrox", "Aatrox de l'Odyssée"),
+            (base + 21, "DRX Aatrox", "DRX Aatrox"),
+            (base + 30, "Primordian Aatrox", "Aatrox primordien"),
         ],
         412 => vec![
-            (base, "Classic Thresh"),
-            (base + 5, "Dark Star Thresh"),
-            (base + 13, "High Noon Thresh"),
-            (base + 17, "Spirit Blossom Thresh"),
+            (base, "Classic Thresh", "Thresh classique"),
+            (base + 5, "Dark Star Thresh", "Thresh du pulsar sombre"),
+            (base + 13, "High Noon Thresh", "Thresh de l'Ouest"),
+            (base + 17, "Spirit Blossom Thresh", "Thresh fleur spirituelle"),
         ],
         _ => vec![
-            (base, "Classic"),
-            (base + 1, "Blood Moon"),
-            (base + 2, "Star Guardian"),
-            (base + 3, "Spirit Blossom"),
-            (base + 4, "High Noon"),
+            (base, "Classic", "classique"),
+            (base + 1, "Blood Moon", "lune de sang"),
+            (base + 2, "Star Guardian", "gardien des étoiles"),
+            (base + 3, "Spirit Blossom", "fleur spirituelle"),
+            (base + 4, "High Noon", "de l'Ouest"),
         ],
     };
 
     themes
         .into_iter()
-        .map(|(id, label)| {
-            let name = if label.contains(champion_name) || label == "Classic" {
-                if label == "Classic" {
-                    format!("Classic {champion_name}")
-                } else {
-                    label.to_string()
-                }
+        .map(|(id, en, fr)| {
+            let label = lang.pick(en, fr);
+            let name = if label.contains(champion_name) {
+                label.to_string()
+            } else if lang.is_fr() {
+                format!("{champion_name} {label}")
             } else {
                 format!("{label} {champion_name}")
             };
@@ -835,4 +924,35 @@ pub fn builtin_skins_for(champion_id: i64, champion_name: &str, selected_skin_id
             }
         })
         .collect()
+}
+
+pub fn builtin_skins_for(champion_id: i64, champion_name: &str, selected_skin_id: i64) -> Vec<RemoteSkinOption> {
+    builtin_skins_for_localized(champion_id, champion_name, selected_skin_id, Lang::En)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn localizes_spells_runes_and_skins_for_en_and_fr() {
+        assert_eq!(spell_name_from_id_localized(4, Lang::En), "Flash");
+        assert_eq!(spell_name_from_id_localized(4, Lang::Fr), "Saut éclair");
+        assert_eq!(spell_name_from_id_localized(14, Lang::Fr), "Embrasement");
+
+        assert_eq!(rune_style_name_localized(8000, Lang::En), "Precision");
+        assert_eq!(rune_style_name_localized(8000, Lang::Fr), "Précision");
+        assert_eq!(keystone_name_from_id_localized(8112, Lang::En), "Electrocute");
+        assert_eq!(keystone_name_from_id_localized(8112, Lang::Fr), "Électrocution");
+
+        let en_skins = builtin_skins_for_localized(103, "Ahri", 103000, Lang::En);
+        let fr_skins = builtin_skins_for_localized(103, "Ahri", 103000, Lang::Fr);
+        assert_eq!(en_skins[0].name, "Classic Ahri");
+        assert_eq!(fr_skins[0].name, "Ahri classique");
+
+        let en_fallback = builtin_skins_for_localized(99, "Lux", 99000, Lang::En);
+        let fr_fallback = builtin_skins_for_localized(99, "Lux", 99000, Lang::Fr);
+        assert_eq!(en_fallback[0].name, "Classic Lux");
+        assert_eq!(fr_fallback[0].name, "Lux classique");
+    }
 }

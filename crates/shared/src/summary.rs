@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use crate::board::LiveBoard;
 use crate::event::GamePhase;
+use crate::i18n::Lang;
 use crate::source::SourceState;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -180,20 +181,33 @@ pub struct SummarySnapshot {
 }
 
 pub fn queue_name_from_id(queue_id: i64) -> String {
-    match queue_id {
-        400 => "Normal Draft 5v5".to_string(),
-        420 => "Ranked Solo/Duo".to_string(),
-        430 => "Normal Blind 5v5".to_string(),
-        440 => "Ranked Flex 5v5".to_string(),
-        450 => "ARAM".to_string(),
-        700 => "Clash".to_string(),
-        _ => format!("Queue #{queue_id}"),
+    queue_name_from_id_localized(queue_id, Lang::En)
+}
+
+pub fn queue_name_from_id_localized(queue_id: i64, lang: Lang) -> String {
+    match (queue_id, lang) {
+        (400, Lang::Fr) => "Normale Draft 5v5".to_string(),
+        (420, Lang::Fr) => "Classée Solo/Duo".to_string(),
+        (430, Lang::Fr) => "Normale Aveugle 5v5".to_string(),
+        (440, Lang::Fr) => "Classée Flexible 5v5".to_string(),
+        (400, Lang::En) => "Normal Draft 5v5".to_string(),
+        (420, Lang::En) => "Ranked Solo/Duo".to_string(),
+        (430, Lang::En) => "Normal Blind 5v5".to_string(),
+        (440, Lang::En) => "Ranked Flex 5v5".to_string(),
+        (450, _) => "ARAM".to_string(),
+        (700, _) => "Clash".to_string(),
+        (_, Lang::Fr) => format!("File #{queue_id}"),
+        (_, Lang::En) => format!("Queue #{queue_id}"),
     }
 }
 
 pub fn champion_name_from_id(champ_id: i64) -> String {
+    champion_name_from_id_localized(champ_id, Lang::En)
+}
+
+pub fn champion_name_from_id_localized(champ_id: i64, lang: Lang) -> String {
     if champ_id <= 0 {
-        return "Selecting...".to_string();
+        return lang.pick("Selecting...", "Sélection...").to_string();
     }
     if let Some(found) = crate::remote::builtin_champion_catalog()
         .into_iter()
@@ -256,7 +270,10 @@ pub fn extract_raw_champion_alias(raw: &str) -> String {
 /// Resolves a built-in Riot champion ID from its display name or internal key (0 if unknown).
 pub fn champion_id_from_name(name: &str) -> i64 {
     let key = normalize_champion_key(name);
-    if key.is_empty() || key == "selecting" || key == "none" || key == "unknown" {
+    if matches!(
+        key.as_str(),
+        "" | "selecting" | "selection" | "none" | "aucun" | "unknown" | "inconnu"
+    ) {
         return 0;
     }
     if let Some(found) = crate::remote::builtin_champion_catalog()
@@ -356,10 +373,11 @@ pub fn champion_id_from_name(name: &str) -> i64 {
     }
 }
 
-pub fn extract_summoner_summary(
+pub fn extract_summoner_summary_localized(
     summoner_val: Option<&Value>,
     ranked_val: Option<&Value>,
     presences_val: Option<&Value>,
+    lang: Lang,
 ) -> Option<SummonerSummary> {
     let sum = summoner_val?;
     let display_name = sum
@@ -371,7 +389,7 @@ pub fn extract_summoner_summary(
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
         })
-        .unwrap_or("Unknown")
+        .unwrap_or(lang.pick("Unknown", "Inconnu"))
         .to_string();
     let tag_line = sum
         .get("tagLine")
@@ -467,7 +485,15 @@ pub fn extract_summoner_summary(
     })
 }
 
-pub fn extract_lobby_summary(lobby_val: Option<&Value>) -> Option<LobbySummary> {
+pub fn extract_summoner_summary(
+    summoner_val: Option<&Value>,
+    ranked_val: Option<&Value>,
+    presences_val: Option<&Value>,
+) -> Option<SummonerSummary> {
+    extract_summoner_summary_localized(summoner_val, ranked_val, presences_val, Lang::En)
+}
+
+pub fn extract_lobby_summary_localized(lobby_val: Option<&Value>, lang: Lang) -> Option<LobbySummary> {
     let lob = lobby_val?;
     let party_id = lob
         .get("partyId")
@@ -479,7 +505,7 @@ pub fn extract_lobby_summary(lobby_val: Option<&Value>) -> Option<LobbySummary> 
         .or_else(|| lob.get("gameConfig").and_then(|gc| gc.get("queueId")))
         .and_then(|v| v.as_i64())
         .unwrap_or(420);
-    let queue_name = queue_name_from_id(queue_id);
+    let queue_name = queue_name_from_id_localized(queue_id, lang);
 
     let mut members = Vec::new();
     if let Some(arr) = lob.get("members").and_then(|v| v.as_array()) {
@@ -488,7 +514,7 @@ pub fn extract_lobby_summary(lobby_val: Option<&Value>) -> Option<LobbySummary> 
                 .get("summonerName")
                 .or_else(|| m.get("gameName"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("Member")
+                .unwrap_or(lang.pick("Member", "Membre"))
                 .to_string();
             let puuid = m
                 .get("puuid")
@@ -526,6 +552,10 @@ pub fn extract_lobby_summary(lobby_val: Option<&Value>) -> Option<LobbySummary> 
         queue_name,
         members,
     })
+}
+
+pub fn extract_lobby_summary(lobby_val: Option<&Value>) -> Option<LobbySummary> {
+    extract_lobby_summary_localized(lobby_val, Lang::En)
 }
 
 pub fn extract_matchmaking_summary(
@@ -566,9 +596,10 @@ pub fn extract_matchmaking_summary(
     })
 }
 
-pub fn extract_champ_select_summary(
+pub fn extract_champ_select_summary_localized(
     cs_val: Option<&Value>,
     lobby: Option<&LobbySummary>,
+    lang: Lang,
 ) -> Option<ChampSelectSummary> {
     let cs = cs_val?;
     let timer = cs.get("timer");
@@ -631,7 +662,7 @@ pub fn extract_champ_select_summary(
                 .get("championName")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| champion_name_from_id(raw_champ_id));
+                .unwrap_or_else(|| champion_name_from_id_localized(raw_champ_id, lang));
             let champ_id = if raw_champ_id > 0 {
                 raw_champ_id
             } else {
@@ -668,14 +699,18 @@ pub fn extract_champ_select_summary(
             }
 
             let summoner_name = if is_anonymized {
-                format!("Ally {}", idx + 1)
+                format!("{} {}", lang.pick("Ally", "Allié"), idx + 1)
             } else {
                 member
                     .get("summonerName")
                     .or_else(|| member.get("gameName"))
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
-                    .unwrap_or(if is_self { "HypatiaObserver#EUW" } else { "Teammate" })
+                    .unwrap_or(if is_self {
+                        "HypatiaObserver#EUW"
+                    } else {
+                        lang.pick("Teammate", "Coéquipier")
+                    })
                     .to_string()
             };
 
@@ -725,8 +760,9 @@ pub fn extract_champ_select_summary(
         });
     }
 
-    let (my_team_bans, my_team_ban_ids) = extract_ban_list(cs.get("bans"), "myTeamBans");
-    let (their_team_bans, their_team_ban_ids) = extract_ban_list(cs.get("bans"), "theirTeamBans");
+    let (my_team_bans, my_team_ban_ids) = extract_ban_list_localized(cs.get("bans"), "myTeamBans", lang);
+    let (their_team_bans, their_team_ban_ids) =
+        extract_ban_list_localized(cs.get("bans"), "theirTeamBans", lang);
 
     let mut their_team = Vec::new();
     if let Some(arr) = cs.get("theirTeam").and_then(|v| v.as_array()) {
@@ -737,7 +773,13 @@ pub fn extract_champ_select_summary(
                 .get("championName")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| if champion_id == 0 { String::new() } else { champion_name_from_id(champion_id) });
+                .unwrap_or_else(|| {
+                    if champion_id == 0 {
+                        String::new()
+                    } else {
+                        champion_name_from_id_localized(champion_id, lang)
+                    }
+                });
             their_team.push(ChampSelectEnemy { cell_id, champion_id, champion_name });
         }
     }
@@ -772,7 +814,18 @@ pub fn extract_champ_select_summary(
     })
 }
 
-fn extract_ban_list(bans: Option<&Value>, key: &str) -> (Vec<String>, Vec<i64>) {
+pub fn extract_champ_select_summary(
+    cs_val: Option<&Value>,
+    lobby: Option<&LobbySummary>,
+) -> Option<ChampSelectSummary> {
+    extract_champ_select_summary_localized(cs_val, lobby, Lang::En)
+}
+
+fn extract_ban_list_localized(
+    bans: Option<&Value>,
+    key: &str,
+    lang: Lang,
+) -> (Vec<String>, Vec<i64>) {
     let mut names = Vec::new();
     let mut ids = Vec::new();
     let Some(arr) = bans.and_then(|b| b.get(key)).and_then(|v| v.as_array()) else {
@@ -780,7 +833,7 @@ fn extract_ban_list(bans: Option<&Value>, key: &str) -> (Vec<String>, Vec<i64>) 
     };
     for entry in arr {
         if let Some(id) = entry.as_i64() {
-            names.push(champion_name_from_id(id));
+            names.push(champion_name_from_id_localized(id, lang));
             ids.push(id);
         } else if let Some(s) = entry.as_str() {
             ids.push(champion_id_from_name(s));
@@ -790,10 +843,11 @@ fn extract_ban_list(bans: Option<&Value>, key: &str) -> (Vec<String>, Vec<i64>) 
     (names, ids)
 }
 
-pub fn extract_live_game_summary(
+pub fn extract_live_game_summary_localized(
     allgame_val: Option<&Value>,
     active_val: Option<&Value>,
     events_val: Option<&Value>,
+    lang: Lang,
 ) -> Option<LiveGameSummary> {
     if allgame_val.is_none() && active_val.is_none() {
         return None;
@@ -810,7 +864,7 @@ pub fn extract_live_game_summary(
     let map_name = game_data
         .and_then(|gd| gd.get("mapName"))
         .and_then(|v| v.as_str())
-        .unwrap_or("Summoner's Rift")
+        .unwrap_or(lang.pick("Summoner's Rift", "Faille de l'invocateur"))
         .to_string();
     let game_time_sec = game_data
         .and_then(|gd| gd.get("gameTime"))
@@ -842,7 +896,7 @@ pub fn extract_live_game_summary(
                 .get("riotId")
                 .or_else(|| p.get("summonerName"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("Player");
+                .unwrap_or(lang.pick("Player", "Joueur"));
             let p_game_name = p
                 .get("riotIdGameName")
                 .and_then(|v| v.as_str())
@@ -860,7 +914,7 @@ pub fn extract_live_game_summary(
             let champ = p
                 .get("championName")
                 .and_then(|v| v.as_str())
-                .unwrap_or("Unknown")
+                .unwrap_or(lang.pick("Unknown", "Inconnu"))
                 .to_string();
             let champion_alias = p
                 .get("rawChampionName")
@@ -1055,6 +1109,14 @@ pub fn extract_live_game_summary(
     })
 }
 
+pub fn extract_live_game_summary(
+    allgame_val: Option<&Value>,
+    active_val: Option<&Value>,
+    events_val: Option<&Value>,
+) -> Option<LiveGameSummary> {
+    extract_live_game_summary_localized(allgame_val, active_val, events_val, Lang::En)
+}
+
 pub fn extract_eog_summary(eog_val: Option<&Value>) -> Option<EndOfGameSummary> {
     let eog = eog_val?;
     let result = eog
@@ -1129,6 +1191,7 @@ mod tests {
         assert_eq!(champion_id_from_name("K'Santé"), 897);
         assert_eq!(champion_id_from_name("Nunu et Willump"), 20);
         assert_eq!(extract_raw_champion_alias("game_character_displayname_MasterYi"), "MasterYi");
+        assert_eq!(champion_id_from_name("Sélection..."), 0);
         assert_eq!(champion_id_from_name("Selecting..."), 0);
     }
 
@@ -1185,5 +1248,17 @@ mod tests {
         assert_eq!(live.players[0].champion_id, 145);
         assert_eq!(live.players[1].champion_id, 11);
         assert_eq!(live.players[1].champion_alias, "MasterYi");
+
+        let en_lobby = extract_lobby_summary_localized(Some(&json!({"queueId": 420, "members": [{}]})), Lang::En).unwrap();
+        let fr_lobby = extract_lobby_summary_localized(Some(&json!({"queueId": 420, "members": [{}]})), Lang::Fr).unwrap();
+        assert_eq!(en_lobby.queue_name, "Ranked Solo/Duo");
+        assert_eq!(fr_lobby.queue_name, "Classée Solo/Duo");
+        assert_eq!(en_lobby.members[0].summoner_name, "Member");
+        assert_eq!(fr_lobby.members[0].summoner_name, "Membre");
+
+        let en_cs = extract_champ_select_summary_localized(Some(&json!({"localPlayerCellId": 0, "myTeam": [{"cellId": 0, "championId": 0}]})), None, Lang::En).unwrap();
+        let fr_cs = extract_champ_select_summary_localized(Some(&json!({"localPlayerCellId": 0, "myTeam": [{"cellId": 0, "championId": 0}]})), None, Lang::Fr).unwrap();
+        assert_eq!(en_cs.my_team[0].champion_name, "Selecting...");
+        assert_eq!(fr_cs.my_team[0].champion_name, "Sélection...");
     }
 }

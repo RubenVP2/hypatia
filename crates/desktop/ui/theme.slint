@@ -2,6 +2,7 @@
 
 export global Theme {
     in-out property <bool> dark: true;
+    in-out property <bool> fr: false;
 
     out property <color> shell: dark ? #0b0d11 : #e5e1d6;
     out property <color> ground: dark ? #0f1116 : #efece3;
@@ -64,7 +65,7 @@ export global Theme {
         if (lane == 2) { return "Mid"; }
         if (lane == 3) { return "Bot"; }
         if (lane == 4) { return "Support"; }
-        return "Any role";
+        return self.fr ? "Tous postes" : "Fill";
     }
 
     public pure function lane-icon-path(lane: int) -> string {

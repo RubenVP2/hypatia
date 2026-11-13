@@ -1,6 +1,7 @@
 pub mod board;
 pub mod catalog;
 pub mod event;
+pub mod i18n;
 pub mod protocol;
 pub mod remote;
 pub mod secret;
@@ -11,6 +12,7 @@ pub mod system;
 pub use board::*;
 pub use catalog::*;
 pub use event::*;
+pub use i18n::*;
 pub use protocol::*;
 pub use remote::*;
 pub use secret::*;

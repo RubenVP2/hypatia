@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::i18n::Lang;
 use crate::summary::LiveGameSummary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,11 +158,14 @@ pub fn parse_turret_id(id: &str) -> Option<(bool, Lane, u8)> {
     (1..=3).contains(&tier).then_some((order_side, lane, tier))
 }
 
-fn tier_name(tier: u8) -> &'static str {
-    match tier {
-        1 => "outer",
-        2 => "inner",
-        _ => "inhibitor",
+fn tier_name(tier: u8, lang: Lang) -> &'static str {
+    match (tier, lang) {
+        (1, Lang::Fr) => "extérieure",
+        (2, Lang::Fr) => "intérieure",
+        (_, Lang::Fr) => "inhibitrice",
+        (1, Lang::En) => "outer",
+        (2, Lang::En) => "inner",
+        (_, Lang::En) => "inhibitor",
     }
 }
 
@@ -174,25 +178,50 @@ fn lane_name(lane: Lane) -> &'static str {
     }
 }
 
-fn drake_label(dragon_type: &str) -> String {
-    match dragon_type {
-        "Fire" => "Infernal Drake",
-        "Water" => "Ocean Drake",
-        "Earth" => "Mountain Drake",
-        "Air" => "Cloud Drake",
-        "Hextech" => "Hextech Drake",
-        "Chemtech" => "Chemtech Drake",
-        "Elder" => "Elder Dragon",
-        _ => "Drake",
+fn drake_label(dragon_type: &str, lang: Lang) -> String {
+    match (dragon_type, lang) {
+        ("Fire", Lang::Fr) => "Dragon infernal",
+        ("Water", Lang::Fr) => "Dragon des océans",
+        ("Earth", Lang::Fr) => "Dragon des montagnes",
+        ("Air", Lang::Fr) => "Dragon des nuages",
+        ("Hextech", Lang::Fr) => "Dragon Hextech",
+        ("Chemtech", Lang::Fr) => "Dragon Techno-chimique",
+        ("Elder", Lang::Fr) => "Dragon ancestral",
+        (_, Lang::Fr) => "Dragon",
+        ("Fire", Lang::En) => "Infernal Drake",
+        ("Water", Lang::En) => "Ocean Drake",
+        ("Earth", Lang::En) => "Mountain Drake",
+        ("Air", Lang::En) => "Cloud Drake",
+        ("Hextech", Lang::En) => "Hextech Drake",
+        ("Chemtech", Lang::En) => "Chemtech Drake",
+        ("Elder", Lang::En) => "Elder Dragon",
+        (_, Lang::En) => "Drake",
     }
     .to_string()
 }
 
-/// Builds the board from the raw Live Client payloads and the extracted summary.
+fn objective_article(kind: ObjectiveKind) -> &'static str {
+    match kind {
+        ObjectiveKind::Grubs => "les",
+        _ => "le",
+    }
+}
+
+/// Builds the board from the raw Live Client payloads and the extracted summary (defaults to English).
 pub fn extract_live_board(
     allgame_val: Option<&Value>,
     events_val: Option<&Value>,
     live: &LiveGameSummary,
+) -> LiveBoard {
+    extract_live_board_localized(allgame_val, events_val, live, Lang::En)
+}
+
+/// Builds the board from the raw Live Client payloads and the extracted summary in `lang`.
+pub fn extract_live_board_localized(
+    allgame_val: Option<&Value>,
+    events_val: Option<&Value>,
+    live: &LiveGameSummary,
+    lang: Lang,
 ) -> LiveBoard {
     let roster = Roster { live };
     let my_team_is_order = live
@@ -239,19 +268,33 @@ pub fn extract_live_board(
                     Some(false) => ev_chaos_kills += 1,
                     None => {}
                 }
-                let who = match &killer_info {
-                    Some((_, _, true, _)) => "You".to_string(),
-                    Some((.., champ)) => champ.clone(),
-                    None => killer.to_string(),
-                };
+                let killer_is_self = matches!(&killer_info, Some((_, _, true, _)));
                 let whom = match &victim_info {
-                    Some((_, _, true, _)) => "you".to_string(),
+                    Some((_, _, true, _)) => lang.pick("you", "vous").to_string(),
                     Some((.., champ)) => champ.clone(),
                     None => victim.to_string(),
                 };
+                let text = if lang.is_fr() {
+                    if killer_is_self {
+                        format!("Vous avez éliminé {whom}")
+                    } else {
+                        let who = match &killer_info {
+                            Some((.., champ)) => champ.clone(),
+                            None => killer.to_string(),
+                        };
+                        format!("{who} a éliminé {whom}")
+                    }
+                } else {
+                    let who = match &killer_info {
+                        Some((_, _, true, _)) => "You".to_string(),
+                        Some((.., champ)) => champ.clone(),
+                        None => killer.to_string(),
+                    };
+                    format!("{who} killed {whom}")
+                };
                 feed.push(FeedItem {
                     time_sec,
-                    text: format!("{who} killed {whom}"),
+                    text,
                     lane: killer_info.as_ref().and_then(|k| k.1),
                     by_my_team: killer_order.map(mine),
                 });
@@ -265,10 +308,16 @@ pub fn extract_live_board(
                     {
                         t.standing = false;
                     }
-                    let text = if mine(order_side) {
-                        format!("Your {} {} tower fell", lane_name(lane), tier_name(tier))
+                    let text = if lang.is_fr() {
+                        if mine(order_side) {
+                            format!("Votre tourelle {} {} est tombée", tier_name(tier, lang), lane_name(lane))
+                        } else {
+                            format!("Votre équipe a détruit la tourelle {} {}", tier_name(tier, lang), lane_name(lane))
+                        }
+                    } else if mine(order_side) {
+                        format!("Your {} {} tower fell", lane_name(lane), tier_name(tier, lang))
                     } else {
-                        format!("Your team destroyed their {} {} tower", lane_name(lane), tier_name(tier))
+                        format!("Your team destroyed their {} {} tower", lane_name(lane), tier_name(tier, lang))
                     };
                     feed.push(FeedItem {
                         time_sec,
@@ -283,19 +332,33 @@ pub fn extract_live_board(
                     "DragonKill" => {
                         let dt = ev.get("DragonType").and_then(|v| v.as_str()).unwrap_or("");
                         let kind = if dt == "Elder" { ObjectiveKind::Elder } else { ObjectiveKind::Drake };
-                        (kind, drake_label(dt))
+                        (kind, drake_label(dt, lang))
                     }
-                    "HeraldKill" => (ObjectiveKind::Herald, "Rift Herald".to_string()),
+                    "HeraldKill" => (
+                        ObjectiveKind::Herald,
+                        lang.pick("Rift Herald", "Héraut de la Faille").to_string(),
+                    ),
                     "BaronKill" => (ObjectiveKind::Baron, "Baron Nashor".to_string()),
-                    _ => (ObjectiveKind::Grubs, "Void Grubs".to_string()),
+                    _ => (
+                        ObjectiveKind::Grubs,
+                        lang.pick("Void Grubs", "Larves du Néant").to_string(),
+                    ),
                 };
                 if let Some(by_order) = killer_order {
                     let stolen = ev.get("Stolen").and_then(|v| v.as_str()) == Some("True");
-                    let who = if mine(by_order) { "Your team" } else { "Enemy" };
-                    let verb = if stolen { "stole" } else { "took" };
+                    let text = if lang.is_fr() {
+                        let who = if mine(by_order) { "Votre équipe" } else { "L'ennemi" };
+                        let verb = if stolen { "a volé" } else { "a pris" };
+                        let article = objective_article(kind);
+                        format!("{who} {verb} {article} {label}")
+                    } else {
+                        let who = if mine(by_order) { "Your team" } else { "Enemy" };
+                        let verb = if stolen { "stole" } else { "took" };
+                        format!("{who} {verb} {label}")
+                    };
                     feed.push(FeedItem {
                         time_sec,
-                        text: format!("{who} {verb} {label}"),
+                        text,
                         lane: Some(Lane::Jungle),
                         by_my_team: Some(mine(by_order)),
                     });
@@ -305,10 +368,19 @@ pub fn extract_live_board(
             "FirstBlood" => {
                 let recipient = ev.get("Recipient").and_then(|v| v.as_str()).unwrap_or("");
                 if let Some((order, lane, is_self, champ)) = roster.lookup(recipient) {
-                    let who = if is_self { "You".to_string() } else { champ };
+                    let who = if is_self {
+                        lang.pick("You", "Vous").to_string()
+                    } else {
+                        champ
+                    };
+                    let text = if lang.is_fr() {
+                        format!("Premier sang : {who}")
+                    } else {
+                        format!("First blood: {who}")
+                    };
                     feed.push(FeedItem {
                         time_sec,
-                        text: format!("First blood: {who}"),
+                        text,
                         lane,
                         by_my_team: Some(mine(order)),
                     });
@@ -317,7 +389,13 @@ pub fn extract_live_board(
             "Ace" => {
                 let acing = ev.get("AcingTeam").and_then(|v| v.as_str()).unwrap_or("");
                 let order = acing == "ORDER";
-                let text = if mine(order) { "Ace! Your team wiped the enemy" } else { "Ace: your team was wiped" };
+                let text = if lang.is_fr() {
+                    if mine(order) { "Ace ! Votre équipe a éliminé l'ennemi" } else { "Ace : votre équipe a été éliminée" }
+                } else if mine(order) {
+                    "Ace! Your team wiped the enemy"
+                } else {
+                    "Ace: your team was wiped"
+                };
                 feed.push(FeedItem { time_sec, text: text.to_string(), lane: None, by_my_team: Some(mine(order)) });
             }
             _ => {}
@@ -414,5 +492,10 @@ mod tests {
         assert_eq!(board.feed[0].text, "Your team took Infernal Drake");
         assert_eq!(board.feed[1].text, "Your bot outer tower fell");
         assert_eq!(board.feed[2].text, "You killed Zed");
+
+        let board_fr = extract_live_board_localized(None, Some(&events), &l, Lang::Fr);
+        assert_eq!(board_fr.feed[0].text, "Votre équipe a pris le Dragon infernal");
+        assert_eq!(board_fr.feed[1].text, "Votre tourelle extérieure bot est tombée");
+        assert_eq!(board_fr.feed[2].text, "Vous avez éliminé Zed");
     }
 }

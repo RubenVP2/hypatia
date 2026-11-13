@@ -523,8 +523,12 @@ export component PhaseLine inherits Rectangle {
     in property <int> current: -1;
     height: 36px;
     accessible-role: text;
-    accessible-label: "Current phase: " + (current == 0 ? "Lobby" : current == 1 ? "Queue" : current == 2 ? "Champion select" : current == 3 ? "In game" : current == 4 ? "Results" : "Not in a match");
-    property <[string]> stops: ["LOBBY", "QUEUE", "CHAMP SELECT", "IN GAME", "RESULTS"];
+    accessible-label: Theme.fr
+        ? ("Phase actuelle : " + (current == 0 ? "Salon" : current == 1 ? "File d'attente" : current == 2 ? "Sélection des champions" : current == 3 ? "En jeu" : current == 4 ? "Résultats" : "Aucune partie en cours"))
+        : ("Current phase: " + (current == 0 ? "Lobby" : current == 1 ? "Queue" : current == 2 ? "Champ Select" : current == 3 ? "Live Game" : current == 4 ? "Results" : "Waiting"));
+    property <[string]> stops: Theme.fr
+        ? ["SALON", "FILE", "CHAMPIONS", "EN JEU", "RÉSULTATS"]
+        : ["LOBBY", "QUEUE", "CHAMPIONS", "LIVE", "RESULTS"];
 
     HorizontalLayout {
         alignment: start;
@@ -581,7 +585,7 @@ export component LineMap inherits Rectangle {
     in property <color> halo: Theme.panel;
     background: transparent;
     accessible-role: image;
-    accessible-label: "Map of the three lanes";
+    accessible-label: Theme.fr ? "Carte des trois voies" : "Three-lane map";
 
     Path {
         width: 100%; height: 100%;
@@ -692,7 +696,7 @@ export component FeedRow inherits HorizontalLayout {
 // Objectives ramp: weighted icon chips combining emblem + objective label.
 export component ObjectiveRow inherits HorizontalLayout {
     in property <[ObjectiveChip]> chips;
-    in property <string> empty-text: "No objectives claimed";
+    in property <string> empty-text: Theme.fr ? "Aucun objectif pris" : "No objectives yet";
     in property <bool> compact: false;
     spacing: root.compact ? 6px : 8px;
     alignment: start;
@@ -844,14 +848,16 @@ export component PlayerRow inherits Rectangle {
             alignment: center;
             spacing: 1px;
             Text {
-                text: root.p.champion + (root.p.is-self ? " (you)" : "");
+                text: root.p.champion + (root.p.is-self ? (Theme.fr ? " (vous)" : " (you)") : "");
                 color: Theme.text;
                 font-size: Type.body;
                 font-weight: 800;
                 overflow: elide;
             }
             Text {
-                text: root.p.dead ? "Respawn in " + root.p.respawn : "Lvl " + root.p.level + " · " + root.p.cs + " CS";
+                text: root.p.dead
+                    ? (Theme.fr ? "Réapp. dans " : "Respawn ") + root.p.respawn
+                    : (Theme.fr ? "Niv. " : "Lvl ") + root.p.level + " · " + root.p.cs + " CS";
                 color: root.p.dead ? Theme.danger : Theme.muted;
                 font-size: Type.small;
                 font-weight: root.p.dead ? 600 : 400;

@@ -317,11 +317,12 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         active_clients: active_clients.clone(),
     };
 
-    // Background task that broadcasts state updates whenever WAMP/store changes or every 1s
+    // Background task that broadcasts state updates whenever WAMP/store/language changes or every 1s
     let bg_state = router_state.clone();
     let mut shutdown_bg = shutdown_rx.clone();
     tokio::spawn(async move {
         let mut wamp_rx = bg_state.app.ws_broadcast_tx.subscribe();
+        let mut lang_rx = bg_state.app.subscribe_lang();
         let mut ticker = tokio::time::interval(Duration::from_millis(1000));
         loop {
             tokio::select! {
@@ -334,6 +335,11 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
                 }
                 Ok(_) = wamp_rx.recv() => {
                     broadcast_latest(&bg_state);
+                }
+                res = lang_rx.changed() => {
+                    if res.is_ok() {
+                        broadcast_latest(&bg_state);
+                    }
                 }
             }
         }
@@ -445,6 +451,21 @@ fn broadcast_latest(st: &RemoteRouterState) {
     let _ = st.state_tx.send(payload);
 }
 
+fn request_lang(headers: &HeaderMap, app: &AppState) -> hypatia_shared::Lang {
+    if let Some(raw) = headers
+        .get(header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+    {
+        for item in raw.split(',') {
+            let tag = item.split(';').next().unwrap_or("").trim();
+            if let Some(lang) = hypatia_shared::Lang::from_code(tag) {
+                return lang;
+            }
+        }
+    }
+    app.lang()
+}
+
 async fn handle_index(
     State(st): State<RemoteRouterState>,
     headers: HeaderMap,
@@ -455,16 +476,23 @@ async fn handle_index(
     }
     let expected = st.token.read().unwrap().clone();
     if !check_token(&headers, q.token.as_deref(), &expected) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Html(
-                "<!doctype html><html><body style='background:#14161b;color:#eceef2;font-family:sans-serif;padding:32px;text-align:center'>\
-                <h2>Pairing Token Required or Expired</h2>\
-                <p>Scan the current QR code shown in Hypatia on your PC to connect.</p>\
-                </body></html>",
+        let lang = request_lang(&headers, &st.app);
+        let html = format!(
+            "<!doctype html><html lang='{}'><body style='background:#14161b;color:#eceef2;font-family:sans-serif;padding:32px;text-align:center'>\
+            <h2>{}</h2>\
+            <p>{}</p>\
+            </body></html>",
+            lang.as_code(),
+            lang.pick(
+                "Pairing token required or expired",
+                "Jeton d'appairage requis ou expiré",
             ),
-        )
-            .into_response();
+            lang.pick(
+                "Scan the current QR code shown in Hypatia on your PC to connect.",
+                "Scannez le QR code actuel affiché dans Hypatia sur votre PC pour vous connecter.",
+            )
+        );
+        return (StatusCode::UNAUTHORIZED, Html(html)).into_response();
     }
 
     let cookie = format!(
@@ -585,7 +613,10 @@ async fn handle_get_state(
     if !check_token(&headers, q.token.as_deref(), &expected) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(json!({"error": "Unauthorized — scan QR code again"})),
+            Json(json!({"error": st.app.lang().pick(
+                "Unauthorized — scan QR code again",
+                "Non autorisé — scannez à nouveau le QR code",
+            )})),
         )
             .into_response();
     }
@@ -605,11 +636,15 @@ async fn handle_post_action(
     if !check_host_and_origin(&headers, &st.allowed_hosts, st.port) {
         return (StatusCode::FORBIDDEN, Json(json!({"error": "Forbidden"}))).into_response();
     }
+    let lang = st.app.lang();
     let expected = st.token.read().unwrap().clone();
     if !check_token(&headers, q.token.as_deref(), &expected) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(json!({"error": "Session expired — scan QR code again"})),
+            Json(json!({"error": lang.pick(
+                "Session expired — scan QR code again",
+                "Session expirée — scannez à nouveau le QR code",
+            )})),
         )
             .into_response();
     }
@@ -630,14 +665,20 @@ async fn handle_post_action(
         let Some(lcu) = st.app.discovery.lcu_args() else {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": "League of Legends client is not running" })),
+                Json(json!({ "error": lang.pick(
+                    "League of Legends client is not running",
+                    "Le client League of Legends n'est pas lancé",
+                )})),
             )
                 .into_response();
         };
         let Some(port) = lcu.app_port else {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": "League Client port not discovered yet" })),
+                Json(json!({ "error": lang.pick(
+                    "League client port not detected yet",
+                    "Port du client League pas encore détecté",
+                )})),
             )
                 .into_response();
         };
@@ -663,7 +704,7 @@ async fn handle_post_action(
 
         if let Err(e) = st
             .action_client
-            .execute(port, token_ref, &cmd, editable_page_id)
+            .execute_localized(port, token_ref, &cmd, editable_page_id, lang)
             .await
         {
             return (
@@ -779,7 +820,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_remote_server_auth_and_demo_actions() {
-        let app = AppState::start(true, 2.0);
+        let app = AppState::start_with_lang(true, 2.0, hypatia_shared::Lang::En);
+        let app_ref = app.clone();
         let handle = start_remote_server(app, 0).await.unwrap();
         let qr = handle.qr_visual().unwrap();
         let client = reqwest::Client::new();
@@ -792,7 +834,7 @@ mod tests {
             .unwrap();
         assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED);
 
-        // 2. Authorized request with token returns state
+        // 2. Authorized request with token returns state and reflects live language switches
         let state_resp = client
             .get(format!("http://127.0.0.1:{}/api/state", handle.port))
             .header("X-Hypatia-Token", &qr.token)
@@ -800,6 +842,20 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(state_resp.status(), StatusCode::OK);
+        let state_en: serde_json::Value = state_resp.json().await.unwrap();
+        assert_eq!(state_en["lang"], "en");
+
+        app_ref.set_lang(hypatia_shared::Lang::Fr);
+        let state_fr: serde_json::Value = client
+            .get(format!("http://127.0.0.1:{}/api/state", handle.port))
+            .header("X-Hypatia-Token", &qr.token)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(state_fr["lang"], "fr");
 
         // 3. Jump to ChampSelect and hover + lock a champion and request a role swap
         let set_phase = client

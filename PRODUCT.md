@@ -48,7 +48,7 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 - **Respect Riot anonymization**: in Ranked Solo/Duo champion select, ally identities are hidden by Riot; Hypatia must never try to reveal them.
 - Secrets (lockfile passwords, tokens, JWTs, PUUIDs) masked by default; only relevant in Advanced mode.
 - **Advanced mode** (off by default, enabled in settings): live WAMP event stream, `GET` endpoint catalog and runner, JSON inspector and diff, Riot processes and ports.
-- Interface language: English only.
+- Interface language: English & French (live `EN | FR` switcher in Desktop & Mobile Remote, persisted locally with OS auto-detection and `--lang <en|fr>` CLI override).
 
 ## Evidence on Hand
 

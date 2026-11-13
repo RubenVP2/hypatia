@@ -10,10 +10,12 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use base64::prelude::*;
 use hypatia_shared::{
-    builtin_champion_catalog, builtin_skins_for, champion_name_from_id, default_rune_trees,
-    default_summoner_spells, extract_champ_select_summary, extract_live_board,
-    extract_live_game_summary, keystone_name_from_id, queue_name_from_id, recommended_pages_for,
-    rune_style_name, spell_name_from_id, EventKind, RemoteActiveAction, RemoteChampSelectState,
+    builtin_champion_catalog, builtin_skins_for_localized, champion_name_from_id_localized,
+    default_rune_trees_localized, default_summoner_spells_localized,
+    extract_champ_select_summary_localized, extract_live_board_localized,
+    extract_live_game_summary_localized, keystone_name_from_id_localized,
+    queue_name_from_id_localized, recommended_pages_for_localized, rune_style_name_localized,
+    spell_name_from_id_localized, EventKind, Lang, RemoteActiveAction, RemoteChampSelectState,
     RemoteCommand, RemoteIncomingSwap, RemoteLiveFeedItem, RemoteLiveObjective,
     RemoteLivePlayer, RemoteLiveState, RemoteLobbyState, RemoteMatchmakingState,
     RemoteRunePage, RemoteSkinOption, RemoteStateSnapshot, RemoteTeamMember, SourceId,
@@ -25,6 +27,17 @@ use crate::AppState;
 
 const VALID_POSITIONS: &[&str] = &["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", "FILL"];
 const VALID_STYLES: &[i64] = &[8000, 8100, 8200, 8300, 8400];
+
+fn position_display(pos: &str, lang: Lang) -> &'static str {
+    match pos.trim().to_ascii_uppercase().as_str() {
+        "TOP" => "Top",
+        "JUNGLE" => "Jungle",
+        "MIDDLE" | "MID" => "Mid",
+        "BOTTOM" | "BOT" => "Bot",
+        "UTILITY" | "SUPPORT" => "Support",
+        _ => lang.pick("Fill", "Polyvalent"),
+    }
+}
 
 /// Describes a resolved LCU HTTP mutation produced from a `RemoteCommand`.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,18 +52,41 @@ pub fn resolve_lcu_command(
     cmd: &RemoteCommand,
     editable_page_id: Option<i64>,
 ) -> Result<Vec<ResolvedLcuCall>> {
+    resolve_lcu_command_localized(cmd, editable_page_id, Lang::En)
+}
+
+/// Validates a `RemoteCommand` with localized validation errors.
+pub fn resolve_lcu_command_localized(
+    cmd: &RemoteCommand,
+    editable_page_id: Option<i64>,
+    lang: Lang,
+) -> Result<Vec<ResolvedLcuCall>> {
     match cmd {
         RemoteCommand::SetLobbyPositions { first, second } => {
             let f = first.trim().to_ascii_uppercase();
             let s = second.trim().to_ascii_uppercase();
             if !VALID_POSITIONS.contains(&f.as_str()) {
-                bail!("Invalid first position '{}'", first);
+                bail!(
+                    "{}: '{}'",
+                    lang.pick("Invalid primary position", "Position principale invalide"),
+                    first
+                );
             }
             if !VALID_POSITIONS.contains(&s.as_str()) {
-                bail!("Invalid second position '{}'", second);
+                bail!(
+                    "{}: '{}'",
+                    lang.pick("Invalid secondary position", "Position secondaire invalide"),
+                    second
+                );
             }
             if f != "FILL" && f == s {
-                bail!("Primary and secondary roles must be different");
+                bail!(
+                    "{}",
+                    lang.pick(
+                        "Primary and secondary positions must be different",
+                        "Les postes principal et secondaire doivent être différents",
+                    )
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::PUT,
@@ -86,10 +122,14 @@ pub fn resolve_lcu_command(
             champion_id,
         } => {
             if *action_id < 0 {
-                bail!("Invalid action_id {}", action_id);
+                bail!("{}: {}", lang.pick("Invalid action_id", "action_id invalide"), action_id);
             }
             if *champion_id <= 0 {
-                bail!("Invalid champion_id {}", champion_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid champion_id", "champion_id invalide"),
+                    champion_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::PATCH,
@@ -99,7 +139,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::LockAction { action_id } => {
             if *action_id < 0 {
-                bail!("Invalid action_id {}", action_id);
+                bail!("{}: {}", lang.pick("Invalid action_id", "action_id invalide"), action_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -112,7 +152,13 @@ pub fn resolve_lcu_command(
             spell2_id,
         } => {
             if *spell1_id <= 0 || *spell2_id <= 0 || spell1_id == spell2_id {
-                bail!("Two distinct summoner spells are required");
+                bail!(
+                    "{}",
+                    lang.pick(
+                        "Two distinct summoner spells are required",
+                        "Deux sorts d'invocateur distincts sont requis",
+                    )
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::PATCH,
@@ -125,7 +171,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::SetSkin { skin_id } => {
             if *skin_id <= 0 {
-                bail!("Invalid skin_id {}", skin_id);
+                bail!("{}: {}", lang.pick("Invalid skin_id", "skin_id invalide"), skin_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::PATCH,
@@ -135,7 +181,11 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::SelectRunePage { page_id } => {
             if *page_id <= 0 {
-                bail!("Invalid rune page_id {}", page_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid rune page ID", "ID de page de runes invalide"),
+                    page_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::PUT,
@@ -150,13 +200,28 @@ pub fn resolve_lcu_command(
             selected_perk_ids,
         } => {
             if !VALID_STYLES.contains(primary_style_id) || !VALID_STYLES.contains(sub_style_id) {
-                bail!("Invalid rune style ID");
+                bail!(
+                    "{}",
+                    lang.pick("Invalid rune style ID", "ID de branche de runes invalide")
+                );
             }
             if primary_style_id == sub_style_id {
-                bail!("Primary and secondary rune trees must differ");
+                bail!(
+                    "{}",
+                    lang.pick(
+                        "Primary and secondary rune styles must differ",
+                        "Les branches principale et secondaire doivent être différentes",
+                    )
+                );
             }
             if selected_perk_ids.len() < 6 || selected_perk_ids.len() > 9 {
-                bail!("Rune page requires between 6 and 9 perks");
+                bail!(
+                    "{}",
+                    lang.pick(
+                        "Rune page requires 6 to 9 perk IDs",
+                        "La page de runes nécessite entre 6 et 9 runes",
+                    )
+                );
             }
             let clean_name = if name.trim().is_empty() {
                 "Hypatia Mobile".to_string()
@@ -193,7 +258,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::RequestPositionSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("Invalid swap_id {}", swap_id);
+                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -203,7 +268,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::RespondPositionSwap { swap_id, accept } => {
             if *swap_id < 0 {
-                bail!("Invalid swap_id {}", swap_id);
+                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
             }
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
@@ -214,7 +279,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::CancelPositionSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("Invalid swap_id {}", swap_id);
+                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -224,7 +289,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::RequestPickOrderSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("Invalid swap_id {}", swap_id);
+                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -234,7 +299,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::RespondPickOrderSwap { swap_id, accept } => {
             if *swap_id < 0 {
-                bail!("Invalid swap_id {}", swap_id);
+                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
             }
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
@@ -245,7 +310,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::CancelPickOrderSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("Invalid swap_id {}", swap_id);
+                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -255,7 +320,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::RequestChampionTrade { trade_id } => {
             if *trade_id < 0 {
-                bail!("Invalid trade_id {}", trade_id);
+                bail!("{}: {}", lang.pick("Invalid trade_id", "trade_id invalide"), trade_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -265,7 +330,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::RespondChampionTrade { trade_id, accept } => {
             if *trade_id < 0 {
-                bail!("Invalid trade_id {}", trade_id);
+                bail!("{}: {}", lang.pick("Invalid trade_id", "trade_id invalide"), trade_id);
             }
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
@@ -276,7 +341,7 @@ pub fn resolve_lcu_command(
         }
         RemoteCommand::CancelChampionTrade { trade_id } => {
             if *trade_id < 0 {
-                bail!("Invalid trade_id {}", trade_id);
+                bail!("{}: {}", lang.pick("Invalid trade_id", "trade_id invalide"), trade_id);
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -285,7 +350,13 @@ pub fn resolve_lcu_command(
             }])
         }
         RemoteCommand::DemoSetPhase { .. } | RemoteCommand::DemoSimulateIncomingSwap => {
-            bail!("Demo commands are only available in Demo Mode")
+            bail!(
+                "{}",
+                lang.pick(
+                    "Demo commands are only available in Demo mode",
+                    "Les commandes de démo ne sont disponibles qu'en mode Démo",
+                )
+            )
         }
     }
 }
@@ -319,7 +390,19 @@ impl LcuActionClient {
         cmd: &RemoteCommand,
         editable_page_id: Option<i64>,
     ) -> Result<Value> {
-        let calls = resolve_lcu_command(cmd, editable_page_id)?;
+        self.execute_localized(port, auth_token, cmd, editable_page_id, Lang::En)
+            .await
+    }
+
+    pub async fn execute_localized(
+        &self,
+        port: u16,
+        auth_token: Option<&str>,
+        cmd: &RemoteCommand,
+        editable_page_id: Option<i64>,
+        lang: Lang,
+    ) -> Result<Value> {
+        let calls = resolve_lcu_command_localized(cmd, editable_page_id, lang)?;
         let mut last_body = Value::Null;
 
         for call in calls {
@@ -336,10 +419,14 @@ impl LcuActionClient {
             if let Some(body) = &call.body {
                 req = req.json(body);
             }
-            let resp = req
-                .send()
-                .await
-                .with_context(|| format!("LCU request {} {} failed", call.method, call.path))?;
+            let resp = req.send().await.with_context(|| {
+                format!(
+                    "{} {} {}",
+                    lang.pick("LCU request failed for", "La requête LCU a échoué pour"),
+                    call.method,
+                    call.path
+                )
+            })?;
             let status = resp.status();
             let bytes = resp.bytes().await.unwrap_or_default();
             last_body = if bytes.is_empty() {
@@ -357,7 +444,10 @@ impl LcuActionClient {
                 let msg = last_body
                     .get("message")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("LCU rejected the action");
+                    .unwrap_or(lang.pick(
+                        "League client rejected the action",
+                        "Le client League a refusé l'action",
+                    ));
                 bail!("LCU {} {}: {}", status.as_u16(), call.path, msg);
             }
         }
@@ -372,21 +462,34 @@ impl LcuActionClient {
 pub struct AlertTracker {
     pub seq: u64,
     last_signature: String,
+    last_lang: Lang,
     pub last_kind: Option<String>,
     pub last_title: Option<String>,
     pub last_body: Option<String>,
 }
 
 impl AlertTracker {
-    pub fn observe(&mut self, signature: String, kind: &str, title: String, body: String) {
+    pub fn observe(
+        &mut self,
+        lang: Lang,
+        signature: String,
+        kind: &str,
+        title: String,
+        body: String,
+    ) {
         if signature != self.last_signature {
             self.last_signature = signature;
+            self.last_lang = lang;
             if !kind.is_empty() {
                 self.seq += 1;
                 self.last_kind = Some(kind.to_string());
                 self.last_title = Some(title);
                 self.last_body = Some(body);
             }
+        } else if lang != self.last_lang && !kind.is_empty() {
+            self.last_lang = lang;
+            self.last_title = Some(title);
+            self.last_body = Some(body);
         }
     }
 }
@@ -478,7 +581,7 @@ impl Default for DemoRemoteState {
                 },
                 RemoteRunePage {
                     id: 102,
-                    name: "Bruiser All-In (Conqueror)".to_string(),
+                    name: "All-In Fighter (Conqueror)".to_string(),
                     primary_style_id: 8000,
                     primary_style_name: "Precision".to_string(),
                     sub_style_id: 8400,
@@ -497,10 +600,11 @@ impl DemoRemoteState {
     /// Applies a `RemoteCommand` to the interactive demo state and pushes updated
     /// synthetic LCU events into `AppState`'s `EventStore`.
     pub fn apply_command(&mut self, app_state: &AppState, cmd: &RemoteCommand) -> Result<()> {
+        let lang = app_state.lang();
         self.manual_override = true;
         match cmd {
             RemoteCommand::SetLobbyPositions { first, second } => {
-                let _ = resolve_lcu_command(cmd, None)?;
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
                 self.first_position = first.trim().to_ascii_uppercase();
                 self.second_position = second.trim().to_ascii_uppercase();
                 self.ally_positions[2] = self.first_position.clone();
@@ -528,7 +632,10 @@ impl DemoRemoteState {
                 champion_id,
             } => {
                 if *champion_id <= 0 {
-                    bail!("Select a champion first");
+                    bail!(
+                        "{}",
+                        lang.pick("Select a champion first", "Sélectionnez d'abord un champion")
+                    );
                 }
                 if self.my_action_type == "ban" {
                     self.my_banned_id = *champion_id;
@@ -553,12 +660,12 @@ impl DemoRemoteState {
                 spell1_id,
                 spell2_id,
             } => {
-                let _ = resolve_lcu_command(cmd, None)?;
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
                 self.spell1_id = *spell1_id;
                 self.spell2_id = *spell2_id;
             }
             RemoteCommand::SetSkin { skin_id } => {
-                let _ = resolve_lcu_command(cmd, None)?;
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
                 self.selected_skin_id = *skin_id;
             }
             RemoteCommand::SelectRunePage { page_id } => {
@@ -572,12 +679,12 @@ impl DemoRemoteState {
                 sub_style_id,
                 selected_perk_ids,
             } => {
-                let _ = resolve_lcu_command(cmd, Some(101))?;
+                let _ = resolve_lcu_command_localized(cmd, Some(101), lang)?;
                 let keystone = selected_perk_ids
                     .first()
                     .copied()
-                    .map(keystone_name_from_id)
-                    .unwrap_or("Keystone")
+                    .map(|id| keystone_name_from_id_localized(id, lang))
+                    .unwrap_or(lang.pick("Keystone", "Rune fondamentale"))
                     .to_string();
                 for p in &mut self.rune_pages {
                     p.current = false;
@@ -585,9 +692,11 @@ impl DemoRemoteState {
                 if let Some(first) = self.rune_pages.first_mut() {
                     first.name = name.clone();
                     first.primary_style_id = *primary_style_id;
-                    first.primary_style_name = rune_style_name(*primary_style_id).to_string();
+                    first.primary_style_name =
+                        rune_style_name_localized(*primary_style_id, lang).to_string();
                     first.sub_style_id = *sub_style_id;
-                    first.sub_style_name = rune_style_name(*sub_style_id).to_string();
+                    first.sub_style_name =
+                        rune_style_name_localized(*sub_style_id, lang).to_string();
                     first.keystone_name = keystone;
                     first.selected_perk_ids = selected_perk_ids.clone();
                     first.current = true;
@@ -754,7 +863,7 @@ impl DemoRemoteState {
                     "cellId": i,
                     "assignedPosition": self.ally_positions[i],
                     "championId": cid,
-                    "championName": champion_name_from_id(cid),
+                    "championName": champion_name_from_id_localized(cid, app_state.lang()),
                     "summonerId": 1000 + i as u64,
                     "puuid": format!("demo-puuid-{i}"),
                     "summonerName": summoner_names[i],
@@ -860,6 +969,7 @@ pub fn extract_remote_state(
     demo_state: &DemoRemoteState,
     alerts: &mut AlertTracker,
 ) -> RemoteStateSnapshot {
+    let lang = app_state.lang();
     let guard = app_state.store.read().unwrap();
     let lcu = |uri: &str| guard.get_state(SourceId::LeagueClient, uri).map(|u| u.current);
 
@@ -937,7 +1047,7 @@ pub fn extract_remote_state(
 
         RemoteLobbyState {
             queue_id,
-            queue_name: queue_name_from_id(queue_id),
+            queue_name: queue_name_from_id_localized(queue_id, lang),
             first_position,
             second_position,
             is_leader,
@@ -988,7 +1098,7 @@ pub fn extract_remote_state(
             .to_string();
 
         Some(RemoteMatchmakingState {
-            queue_name: queue_name_from_id(queue_id),
+            queue_name: queue_name_from_id_localized(queue_id, lang),
             in_queue,
             time_in_queue_sec,
             estimated_queue_time_sec,
@@ -1000,7 +1110,7 @@ pub fn extract_remote_state(
 
     // 3. Champion Select state
     let champ_select = cs_val.as_ref().map(|cs| {
-        let base_summary = extract_champ_select_summary(Some(cs), None);
+        let base_summary = extract_champ_select_summary_localized(Some(cs), None, lang);
         let local_cell_id = cs
             .get("localPlayerCellId")
             .and_then(|v| v.as_i64())
@@ -1099,7 +1209,7 @@ pub fn extract_remote_state(
                                     action_type,
                                     champion_id: champ_id,
                                     champion_name: if champ_id > 0 {
-                                        champion_name_from_id(champ_id)
+                                        champion_name_from_id_localized(champ_id, lang)
                                     } else {
                                         String::new()
                                     },
@@ -1149,7 +1259,7 @@ pub fn extract_remote_state(
                         .and_then(|v| v.as_str())
                         .filter(|s| !s.is_empty())
                         .map(|s| s.to_string())
-                        .unwrap_or_else(|| champion_name_from_id(cid))
+                        .unwrap_or_else(|| champion_name_from_id_localized(cid, lang))
                 } else {
                     String::new()
                 };
@@ -1159,7 +1269,7 @@ pub fn extract_remote_state(
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("Ally {}", idx + 1));
+                    .unwrap_or_else(|| format!("{} {}", lang.pick("Ally", "Allié"), idx + 1));
                 let s1 = m.get("spell1Id").and_then(|v| v.as_i64()).unwrap_or(4);
                 let s2 = m.get("spell2Id").and_then(|v| v.as_i64()).unwrap_or(14);
                 let skin = m
@@ -1181,11 +1291,19 @@ pub fn extract_remote_state(
 
                 if let Some((id, ref st)) = p_swap {
                     if st == "RECEIVED" {
+                        let my_pos = position_display(&assigned_position, lang);
+                        let their_pos = position_display(&pos, lang);
                         incoming_swaps.push(RemoteIncomingSwap {
                             id,
                             kind: "position".to_string(),
                             caller_name: sname.clone(),
-                            detail: format!("wants to swap to your {assigned_position} lane (they have {pos})"),
+                            detail: if lang.is_fr() {
+                                format!(
+                                    "veut échanger vers votre poste {my_pos} (actuellement {their_pos})"
+                                )
+                            } else {
+                                format!("wants to swap for your {my_pos} (currently {their_pos})")
+                            },
                         });
                     }
                 }
@@ -1195,19 +1313,29 @@ pub fn extract_remote_state(
                             id,
                             kind: "pick_order".to_string(),
                             caller_name: sname.clone(),
-                            detail: "wants to swap pick order with you".to_string(),
+                            detail: lang
+                                .pick(
+                                    "wants to swap pick order with you",
+                                    "veut échanger l'ordre de sélection avec vous",
+                                )
+                                .to_string(),
                         });
                     }
                 }
                 if let Some((id, ref st)) = c_trade {
                     if st == "RECEIVED" {
+                        let champ_label = if cname.is_empty() {
+                            lang.pick("Ally", "Allié")
+                        } else {
+                            &cname
+                        };
                         incoming_swaps.push(RemoteIncomingSwap {
                             id,
                             kind: "champion".to_string(),
                             caller_name: sname.clone(),
                             detail: format!(
-                                "wants to trade champion ({})",
-                                if cname.is_empty() { "Ally" } else { &cname }
+                                "{} ({champ_label})",
+                                lang.pick("wants to trade champions", "veut échanger de champion")
                             ),
                         });
                     }
@@ -1309,8 +1437,10 @@ pub fn extract_remote_state(
             })
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| {
-                let cname = app_state.assets.resolve_champion_name(champ_for_skins);
-                builtin_skins_for(champ_for_skins, &cname, selected_skin_id)
+                let cname = app_state
+                    .assets
+                    .resolve_champion_name_localized(champ_for_skins, lang);
+                builtin_skins_for_localized(champ_for_skins, &cname, selected_skin_id, lang)
             });
 
         // Rune pages from LCU `/lol-perks/v1/pages` or demo state
@@ -1339,16 +1469,18 @@ pub fn extract_remote_state(
                         let keystone = selected_perk_ids
                             .first()
                             .copied()
-                            .map(keystone_name_from_id)
-                            .unwrap_or("Keystone")
+                            .map(|kid| keystone_name_from_id_localized(kid, lang))
+                            .unwrap_or(lang.pick("Keystone", "Rune fondamentale"))
                             .to_string();
                         Some(RemoteRunePage {
                             id,
                             name,
                             primary_style_id,
-                            primary_style_name: rune_style_name(primary_style_id).to_string(),
+                            primary_style_name: rune_style_name_localized(primary_style_id, lang)
+                                .to_string(),
                             sub_style_id,
-                            sub_style_name: rune_style_name(sub_style_id).to_string(),
+                            sub_style_name: rune_style_name_localized(sub_style_id, lang)
+                                .to_string(),
                             keystone_name: keystone,
                             selected_perk_ids,
                             current,
@@ -1358,9 +1490,38 @@ pub fn extract_remote_state(
                     .collect::<Vec<_>>()
             })
             .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| demo_state.rune_pages.clone());
+            .unwrap_or_else(|| {
+                demo_state
+                    .rune_pages
+                    .iter()
+                    .cloned()
+                    .map(|mut rp| {
+                        rp.primary_style_name =
+                            rune_style_name_localized(rp.primary_style_id, lang).to_string();
+                        rp.sub_style_name =
+                            rune_style_name_localized(rp.sub_style_id, lang).to_string();
+                        if let Some(&kid) = rp.selected_perk_ids.first() {
+                            rp.keystone_name = keystone_name_from_id_localized(kid, lang).to_string();
+                        }
+                        if rp.id == 101 && rp.name == "Mid Burst (Electrocute)" {
+                            rp.name = lang
+                                .pick("Mid Burst (Electrocute)", "Mid Burst (Électrocution)")
+                                .to_string();
+                        } else if rp.id == 102 && rp.name == "All-In Fighter (Conqueror)" {
+                            rp.name = lang
+                                .pick(
+                                    "All-In Fighter (Conqueror)",
+                                    "Combattant All-In (Conquérant)",
+                                )
+                                .to_string();
+                        }
+                        rp
+                    })
+                    .collect()
+            });
 
-        let recommended_rune_pages = recommended_pages_for(champ_for_skins, &assigned_position);
+        let recommended_rune_pages =
+            recommended_pages_for_localized(champ_for_skins, &assigned_position, lang);
 
         let my_team_bans = base_summary
             .as_ref()
@@ -1415,10 +1576,10 @@ pub fn extract_remote_state(
             incoming_swaps,
             champions,
             available_skins,
-            available_spells: default_summoner_spells(),
+            available_spells: default_summoner_spells_localized(lang),
             rune_pages,
             recommended_rune_pages,
-            rune_trees: default_rune_trees(),
+            rune_trees: default_rune_trees_localized(lang),
         }
     });
 
@@ -1426,10 +1587,18 @@ pub fn extract_remote_state(
     if let Some(ref mm) = matchmaking {
         if mm.ready_check_active && mm.player_response == "None" {
             alerts.observe(
+                lang,
                 "ready_check_pending".to_string(),
                 "ready_check",
-                "Match Found!".to_string(),
-                format!("Tap ACCEPT now ({}s remaining)", mm.ready_check_timer_sec),
+                lang.pick("Match Found!", "Partie trouvée !").to_string(),
+                if lang.is_fr() {
+                    format!(
+                        "Appuyez sur ACCEPTER maintenant ({}s restantes)",
+                        mm.ready_check_timer_sec
+                    )
+                } else {
+                    format!("Tap ACCEPT now ({}s remaining)", mm.ready_check_timer_sec)
+                },
             );
         }
     }
@@ -1437,9 +1606,14 @@ pub fn extract_remote_state(
         if let Some(ref cs) = champ_select {
             if let Some(swap) = cs.incoming_swaps.first() {
                 alerts.observe(
+                    lang,
                     format!("swap:{}:{}", swap.kind, swap.id),
                     "incoming_swap",
-                    format!("Swap Request from {}", swap.caller_name),
+                    if lang.is_fr() {
+                        format!("Demande d'échange de {}", swap.caller_name)
+                    } else {
+                        format!("{} requests a swap", swap.caller_name)
+                    },
                     swap.detail.clone(),
                 );
             } else if let Some(ref act) = cs.active_action {
@@ -1450,20 +1624,31 @@ pub fn extract_remote_state(
                         "your_pick"
                     };
                     let title = if act.action_type == "ban" {
-                        "Your Turn to Ban!".to_string()
+                        lang.pick("Your turn to BAN!", "À vous de bannir !").to_string()
+                    } else if lang.is_fr() {
+                        format!(
+                            "À vous de choisir ({}) !",
+                            position_display(&cs.assigned_position, lang)
+                        )
                     } else {
-                        format!("Your Turn to Pick ({})!", cs.assigned_position)
+                        format!(
+                            "Your turn to PICK ({})!",
+                            position_display(&cs.assigned_position, lang)
+                        )
+                    };
+                    let s1 = spell_name_from_id_localized(cs.spell1_id, lang);
+                    let s2 = spell_name_from_id_localized(cs.spell2_id, lang);
+                    let body = if lang.is_fr() {
+                        format!("Sorts : {s1} + {s2} · {}s restantes", cs.time_left_sec)
+                    } else {
+                        format!("Spells: {s1} + {s2} · {}s left", cs.time_left_sec)
                     };
                     alerts.observe(
+                        lang,
                         format!("turn:{}:{}", act.action_id, act.action_type),
                         kind,
                         title,
-                        format!(
-                            "Spells: {} + {} · {}s left",
-                            spell_name_from_id(cs.spell1_id),
-                            spell_name_from_id(cs.spell2_id),
-                            cs.time_left_sec
-                        ),
+                        body,
                     );
                 }
             }
@@ -1481,13 +1666,19 @@ pub fn extract_remote_state(
         let active_val = live("/liveclientdata/activeplayer");
         let events_val = live("/liveclientdata/eventdata");
         drop(live_guard);
-        extract_live_game_summary(
+        extract_live_game_summary_localized(
             allgame_val.as_ref(),
             active_val.as_ref(),
             events_val.as_ref(),
+            lang,
         )
         .map(|lg| {
-            let board = extract_live_board(allgame_val.as_ref(), events_val.as_ref(), &lg);
+            let board = extract_live_board_localized(
+                allgame_val.as_ref(),
+                events_val.as_ref(),
+                &lg,
+                lang,
+            );
             let clock_sec = lg.game_time_sec.max(0.0).round() as u32;
             let clock = format!("{:02}:{:02}", clock_sec / 60, clock_sec % 60);
             let my_team_name = lg
@@ -1608,6 +1799,7 @@ pub fn extract_remote_state(
     };
 
     RemoteStateSnapshot {
+        lang,
         phase,
         is_demo: app_state.is_demo_active(),
         alert_seq: alerts.seq,
@@ -1686,5 +1878,47 @@ mod tests {
             None
         )
         .is_err());
+
+        let en_err = resolve_lcu_command_localized(
+            &RemoteCommand::SetSummonerSpells {
+                spell1_id: 4,
+                spell2_id: 4,
+            },
+            None,
+            Lang::En,
+        )
+        .unwrap_err()
+        .to_string();
+        let fr_err = resolve_lcu_command_localized(
+            &RemoteCommand::SetSummonerSpells {
+                spell1_id: 4,
+                spell2_id: 4,
+            },
+            None,
+            Lang::Fr,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_ne!(en_err, fr_err);
+        assert!(fr_err.contains("sorts"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_remote_state_tracks_language() {
+        let app = AppState::start_with_lang(true, 2.0, Lang::En);
+        let demo = DemoRemoteState::default();
+        demo.sync_to_store(&app);
+        let mut alerts = AlertTracker::default();
+
+        let en = extract_remote_state(&app, &demo, &mut alerts);
+        assert_eq!(en.lang, Lang::En);
+        assert_eq!(en.lobby.as_ref().unwrap().queue_name, "Ranked Solo/Duo");
+        assert_eq!(en.champ_select.as_ref().unwrap().available_spells[0].name, "Flash");
+
+        app.set_lang(Lang::Fr);
+        let fr = extract_remote_state(&app, &demo, &mut alerts);
+        assert_eq!(fr.lang, Lang::Fr);
+        assert_eq!(fr.lobby.as_ref().unwrap().queue_name, "Classée Solo/Duo");
+        assert_eq!(fr.champ_select.as_ref().unwrap().available_spells[0].name, "Saut éclair");
     }
 }

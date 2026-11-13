@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use hypatia_shared::{normalize_champion_key, RemoteChampionOption, SourceId};
+use hypatia_shared::{normalize_champion_key, Lang, RemoteChampionOption, SourceId};
 use serde_json::Value;
 use tracing::{debug, warn};
 
@@ -87,15 +87,20 @@ impl GameAssetCache {
         self.resolve_champion_id(alias)
     }
 
-    /// Resolves a champion display name by ID using synced LCU metadata first, then built-in fallback.
-    pub fn resolve_champion_name(&self, champion_id: i64) -> String {
+    /// Resolves a champion display name by ID using synced LCU metadata first, then localized built-in fallback.
+    pub fn resolve_champion_name_localized(&self, champion_id: i64, lang: Lang) -> String {
         if champion_id <= 0 {
-            return "Selecting...".to_string();
+            return lang.pick("Selecting...", "Sélection...").to_string();
         }
         if let Some(name) = self.champ_names_by_id.read().unwrap().get(&champion_id) {
             return name.clone();
         }
-        hypatia_shared::champion_name_from_id(champion_id)
+        hypatia_shared::champion_name_from_id_localized(champion_id, lang)
+    }
+
+    /// Resolves a champion display name by ID using synced LCU metadata first, then built-in fallback.
+    pub fn resolve_champion_name(&self, champion_id: i64) -> String {
+        self.resolve_champion_name_localized(champion_id, Lang::En)
     }
 
     /// Returns cached LCU champion catalog merged/available for pick/ban grids, if synced.
@@ -601,6 +606,85 @@ pub fn default_cache_dir() -> PathBuf {
     std::env::temp_dir().join("hypatia-assets-cache")
 }
 
+/// Returns the per-user Hypatia config directory (`%LOCALAPPDATA%\hypatia` on Windows).
+pub fn default_config_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        return PathBuf::from(local).join("hypatia");
+    }
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        return PathBuf::from(xdg).join("hypatia");
+    }
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        return PathBuf::from(home).join(".config").join("hypatia");
+    }
+    std::env::temp_dir().join("hypatia")
+}
+
+pub fn default_lang_file_path() -> PathBuf {
+    default_config_dir().join("lang")
+}
+
+/// Reads a persisted language preference from `path`, falling back to OS locale detection.
+pub fn load_lang_from_path(path: &Path) -> Lang {
+    if let Ok(raw) = std::fs::read_to_string(path) {
+        if let Some(lang) = Lang::from_code(&raw) {
+            return lang;
+        }
+    }
+    detect_os_lang()
+}
+
+/// Persists the active language code (`"en"` or `"fr"`) to `path`.
+pub fn save_lang_to_path(path: &Path, lang: Lang) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, lang.as_code())
+}
+
+pub fn load_persisted_or_detect_lang() -> Lang {
+    load_lang_from_path(&default_lang_file_path())
+}
+
+pub fn save_persisted_lang(lang: Lang) {
+    let _ = save_lang_to_path(&default_lang_file_path(), lang);
+}
+
+fn detect_env_lang() -> Option<Lang> {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(val) = std::env::var(key) {
+            if let Some(lang) = Lang::from_code(&val) {
+                return Some(lang);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn detect_os_lang() -> Lang {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetUserDefaultLocaleName(lp_locale_name: *mut u16, cch_locale_name: i32) -> i32;
+    }
+    let mut buf = [0u16; 85];
+    // SAFETY: `buf` is a stack buffer matching Windows LOCALE_NAME_MAX_LENGTH (85 UTF-16 code units).
+    let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+    if len > 1 {
+        let raw = String::from_utf16_lossy(&buf[..(len as usize - 1)]);
+        if let Some(lang) = Lang::from_code(raw.trim_end_matches('\0')) {
+            return lang;
+        }
+    }
+    detect_env_lang().unwrap_or_default()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_os_lang() -> Lang {
+    detect_env_lang().unwrap_or_default()
+}
+
 /// Validates and detects PNG or JPEG image magic headers.
 pub fn detect_image_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     const PNG_MAGIC: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
@@ -771,6 +855,14 @@ mod tests {
         assert_eq!(cache.resolve_champion_id("Test Champ"), 999);
         assert_eq!(cache.resolve_champion_id("TestChamp"), 999);
         assert_eq!(cache.resolve_champion_name(999), "Test Champ");
+        assert_eq!(cache.resolve_champion_name_localized(0, Lang::En), "Selecting...");
+        assert_eq!(cache.resolve_champion_name_localized(0, Lang::Fr), "Sélection...");
+
+        let lang_file = dir.join("nested").join("lang");
+        save_lang_to_path(&lang_file, Lang::Fr).unwrap();
+        assert_eq!(load_lang_from_path(&lang_file), Lang::Fr);
+        save_lang_to_path(&lang_file, Lang::En).unwrap();
+        assert_eq!(load_lang_from_path(&lang_file), Lang::En);
 
         cache.ingest_metadata(
             "perks.json",

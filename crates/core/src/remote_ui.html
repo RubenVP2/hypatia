@@ -1041,25 +1041,26 @@ button:disabled {
       <span id="summoner-avatar"></span>
       <div>
         <h1 class="brand-title">HYPATIA</h1>
-        <div id="summoner-line" class="brand-sub">Connecting...</div>
+        <div id="summoner-line" class="brand-sub">Connexion...</div>
       </div>
     </div>
     <div class="top-actions">
-      <button id="alert-top-btn" class="pill-btn" type="button" title="Notification alerts status">
+      <button id="alert-top-btn" class="pill-btn" type="button" title="État des notifications d'alerte">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
           <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         </svg>
-        <span id="alert-top-lbl">Arm Alerts</span>
+        <span id="alert-top-lbl">Alertes</span>
       </button>
-      <button id="demo-toggle-btn" class="pill-btn signal" type="button" style="display:none">Demo</button>
+      <button id="demo-toggle-btn" class="pill-btn signal" type="button" style="display:none">Démo</button>
+      <button id="lang-btn" class="pill-btn mono" type="button" title="Language / Langue">EN</button>
       <button id="theme-btn" class="icon-btn" type="button" aria-label="Toggle day or night theme">
         <svg id="theme-icon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"/>
           <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
         </svg>
       </button>
-      <button id="refresh-btn" class="icon-btn" type="button" aria-label="Refresh state">
+      <button id="refresh-btn" class="icon-btn" type="button" aria-label="Actualiser l'état">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
           <path d="M21 3v5h-5"/>
@@ -1068,24 +1069,24 @@ button:disabled {
     </div>
   </header>
 
-  <nav id="demo-strip" class="demo-strip" style="display:none" aria-label="Demo phase controls">
-    <span class="demo-strip-label">DEMO:</span>
-    <button class="demo-chip" data-action="demo-phase" data-phase="Lobby">Lobby</button>
-    <button class="demo-chip" data-action="demo-phase" data-phase="Matchmaking">Queue</button>
-    <button class="demo-chip" data-action="demo-phase" data-phase="ReadyCheck">Ready</button>
-    <button class="demo-chip" data-action="demo-phase" data-phase="ChampSelect">Champ Select</button>
-    <button class="demo-chip" data-action="demo-phase" data-phase="InProgress">Live Game</button>
-    <button class="demo-chip" data-action="demo-swap">Test Swap</button>
+  <nav id="demo-strip" class="demo-strip" style="display:none" aria-label="Contrôles des phases de démonstration">
+    <span class="demo-strip-label">DÉMO :</span>
+    <button class="demo-chip" data-action="demo-phase" data-phase="Lobby">Salon</button>
+    <button class="demo-chip" data-action="demo-phase" data-phase="Matchmaking">File</button>
+    <button class="demo-chip" data-action="demo-phase" data-phase="ReadyCheck">Trouvée</button>
+    <button class="demo-chip" data-action="demo-phase" data-phase="ChampSelect">Sélection</button>
+    <button class="demo-chip" data-action="demo-phase" data-phase="InProgress">En jeu</button>
+    <button class="demo-chip" data-action="demo-swap">Tester échange</button>
   </nav>
 
   <main class="shell-main">
     <section id="alert-setup-card" class="card card-spotlight" style="display:none">
       <div class="alert-banner">
         <div>
-          <div class="h3">Enable Turn & Ready Alerts</div>
-          <div class="meta">Arm browser notifications and audio chime so you never miss Ready Check or Pick turn.</div>
+          <div class="h3">Activer les alertes de tour et de partie</div>
+          <div class="meta">Activez les notifications et le signal sonore pour ne manquer aucun appel ou tour de sélection.</div>
         </div>
-        <button id="arm-alerts-btn" class="btn-secondary" type="button" style="flex-shrink:0">Arm</button>
+        <button id="arm-alerts-btn" class="btn-secondary" type="button" style="flex-shrink:0">Activer</button>
       </div>
     </section>
 
@@ -1101,47 +1102,303 @@ button:disabled {
 <script>
 (() => {
   const URL_TOKEN = new URLSearchParams(location.search).get("token") || "";
-  const LANE_META = [
-    { key: "TOP", label: "Top", code: "T", color: "var(--lane-top)" },
-    { key: "JUNGLE", label: "Jungle", code: "J", color: "var(--lane-jgl)" },
-    { key: "MIDDLE", label: "Mid", code: "M", color: "var(--lane-mid)" },
-    { key: "BOTTOM", label: "Bot", code: "B", color: "var(--lane-bot)" },
-    { key: "UTILITY", label: "Support", code: "S", color: "var(--lane-bot)" },
-    { key: "FILL", label: "Fill", code: "F", color: "var(--muted)" }
+  const DEFAULT_CUSTOM_NAMES = {
+    en: "Hypatia Mobile Page",
+    fr: "Page Hypatia Mobile"
+  };
+
+  const I18N = {
+    en: {
+      title: "Hypatia — Mobile Remote",
+      connecting: "Connecting...",
+      alertsTitle: "Alert Notification Status",
+      alerts: "Alerts",
+      alertsOn: "Alerts ON",
+      demoBtn: "Demo",
+      langTitle: "Switch mobile language (EN / FR)",
+      themeAria: "Toggle day or night theme",
+      refreshAria: "Refresh state",
+      demoAria: "Demo phase controls",
+      demoStrip: "DEMO:",
+      demoLobby: "Lobby",
+      demoQueue: "Queue",
+      demoReady: "Ready",
+      demoSelect: "Select",
+      demoLive: "Live",
+      demoSwap: "Test Swap",
+      armTitle: "Enable Turn & Match Alerts",
+      armDesc: "Arm notifications and chime so you never miss a ready check or champ-select turn.",
+      armBtn: "Enable",
+      chimeTested: "Alert chime tested",
+      alertsEnabled: "Alerts enabled",
+      cmdRejected: "Command rejected",
+      netErr: "Network error sending command",
+      langSwitched: "Mobile language: English",
+      none: "None",
+      pending: "Pending",
+      fill: "Fill",
+      saveRoles: "Save Roles",
+      findMatch: "Find Match",
+      leagueLobby: "League Lobby",
+      playersCount: n => `${n} player${n === 1 ? "" : "s"}`,
+      lobbyHint: "Tap Primary or Secondary below, then choose a lane.",
+      primary: "Primary",
+      secondary: "Secondary",
+      lobbyMembers: "Lobby Members",
+      leaderTag: " (Leader)",
+      ready: "READY",
+      waiting: "WAITING",
+      cancelQueue: "Cancel Queue",
+      inQueue: "In Queue",
+      estWait: s => `Estimated wait: ${s}`,
+      matchAccepted: "Match Accepted",
+      matchFound: "Match Found",
+      waitingOthers: "Waiting for other players to accept.",
+      acceptBefore: "Tap ACCEPT before the timer expires.",
+      acceptMatch: "ACCEPT MATCH",
+      decline: "Decline",
+      accept: "Accept",
+      champSelect: "Champion Select",
+      syncDraft: "Synchronizing draft state...",
+      actBan: "Ban",
+      actPick: "Lock",
+      teamStripAria: "Team draft summary",
+      blueSide: "Blue:",
+      redSide: "Red:",
+      chooseBan: "Choose a ban below",
+      choosePick: "Choose a champion below",
+      filterBan: "Filter a champion to ban...",
+      filterPick: "Filter a champion to pick...",
+      all: "All",
+      champSkins: "Champion Skins",
+      equipped: "EQUIPPED",
+      pickAction: "Select",
+      selectChampSkins: "Pick a champion to browse skins.",
+      sumSpells: "Summoner Spells",
+      swapDF: "Swap D / F",
+      slotD: "SLOT D",
+      slotF: "SLOT F",
+      runes: "Runes",
+      pages: "Pages",
+      builder: "Builder",
+      activeTag: "ACTIVE",
+      presetTag: "PRESET",
+      equipTag: "EQUIP",
+      runeNamePh: "Rune page name",
+      priPath: "Primary Path",
+      keystone: "Keystone",
+      secPath: "Secondary Path (choose 2 from distinct rows)",
+      statShards: "Stat Shards (3 slots)",
+      save9Runes: "Save & Equip All 9 Perks",
+      incomingReq: "Incoming Requests",
+      alliesSwaps: "Allies & Swaps",
+      youTag: "(You)",
+      cancelLane: "Cancel Lane",
+      swapLane: "Swap Lane",
+      laneNA: "Lane N/A",
+      cancelOrder: "Cancel Order",
+      swapOrder: "Swap Order",
+      orderNA: "Order N/A",
+      cancelTrade: "Cancel Trade",
+      tradeChamp: "Trade Champ",
+      tradeNA: "Trade N/A",
+      enemyTeam: "Enemy Team",
+      turnBan: "Your Turn to Ban",
+      turnPick: "Your Turn to Pick",
+      tabPick: "Pick",
+      tabSkins: "Skins",
+      tabLoadout: "Loadout",
+      tabTeam: "Team",
+      liveMatch: "Live Match",
+      waitingLive: "Waiting for League Live Client Data on :2999...",
+      towers: (a, b) => `Towers ${a} / ${b}`,
+      lvl: n => `Lvl ${n}`,
+      gold: g => `${g} Gold`,
+      objectives: "Objectives",
+      recentEvents: "Recent Match Events",
+      allies: "Allies",
+      enemies: "Enemies",
+      respawn: s => `Respawn ${s}s`,
+      matchCompleted: "Match Completed",
+      standingBy: "Standing By",
+      eogDetail: "Full post-game damage and gold telemetry is available on Hypatia Desktop.",
+      idleDetail: "Open a League lobby on your PC or toggle Demo mode to control draft from here.",
+      defaultSaveName: "Hypatia Page"
+    },
+    fr: {
+      title: "Hypatia — Télécommande Mobile",
+      connecting: "Connexion...",
+      alertsTitle: "État des notifications d'alerte",
+      alerts: "Alertes",
+      alertsOn: "Alertes ON",
+      demoBtn: "Démo",
+      langTitle: "Changer la langue sur mobile (FR / EN)",
+      themeAria: "Basculer thème jour ou nuit",
+      refreshAria: "Actualiser l'état",
+      demoAria: "Contrôles des phases de démonstration",
+      demoStrip: "DÉMO :",
+      demoLobby: "Salon",
+      demoQueue: "File",
+      demoReady: "Trouvée",
+      demoSelect: "Sélection",
+      demoLive: "En jeu",
+      demoSwap: "Tester échange",
+      armTitle: "Activer les alertes de tour et de partie",
+      armDesc: "Activez les notifications et le signal sonore pour ne manquer aucun appel ou tour de sélection.",
+      armBtn: "Activer",
+      chimeTested: "Signal sonore testé",
+      alertsEnabled: "Alertes activées",
+      cmdRejected: "Commande refusée",
+      netErr: "Erreur réseau lors de l'envoi de l'action",
+      langSwitched: "Langue mobile : Français",
+      none: "Aucun",
+      pending: "En attente",
+      fill: "Polyvalent",
+      saveRoles: "Appliquer les postes",
+      findMatch: "Trouver un match",
+      leagueLobby: "Salon League",
+      playersCount: n => `${n} joueur${n === 1 ? "" : "s"}`,
+      lobbyHint: "Touchez Principal ou Secondaire ci-dessous, puis choisissez un poste.",
+      primary: "Principal",
+      secondary: "Secondaire",
+      lobbyMembers: "Membres du salon",
+      leaderTag: " (Chef)",
+      ready: "PRÊT",
+      waiting: "ATTENTE",
+      cancelQueue: "Annuler la file",
+      inQueue: "En file",
+      estWait: s => `Temps d'attente estimé : ${s}`,
+      matchAccepted: "Partie acceptée",
+      matchFound: "Partie trouvée",
+      waitingOthers: "En attente de l'acceptation des autres joueurs.",
+      acceptBefore: "Appuyez sur ACCEPTER avant la fin du décompte.",
+      acceptMatch: "ACCEPTER LA PARTIE",
+      decline: "Refuser",
+      accept: "Accepter",
+      champSelect: "Sélection des champions",
+      syncDraft: "Synchronisation de la draft...",
+      actBan: "Bannir",
+      actPick: "Verrouiller",
+      teamStripAria: "Résumé de la draft d'équipe",
+      blueSide: "Bleu :",
+      redSide: "Rouge :",
+      chooseBan: "Choisir un ban ci-dessous",
+      choosePick: "Choisir un champion ci-dessous",
+      filterBan: "Filtrer un champion à bannir...",
+      filterPick: "Filtrer un champion à choisir...",
+      all: "Tous",
+      champSkins: "Skins du champion",
+      equipped: "ÉQUIPÉ",
+      pickAction: "Choisir",
+      selectChampSkins: "Sélectionnez un champion pour parcourir ses skins.",
+      sumSpells: "Sorts d'invocateur",
+      swapDF: "Permuter D / F",
+      slotD: "EMPL. D",
+      slotF: "EMPL. F",
+      runes: "Runes",
+      pages: "Pages",
+      builder: "Créateur",
+      activeTag: "ACTIF",
+      presetTag: "PRÉRÉG.",
+      equipTag: "ÉQUIPER",
+      runeNamePh: "Nom de la page de runes",
+      priPath: "Branche principale",
+      keystone: "Rune fondamentale",
+      secPath: "Branche secondaire (2 runes de lignes distinctes)",
+      statShards: "Fragments de statistiques (3 emplacements)",
+      save9Runes: "Enregistrer et équiper les 9 runes",
+      incomingReq: "Demandes reçues",
+      alliesSwaps: "Alliés & Échanges",
+      youTag: "(Vous)",
+      cancelLane: "Annuler poste",
+      swapLane: "Éch. poste",
+      laneNA: "Poste indisp.",
+      cancelOrder: "Annuler ordre",
+      swapOrder: "Éch. ordre",
+      orderNA: "Ordre indisp.",
+      cancelTrade: "Annuler éch.",
+      tradeChamp: "Éch. champ.",
+      tradeNA: "Éch. indisp.",
+      enemyTeam: "Équipe ennemie",
+      turnBan: "À vous de bannir",
+      turnPick: "À vous de choisir",
+      tabPick: "Choix",
+      tabSkins: "Skins",
+      tabLoadout: "Équipement",
+      tabTeam: "Équipe",
+      liveMatch: "Match en direct",
+      waitingLive: "En attente des données Live Client sur :2999...",
+      towers: (a, b) => `Tourelles ${a} / ${b}`,
+      lvl: n => `Niv. ${n}`,
+      gold: g => `${g} Po`,
+      objectives: "Objectifs",
+      recentEvents: "Événements récents",
+      allies: "Alliés",
+      enemies: "Ennemis",
+      respawn: s => `Réapp. ${s}s`,
+      matchCompleted: "Partie terminée",
+      standingBy: "En attente",
+      eogDetail: "La télémétrie complète d'après-partie (dégâts et or) est disponible sur Hypatia Desktop.",
+      idleDetail: "Ouvrez un salon League sur votre PC ou activez le mode Démo pour contrôler la draft ici.",
+      defaultSaveName: "Page Hypatia"
+    }
+  };
+
+  const SPELL_NAMES = {
+    1: { en: "Cleanse", fr: "Purge" },
+    3: { en: "Exhaust", fr: "Fatigue" },
+    4: { en: "Flash", fr: "Saut éclair" },
+    6: { en: "Ghost", fr: "Fantôme" },
+    7: { en: "Heal", fr: "Soins" },
+    11: { en: "Smite", fr: "Châtiment" },
+    12: { en: "Teleport", fr: "Téléportation" },
+    14: { en: "Ignite", fr: "Embrasement" },
+    21: { en: "Barrier", fr: "Barrière" },
+    32: { en: "Mark", fr: "Marquage" }
+  };
+
+  const STYLE_NAMES = {
+    8000: { en: "Precision", fr: "Précision" },
+    8100: { en: "Domination", fr: "Domination" },
+    8200: { en: "Sorcery", fr: "Sorcellerie" },
+    8300: { en: "Inspiration", fr: "Inspiration" },
+    8400: { en: "Resolve", fr: "Volonté" }
+  };
+
+  const SHARD_NAMES = {
+    5008: { en: "+9 Adaptive Force", fr: "+9 Force adaptative" },
+    5005: { en: "+10% Attack Speed", fr: "+10 % Vit. d'attaque" },
+    5007: { en: "+8 Ability Haste", fr: "+8 Accélération" },
+    5010: { en: "+2% Move Speed", fr: "+2 % Vit. déplacement" },
+    5001: { en: "+10-180 HP", fr: "+10-180 PV" },
+    5011: { en: "+65 HP", fr: "+65 PV bruts" },
+    5013: { en: "+10% Tenacity", fr: "+10 % Ténacité" }
+  };
+
+  const LANE_META_BASE = [
+    { key: "TOP", en: "Top", fr: "Top", codeEn: "T", codeFr: "T", color: "var(--lane-top)" },
+    { key: "JUNGLE", en: "Jungle", fr: "Jungle", codeEn: "J", codeFr: "J", color: "var(--lane-jgl)" },
+    { key: "MIDDLE", en: "Mid", fr: "Mid", codeEn: "M", codeFr: "M", color: "var(--lane-mid)" },
+    { key: "BOTTOM", en: "Bot", fr: "Bot", codeEn: "B", codeFr: "B", color: "var(--lane-bot)" },
+    { key: "UTILITY", en: "Support", fr: "Support", codeEn: "S", codeFr: "S", color: "var(--lane-bot)" },
+    { key: "FILL", en: "Fill", fr: "Polyvalent", codeEn: "F", codeFr: "P", color: "var(--muted)" }
   ];
 
   const STAT_SHARD_ROWS = [
-    {
-      label: "Offense",
-      slot: 6,
-      options: [
-        { id: 5008, name: "+9 Adaptive Force" },
-        { id: 5005, name: "+10% Attack Speed" },
-        { id: 5007, name: "+8 Ability Haste" }
-      ]
-    },
-    {
-      label: "Flex",
-      slot: 7,
-      options: [
-        { id: 5008, name: "+9 Adaptive Force" },
-        { id: 5010, name: "+2% Move Speed" },
-        { id: 5001, name: "+10-180 HP" }
-      ]
-    },
-    {
-      label: "Defense",
-      slot: 8,
-      options: [
-        { id: 5011, name: "+65 Flat HP" },
-        { id: 5013, name: "+10% Tenacity" },
-        { id: 5001, name: "+10-180 HP" }
-      ]
-    }
+    { slot: 6, options: [5008, 5005, 5007] },
+    { slot: 7, options: [5008, 5010, 5001] },
+    { slot: 8, options: [5011, 5013, 5001] }
   ];
+
+  const storedOverride = localStorage.getItem("hypatia_lang_override") || "";
+  const storedServerLang = localStorage.getItem("hypatia_last_server_lang") || "";
+  const browserPrefLang = (navigator.language || "").toLowerCase().startsWith("fr") ? "fr" : "en";
 
   const ui = {
     state: null,
+    serverLang: storedServerLang || browserPrefLang,
+    lastServerLang: storedServerLang,
+    langOverride: (storedOverride === "en" || storedOverride === "fr") ? storedOverride : "",
     demoOpen: localStorage.getItem("hypatia_demo_open") !== "0",
     theme: localStorage.getItem("hypatia_theme") || "dark",
     csTab: "pick",
@@ -1162,7 +1419,8 @@ button:disabled {
       { row: "slot1", id: 8226 },
       { row: "slot2", id: 8210 }
     ],
-    customName: "Hypatia Pit-Wall Page",
+    customName: DEFAULT_CUSTOM_NAMES[storedOverride || storedServerLang || browserPrefLang],
+    customNameEdited: false,
     lastAvatarKey: "",
     alertsArmed: localStorage.getItem("hypatia_alerts") === "1",
     lastAlertSeq: 0,
@@ -1170,6 +1428,71 @@ button:disabled {
     ws: null,
     toastTimer: null
   };
+
+  function activeLang() {
+    return ui.langOverride || ui.serverLang || "en";
+  }
+
+  function t(key, ...args) {
+    const lang = activeLang();
+    const entry = (I18N[lang] && I18N[lang][key] !== undefined) ? I18N[lang][key] : I18N.en[key];
+    return typeof entry === "function" ? entry(...args) : entry;
+  }
+
+  function applyStaticChrome() {
+    const lang = activeLang();
+    document.documentElement.lang = lang;
+    document.title = t("title");
+    if (!ui.customNameEdited) {
+      ui.customName = DEFAULT_CUSTOM_NAMES[lang];
+    }
+    const langBtn = document.getElementById("lang-btn");
+    if (langBtn) {
+      langBtn.textContent = lang.toUpperCase();
+      langBtn.title = t("langTitle");
+      langBtn.classList.toggle("active", Boolean(ui.langOverride));
+    }
+    const alertTopBtn = document.getElementById("alert-top-btn");
+    if (alertTopBtn) alertTopBtn.title = t("alertsTitle");
+    const demoBtn = document.getElementById("demo-toggle-btn");
+    if (demoBtn) demoBtn.textContent = t("demoBtn");
+    const themeBtn = document.getElementById("theme-btn");
+    if (themeBtn) themeBtn.setAttribute("aria-label", t("themeAria"));
+    const refreshBtn = document.getElementById("refresh-btn");
+    if (refreshBtn) refreshBtn.setAttribute("aria-label", t("refreshAria"));
+    const demoStrip = document.getElementById("demo-strip");
+    if (demoStrip) {
+      demoStrip.setAttribute("aria-label", t("demoAria"));
+      const lbl = demoStrip.querySelector(".demo-strip-label");
+      if (lbl) lbl.textContent = t("demoStrip");
+      const phaseLabels = {
+        Lobby: t("demoLobby"),
+        Matchmaking: t("demoQueue"),
+        ReadyCheck: t("demoReady"),
+        ChampSelect: t("demoSelect"),
+        InProgress: t("demoLive")
+      };
+      demoStrip.querySelectorAll("[data-phase]").forEach(btn => {
+        if (phaseLabels[btn.dataset.phase]) btn.textContent = phaseLabels[btn.dataset.phase];
+      });
+      const swapBtn = demoStrip.querySelector('[data-action="demo-swap"]');
+      if (swapBtn) swapBtn.textContent = t("demoSwap");
+    }
+    const armCard = document.getElementById("alert-setup-card");
+    if (armCard) {
+      const h = armCard.querySelector(".h3");
+      const d = armCard.querySelector(".meta");
+      const b = document.getElementById("arm-alerts-btn");
+      if (h) h.textContent = t("armTitle");
+      if (d) d.textContent = t("armDesc");
+      if (b) b.textContent = t("armBtn");
+    }
+    if (!ui.state) {
+      const sl = document.getElementById("summoner-line");
+      if (sl) sl.textContent = t("connecting");
+    }
+    updateAlertChrome();
+  }
 
   function applyTheme(t) {
     ui.theme = t;
@@ -1207,14 +1530,38 @@ button:disabled {
   }
 
   function laneInfo(raw) {
+    const lang = activeLang();
     const u = String(raw || "").toUpperCase();
     const alias = u === "JGL" ? "JUNGLE"
       : (u === "MID" ? "MIDDLE"
       : (u === "BOT" ? "BOTTOM"
       : (u === "SUP" || u === "SUPPORT" ? "UTILITY"
       : (u === "FLEX" || u === "NONE" ? "FILL" : u))));
-    return LANE_META.find(l => l.key === alias || l.label.toUpperCase() === alias)
-      || { key: alias || "FILL", label: u || "Flex", code: "F", color: "var(--muted)" };
+    const item = LANE_META_BASE.find(l => l.key === alias || l.en.toUpperCase() === alias || l.fr.toUpperCase() === alias);
+    if (!item) {
+      return { key: alias || "FILL", label: u || t("fill"), code: lang === "fr" ? "P" : "F", color: "var(--muted)" };
+    }
+    return {
+      key: item.key,
+      label: lang === "fr" ? item.fr : item.en,
+      code: lang === "fr" ? item.codeFr : item.codeEn,
+      color: item.color
+    };
+  }
+
+  function spellName(id, fallback) {
+    const e = SPELL_NAMES[Number(id)];
+    return e ? e[activeLang()] : (fallback || "");
+  }
+
+  function styleName(id, fallback) {
+    const e = STYLE_NAMES[Number(id)];
+    return e ? e[activeLang()] : (fallback || "");
+  }
+
+  function shardName(id) {
+    const e = SHARD_NAMES[Number(id)];
+    return e ? e[activeLang()] : String(id);
   }
 
   function laneSvg(raw, size = 14, stroke = "currentColor") {
@@ -1233,22 +1580,105 @@ button:disabled {
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
   }
 
+  function phaseLabel(phase) {
+    const lang = activeLang();
+    const map = lang === "fr"
+      ? {
+          Lobby: "Salon",
+          Matchmaking: "File d'attente",
+          ReadyCheck: "Confirmation",
+          ChampSelect: "Sélection",
+          InProgress: "En jeu",
+          PreEndOfGame: "Fin de partie",
+          EndOfGame: "Résultats"
+        }
+      : {
+          Lobby: "Lobby",
+          Matchmaking: "Matchmaking",
+          ReadyCheck: "Ready Check",
+          ChampSelect: "Champ Select",
+          InProgress: "In Game",
+          PreEndOfGame: "Post-Game",
+          EndOfGame: "Results"
+        };
+    return map[phase] || (phase ? phase : t("none"));
+  }
+
+  function subPhaseLabel(sub) {
+    const u = String(sub || "").toUpperCase();
+    const fr = activeLang() === "fr";
+    if (u === "PLANNING") return fr ? "Préparation" : "Planning";
+    if (u === "BAN_PICK") return fr ? "Bannissements & Choix" : "Ban & Pick";
+    if (u === "FINALIZATION") return fr ? "Finalisation" : "Finalization";
+    return String(sub || (fr ? "Sélection" : "Champ Select")).replace(/_/g, " ");
+  }
+
+  function queueLabel(q) {
+    const u = String(q || "").toUpperCase();
+    const fr = activeLang() === "fr";
+    if (u.includes("RANKED_SOLO") || u.includes("SOLO/DUO")) return fr ? "Classée Solo/Duo" : "Ranked Solo/Duo";
+    if (u.includes("RANKED_FLEX") || u.includes("FLEX")) return fr ? "Classée Flexible" : "Ranked Flex";
+    if (u.includes("NORMAL_DRAFT") || u === "DRAFT" || u.includes("DRAFT")) return fr ? "Normale Draft" : "Normal Draft";
+    if (u.includes("ARAM")) return "ARAM";
+    return String(q || "").replace(/_/g, " ");
+  }
+
+  function swapKindLabel(kind) {
+    const fr = activeLang() === "fr";
+    if (kind === "position") return fr ? "échange de poste" : "position swap";
+    if (kind === "pick_order") return fr ? "ordre de sélection" : "pick order";
+    if (kind === "champion") return fr ? "échange de champion" : "champion trade";
+    return String(kind || "").replace(/_/g, " ");
+  }
+
+  function localizedAlert(snap) {
+    const lang = activeLang();
+    if (!ui.langOverride || lang === ui.serverLang) {
+      return { title: snap.alert_title || "", body: snap.alert_body || "" };
+    }
+    if (snap.alert_kind === "ready_check") {
+      return {
+        title: lang === "fr" ? "Partie trouvée !" : "Match Found!",
+        body: t("acceptBefore")
+      };
+    }
+    if (snap.alert_kind === "your_ban") {
+      return {
+        title: lang === "fr" ? "À vous de bannir !" : "Your turn to BAN!",
+        body: t("chooseBan")
+      };
+    }
+    if (snap.alert_kind === "your_pick") {
+      return {
+        title: lang === "fr" ? "À vous de choisir !" : "Your turn to PICK!",
+        body: t("choosePick")
+      };
+    }
+    if (snap.alert_kind === "incoming_swap") {
+      return {
+        title: t("incomingReq"),
+        body: snap.alert_body || ""
+      };
+    }
+    return { title: snap.alert_title || "", body: snap.alert_body || "" };
+  }
+
   function objectiveSvg(label, size = 12) {
     const s = String(label || "").toLowerCase();
     let d = "M4 8l8-4 8 4-4 6-4 6-4-6zM8 10l4 3 4-3"; // Drake default
     if (s.includes("baron")) d = "M4 19h16l1-12-5 5-4-8-4 8-5-5z";
-    else if (s.includes("elder")) d = "M12 3l8 6-4 11H8L4 9zM12 8v8M9 12h6";
-    else if (s.includes("herald")) d = "M4 16l4-9h8l4 9zM9 16v3M15 16v3M12 10l2 3-2 2-2-2z";
-    else if (s.includes("grub")) d = "M7 6l3 3-3 3-3-3zM17 6l3 3-3 3-3-3zM12 13l3 3-3 3-3-3z";
-    else if (s.includes("tower") || s.includes("turret") || s.includes("inhib")) d = "M7 20h10M9 20V8l3-4 3 4v12M8 8h8";
-    else if (s.includes("->") || s.includes("→") || s.includes("kill")) d = "M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5";
+    else if (s.includes("elder") || s.includes("ancestral")) d = "M12 3l8 6-4 11H8L4 9zM12 8v8M9 12h6";
+    else if (s.includes("herald") || s.includes("héraut")) d = "M4 16l4-9h8l4 9zM9 16v3M15 16v3M12 10l2 3-2 2-2-2z";
+    else if (s.includes("grub") || s.includes("larve")) d = "M7 6l3 3-3 3-3-3zM17 6l3 3-3 3-3-3zM12 13l3 3-3 3-3-3z";
+    else if (s.includes("tower") || s.includes("turret") || s.includes("tourelle") || s.includes("inhib")) d = "M7 20h10M9 20V8l3-4 3 4v12M8 8h8";
+    else if (s.includes("->") || s.includes("→") || s.includes("kill") || s.includes("éliminé") || s.includes("sang")) d = "M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5";
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
   }
 
   function initials(name) {
     const t = String(name || "").trim();
-    if (!t || t.startsWith("Selecting") || t.startsWith("Pending")) return "--";
-    const words = t.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+    if (!t || t.startsWith("Selecting") || t.startsWith("Sélection") || t.startsWith("Pending") || t.startsWith("En attente")) return "--";
+    const words = t.split(/[^a-zA-Z0-9\u00C0-\u017F]+/).filter(Boolean);
     if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
     return t.slice(0, 2).toUpperCase();
   }
@@ -1276,7 +1706,8 @@ button:disabled {
   }
 
   function champBadge(id, name, size = 28, mine = true) {
-    const hasChamp = Number(id) > 0 || (name && !String(name).startsWith("Selecting") && name !== "Pending");
+    const n = String(name || "");
+    const hasChamp = Number(id) > 0 || (n && !n.startsWith("Selecting") && !n.startsWith("Sélection") && n !== "Pending" && n !== "En attente");
     return gameBadge("champion", id, esc(initials(name)), {
       size,
       empty: !hasChamp,
@@ -1285,12 +1716,12 @@ button:disabled {
   }
 
   function spellFallbackGlyph(id, name) {
-    const map = { 1: "CL", 3: "EX", 4: "FL", 6: "GH", 7: "HE", 11: "SM", 12: "TP", 13: "MN", 14: "IG", 21: "BA", 32: "MK" };
+    const map = { 1: "PU", 3: "FA", 4: "SE", 6: "FT", 7: "SO", 11: "CH", 12: "TP", 13: "CL", 14: "EM", 21: "BA", 32: "MQ" };
     return esc(map[Number(id)] || initials(name));
   }
 
   function shardFallbackGlyph(id) {
-    const map = { 5008: "+9", 5005: "AS", 5007: "AH", 5010: "MS", 5001: "HP", 5011: "HP+", 5013: "TEN" };
+    const map = { 5008: "+9", 5005: "VA", 5007: "AC", 5010: "VIT", 5001: "PV", 5011: "PV+", 5013: "TÉN" };
     return esc(map[Number(id)] || "*");
   }
 
@@ -1338,7 +1769,7 @@ button:disabled {
     }
     updateAlertChrome();
     playChime();
-    showToast(isTest ? "Alert chime tested" : "Alerts armed");
+    showToast(isTest ? t("chimeTested") : t("alertsEnabled"));
   }
 
   function updateAlertChrome() {
@@ -1349,11 +1780,11 @@ button:disabled {
     const card = document.getElementById("alert-setup-card");
     if (armed) {
       btn.className = "pill-btn active";
-      lbl.textContent = "Alerts ON";
+      lbl.textContent = t("alertsOn");
       card.style.display = "none";
     } else {
       btn.className = "pill-btn";
-      lbl.textContent = "Arm Alerts";
+      lbl.textContent = t("alerts");
       card.style.display = "flex";
     }
   }
@@ -1362,12 +1793,13 @@ button:disabled {
     if (!snap || !snap.alert_seq || snap.alert_seq <= ui.lastAlertSeq) return;
     const isInitial = ui.lastAlertSeq === 0;
     ui.lastAlertSeq = snap.alert_seq;
-    if (isInitial || !ui.alertsArmed || !snap.alert_title) return;
+    const msg = localizedAlert(snap);
+    if (isInitial || !ui.alertsArmed || !msg.title) return;
     playChime();
     if (navigator.vibrate) navigator.vibrate([120, 60, 140]);
     if ("Notification" in window && Notification.permission === "granted") {
       try {
-        new Notification(snap.alert_title, { body: snap.alert_body || "", tag: "hypatia-turn" });
+        new Notification(msg.title, { body: msg.body || "", tag: "hypatia-turn" });
       } catch (_) {}
     }
   }
@@ -1383,12 +1815,12 @@ button:disabled {
       });
       const json = await res.json();
       if (!res.ok || json.error) {
-        showToast(json.error || "Command rejected");
+        showToast(json.error || t("cmdRejected"));
         return;
       }
       if (json.state) renderState(json.state);
     } catch (_) {
-      showToast("Network error sending action");
+      showToast(t("netErr"));
     }
   }
 
@@ -1477,29 +1909,30 @@ button:disabled {
     const members = (l && l.members) || [];
     renderDock(`
       <div class="row-2">
-        <button class="btn-secondary" data-action="save-roles">Apply Lanes</button>
-        <button class="btn-primary" data-action="start-queue">Find Match</button>
+        <button class="btn-secondary" data-action="save-roles">${t("saveRoles")}</button>
+        <button class="btn-primary" data-action="start-queue">${t("findMatch")}</button>
       </div>
     `);
     return `
       <section class="card">
         <div class="heading-row">
-          <h2 class="h2">${esc((l && l.queue_name) || "League Lobby")}</h2>
-          <span class="meta mono">${members.length} player${members.length === 1 ? "" : "s"}</span>
+          <h2 class="h2">${esc((l && queueLabel(l.queue_name)) || t("leagueLobby"))}</h2>
+          <span class="meta mono">${esc(t("playersCount", members.length))}</span>
         </div>
-        <div class="meta">Tap Primary or Secondary slot below, then choose a role.</div>
+        <div class="meta">${t("lobbyHint")}</div>
         <div class="row-2">
           <button class="lane-card ${ui.selectingFirstRole ? "primary" : ""}" data-action="focus-slot" data-slot="1">
             <span class="roundel-dot" style="border-color:${laneInfo(ui.lobbyFirst).color};color:${laneInfo(ui.lobbyFirst).color}">${laneSvg(ui.lobbyFirst, 14)}</span>
-            <span>Primary: ${esc(laneInfo(ui.lobbyFirst).label)}</span>
+            <span>${t("primary")}: ${esc(laneInfo(ui.lobbyFirst).label)}</span>
           </button>
           <button class="lane-card ${!ui.selectingFirstRole ? "secondary" : ""}" data-action="focus-slot" data-slot="2">
             <span class="roundel-dot" style="border-color:${laneInfo(ui.lobbySecond).color};color:${laneInfo(ui.lobbySecond).color}">${laneSvg(ui.lobbySecond, 14)}</span>
-            <span>Secondary: ${esc(laneInfo(ui.lobbySecond).label)}</span>
+            <span>${t("secondary")}: ${esc(laneInfo(ui.lobbySecond).label)}</span>
           </button>
         </div>
         <div class="lane-grid">
-          ${LANE_META.map(m => {
+          ${LANE_META_BASE.map(item => {
+            const m = laneInfo(item.key);
             const cls = m.key === ui.lobbyFirst ? "primary" : (m.key === ui.lobbySecond ? "secondary" : "");
             return `<button class="lane-card ${cls}" data-action="pick-lane" data-lane="${esc(m.key)}">
               <span class="roundel-dot" style="border-color:${m.color};color:${m.color}">${laneSvg(m.key, 14)}</span>
@@ -1509,19 +1942,19 @@ button:disabled {
         </div>
       </section>
       ${members.length ? `<section class="card">
-        <h3 class="h3">Party Roster</h3>
+        <h3 class="h3">${t("lobbyMembers")}</h3>
         <div class="list-col">
           ${members.map(m => `
             <div class="row-card">
               <div>
-                <div style="font-weight:800">${esc(m.summoner_name)}${m.is_leader ? " (Leader)" : ""}</div>
+                <div style="font-weight:800">${esc(m.summoner_name)}${m.is_leader ? t("leaderTag") : ""}</div>
                 <div class="meta" style="display:flex;align-items:center;gap:6px;margin-top:2px">
                   <span style="display:inline-flex;align-items:center;gap:3px;color:${laneInfo(m.first_position).color}">${laneSvg(m.first_position, 12)}<span>${esc(laneInfo(m.first_position).label)}</span></span>
                   <span>/</span>
                   <span style="display:inline-flex;align-items:center;gap:3px;color:${laneInfo(m.second_position).color}">${laneSvg(m.second_position, 12)}<span>${esc(laneInfo(m.second_position).label)}</span></span>
                 </div>
               </div>
-              <span class="meta mono">${m.ready ? "READY" : "WAIT"}</span>
+              <span class="meta mono">${m.ready ? t("ready") : t("waiting")}</span>
             </div>`).join("")}
         </div>
       </section>` : ""}
@@ -1530,15 +1963,15 @@ button:disabled {
 
   function renderQueue(s) {
     const mm = s.matchmaking || {};
-    renderDock(`<button class="btn-danger" style="width:100%;height:44px" data-action="stop-queue">Cancel Queue</button>`);
+    renderDock(`<button class="btn-danger" style="width:100%;height:44px" data-action="stop-queue">${t("cancelQueue")}</button>`);
     return `
       <section class="card">
         <div class="heading-row">
-          <h2 class="h2">${esc(mm.queue_name || "Matchmaking")}</h2>
-          <span class="pill-btn signal">In Queue</span>
+          <h2 class="h2">${esc(queueLabel(mm.queue_name) || "Matchmaking")}</h2>
+          <span class="pill-btn signal">${t("inQueue")}</span>
         </div>
         <div class="timer-readout">${fmtSec(mm.time_in_queue_sec)}</div>
-        <div class="meta" style="text-align:center">Estimated queue wait: ${fmtSec(mm.estimated_queue_time_sec || 60)}</div>
+        <div class="meta" style="text-align:center">${esc(t("estWait", fmtSec(mm.estimated_queue_time_sec || 60)))}</div>
       </section>
     `;
   }
@@ -1550,13 +1983,13 @@ button:disabled {
     return `
       <section class="card ${accepted ? "card-green" : "card-spotlight"}">
         <div class="heading-row">
-          <h2 class="h2">${accepted ? "Match Accepted" : "Match Found"}</h2>
+          <h2 class="h2">${accepted ? t("matchAccepted") : t("matchFound")}</h2>
           <span class="timer-inline">${esc(mm.ready_check_timer_sec || 10)}s</span>
         </div>
-        <div class="meta">${accepted ? "Waiting for remaining players to accept." : "Tap ACCEPT now before the timer expires."}</div>
+        <div class="meta">${accepted ? t("waitingOthers") : t("acceptBefore")}</div>
         ${!accepted ? `
-          <button class="btn-accept" data-action="accept-ready">ACCEPT MATCH</button>
-          <button class="btn-danger" data-action="decline-ready">Decline</button>
+          <button class="btn-accept" data-action="accept-ready">${t("acceptMatch")}</button>
+          <button class="btn-danger" data-action="decline-ready">${t("decline")}</button>
         ` : ""}
       </section>
     `;
@@ -1566,12 +1999,13 @@ button:disabled {
     const cs = s.champ_select;
     if (!cs) {
       renderDock("");
-      return `<section class="card"><h2 class="h2">Champion Select</h2><div class="meta">Syncing draft state...</div></section>`;
+      return `<section class="card"><h2 class="h2">${t("champSelect")}</h2><div class="meta">${t("syncDraft")}</div></section>`;
     }
     syncCustomRunesDefaults(cs);
     const act = cs.active_action;
     const isTurn = Boolean(act && act.is_my_turn && !act.completed);
-    const actWord = act && act.action_type === "ban" ? "Ban" : "Pick";
+    const isBan = Boolean(act && act.action_type === "ban");
+    const actVerb = isBan ? t("actBan") : t("actPick");
 
     // Persistent compact team strip with role emblems, portraits, names, and ban chips
     const myBans = cs.my_team_bans || [];
@@ -1580,33 +2014,33 @@ button:disabled {
     const theirBanIds = cs.their_team_ban_ids || [];
     const banChips = (names, ids, mine) => names.length
       ? names.map((n, i) => `<span class="ban-chip ${mine ? "blue" : "red"}">${champBadge(ids[i] || 0, n, 18, mine)}<span>${esc(n)}</span></span>`).join("")
-      : `<span>None</span>`;
+      : `<span>${t("none")}</span>`;
 
     const teamStrip = `
-      <div class="team-strip" aria-label="Team draft summary">
+      <div class="team-strip" aria-label="${esc(t("teamStripAria"))}">
         <div class="team-slots-5">
           ${(cs.my_team || []).map(a => {
             const role = laneInfo(a.assigned_position);
             return `<div class="slot-mini ${a.is_self ? "self" : ""}">
               <div class="slot-mini-role" style="color:${role.color}">${laneSvg(role.key, 12)}<span>${esc(role.code)}</span></div>
               ${champBadge(a.champion_id, a.champion_name, 26, true)}
-              <div class="slot-mini-champ">${esc(a.champion_name || "Pending")}</div>
+              <div class="slot-mini-champ">${esc(a.champion_name || t("pending"))}</div>
             </div>`;
           }).join("")}
         </div>
         <div class="ban-groups">
-          <div class="ban-row"><span class="ban-side-lbl" style="color:var(--blue)">Blue:</span>${banChips(myBans, myBanIds, true)}</div>
-          <div class="ban-row"><span class="ban-side-lbl" style="color:var(--red)">Red:</span>${banChips(theirBans, theirBanIds, false)}</div>
+          <div class="ban-row"><span class="ban-side-lbl" style="color:var(--blue)">${t("blueSide")}</span>${banChips(myBans, myBanIds, true)}</div>
+          <div class="ban-row"><span class="ban-side-lbl" style="color:var(--red)">${t("redSide")}</span>${banChips(theirBans, theirBanIds, false)}</div>
         </div>
       </div>
     `;
 
     // Bottom Dock when acting
     if (isTurn && act) {
-      const hovered = act.champion_name || (act.action_type === "ban" ? "Choose ban below" : "Choose champion below");
+      const hovered = act.champion_name || (isBan ? t("chooseBan") : t("choosePick"));
       renderDock(`
         <button class="btn-primary" data-action="lock-action" data-action-id="${act.action_id}" ${act.champion_id > 0 ? "" : "disabled"}>
-          Lock ${esc(actWord)}: ${esc(hovered)}
+          ${esc(actVerb)} : ${esc(hovered)}
         </button>
       `);
     } else {
@@ -1624,11 +2058,11 @@ button:disabled {
       const selectedId = act ? act.champion_id : 0;
       tabBody = `
         <section class="card">
-          <input id="champ-search" class="search-input" type="search" placeholder="Filter champion for ${esc(actWord)}..." value="${esc(ui.champQuery)}">
+          <input id="champ-search" class="search-input" type="search" placeholder="${esc(isBan ? t("filterBan") : t("filterPick"))}" value="${esc(ui.champQuery)}">
           <div class="filter-pills">
             ${["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"].map(rk => `
               <button class="filter-pill ${ui.champRole === rk ? "active" : ""}" data-action="champ-role" data-role="${rk}">
-                ${rk === "ALL" ? "All" : `${laneSvg(rk, 12, ui.champRole === rk ? "currentColor" : laneInfo(rk).color)}<span>${esc(laneInfo(rk).label)}</span>`}
+                ${rk === "ALL" ? t("all") : `${laneSvg(rk, 12, ui.champRole === rk ? "currentColor" : laneInfo(rk).color)}<span>${esc(laneInfo(rk).label)}</span>`}
               </button>
             `).join("")}
           </div>
@@ -1638,7 +2072,7 @@ button:disabled {
                 ${champBadge(c.id, c.name, 34, true)}
                 <div class="champ-card-meta">
                   <div class="champ-card-name">${esc(c.name)}</div>
-                  <div class="champ-card-role">${(c.roles || []).length ? (c.roles || []).slice(0, 2).map(r => `<span style="display:inline-flex;align-items:center;gap:2px">${laneSvg(r, 11, laneInfo(r).color)}<span>${esc(laneInfo(r).label)}</span></span>`).join(" ") : "Flex"}</div>
+                  <div class="champ-card-role">${(c.roles || []).length ? (c.roles || []).slice(0, 2).map(r => `<span style="display:inline-flex;align-items:center;gap:2px">${laneSvg(r, 11, laneInfo(r).color)}<span>${esc(laneInfo(r).label)}</span></span>`).join(" ") : esc(t("fill"))}</div>
                 </div>
               </button>
             `).join("")}
@@ -1649,7 +2083,7 @@ button:disabled {
       const skins = cs.available_skins || [];
       tabBody = `
         <section class="card">
-          <h3 class="h3">Champion Skins</h3>
+          <h3 class="h3">${t("champSkins")}</h3>
           <div class="list-col">
             ${skins.length ? skins.map(sk => `
               <button class="row-card ${sk.selected ? "selected" : ""}" data-action="set-skin" data-id="${sk.id}">
@@ -1657,56 +2091,59 @@ button:disabled {
                   ${gameBadge("skin", sk.id, esc(initials(sk.name)), { size: 36, className: "blue" })}
                   <span style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${esc(sk.name)}</span>
                 </span>
-                <span class="meta mono">${sk.selected ? "EQUIPPED" : "Select"}</span>
+                <span class="meta mono">${sk.selected ? t("equipped") : t("pickAction")}</span>
               </button>
-            `).join("") : `<div class="meta">Select a champion to browse available skins.</div>`}
+            `).join("") : `<div class="meta">${t("selectChampSkins")}</div>`}
           </div>
         </section>
       `;
     } else if (ui.csTab === "loadout") {
       const spells = cs.available_spells || [];
-      const s1 = spells.find(sp => sp.id === cs.spell1_id) || { id: cs.spell1_id || 4, name: "Flash", cooldown: "300s" };
-      const s2 = spells.find(sp => sp.id === cs.spell2_id) || { id: cs.spell2_id || 14, name: "Ignite", cooldown: "180s" };
+      const s1Raw = spells.find(sp => sp.id === cs.spell1_id) || { id: cs.spell1_id || 4, name: "Flash", cooldown: "300s" };
+      const s2Raw = spells.find(sp => sp.id === cs.spell2_id) || { id: cs.spell2_id || 14, name: "Ignite", cooldown: "180s" };
+      const s1Name = spellName(s1Raw.id, s1Raw.name);
+      const s2Name = spellName(s2Raw.id, s2Raw.name);
       const pages = [...(cs.rune_pages || []), ...(cs.recommended_rune_pages || [])];
-      const pTree = (cs.rune_trees || []).find(t => t.id === ui.customPrimary);
-      const sTree = (cs.rune_trees || []).find(t => t.id === ui.customSub);
+      const pTree = (cs.rune_trees || []).find(tr => tr.id === ui.customPrimary);
+      const sTree = (cs.rune_trees || []).find(tr => tr.id === ui.customSub);
 
       tabBody = `
         <section class="card">
           <div class="heading-row">
-            <h3 class="h3">Summoner Spells</h3>
+            <h3 class="h3">${t("sumSpells")}</h3>
             <button class="btn-secondary" style="height:30px;font-size:11px" data-action="swap-spells">
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/>
               </svg>
-              Swap D / F
+              ${t("swapDF")}
             </button>
           </div>
           <div class="spell-pair">
             <button class="spell-box ${ui.spellSlot === 1 ? "active" : ""}" data-action="focus-spell-slot" data-slot="1">
-              ${gameBadge("spell", s1.id, spellFallbackGlyph(s1.id, s1.name), { size: 32 })}
+              ${gameBadge("spell", s1Raw.id, spellFallbackGlyph(s1Raw.id, s1Name), { size: 32 })}
               <div>
-                <div class="meta mono">SLOT D</div>
-                <div style="font-weight:800">${esc(s1.name)}</div>
-                <div class="meta">${esc(s1.cooldown)}</div>
+                <div class="meta mono">${t("slotD")}</div>
+                <div style="font-weight:800">${esc(s1Name)}</div>
+                <div class="meta">${esc(s1Raw.cooldown)}</div>
               </div>
             </button>
-            <div style="display:flex;align-items:center" class="meta">to</div>
+            <div style="display:flex;align-items:center" class="meta">⇄</div>
             <button class="spell-box ${ui.spellSlot === 2 ? "active" : ""}" data-action="focus-spell-slot" data-slot="2">
-              ${gameBadge("spell", s2.id, spellFallbackGlyph(s2.id, s2.name), { size: 32 })}
+              ${gameBadge("spell", s2Raw.id, spellFallbackGlyph(s2Raw.id, s2Name), { size: 32 })}
               <div>
-                <div class="meta mono">SLOT F</div>
-                <div style="font-weight:800">${esc(s2.name)}</div>
-                <div class="meta">${esc(s2.cooldown)}</div>
+                <div class="meta mono">${t("slotF")}</div>
+                <div style="font-weight:800">${esc(s2Name)}</div>
+                <div class="meta">${esc(s2Raw.cooldown)}</div>
               </div>
             </button>
           </div>
           <div class="perk-row cols-flex">
             ${spells.map(sp => {
               const active = (ui.spellSlot === 1 ? cs.spell1_id : cs.spell2_id) === sp.id;
+              const nm = spellName(sp.id, sp.name);
               return `<button class="perk-chip ${active ? "active" : ""}" data-action="pick-spell" data-id="${sp.id}">
-                ${gameBadge("spell", sp.id, spellFallbackGlyph(sp.id, sp.name), { size: 22 })}
-                <span class="perk-chip-lbl">${esc(sp.name)}</span>
+                ${gameBadge("spell", sp.id, spellFallbackGlyph(sp.id, nm), { size: 22 })}
+                <span class="perk-chip-lbl">${esc(nm)}</span>
               </button>`;
             }).join("")}
           </div>
@@ -1714,10 +2151,10 @@ button:disabled {
 
         <section class="card">
           <div class="heading-row">
-            <h3 class="h3">Runes</h3>
+            <h3 class="h3">${t("runes")}</h3>
             <div class="row-2" style="width:168px;gap:4px">
-              <button class="filter-pill ${ui.runeSubView === "saved" ? "active" : ""}" data-action="rune-sub" data-mode="saved">Pages</button>
-              <button class="filter-pill ${ui.runeSubView === "custom" ? "active" : ""}" data-action="rune-sub" data-mode="custom">Builder</button>
+              <button class="filter-pill ${ui.runeSubView === "saved" ? "active" : ""}" data-action="rune-sub" data-mode="saved">${t("pages")}</button>
+              <button class="filter-pill ${ui.runeSubView === "custom" ? "active" : ""}" data-action="rune-sub" data-mode="custom">${t("builder")}</button>
             </div>
           </div>
 
@@ -1725,34 +2162,39 @@ button:disabled {
             <div class="list-col">
               ${pages.map(pg => {
                 const keystoneId = (pg.selected_perk_ids || [])[0] || 0;
+                const pStyle = styleName(pg.primary_style_id, pg.primary_style_name);
+                const sStyle = styleName(pg.sub_style_id, pg.sub_style_name);
                 return `<button class="row-card ${pg.current ? "selected" : ""}" data-action="select-rune-page" data-id="${pg.id}" data-is-preset="${pg.is_preset ? "1" : "0"}" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc((pg.selected_perk_ids || []).join(","))}">
                   <div style="display:flex;align-items:center;gap:10px;min-width:0">
                     <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0">
                       ${gameBadge("perk", keystoneId, esc(initials(pg.keystone_name)), { size: 28, className: "round" })}
-                      ${gameBadge("style", pg.primary_style_id, esc(initials(pg.primary_style_name)), { size: 22, className: "round" })}
-                      ${gameBadge("style", pg.sub_style_id, esc(initials(pg.sub_style_name)), { size: 18, className: "round" })}
+                      ${gameBadge("style", pg.primary_style_id, esc(initials(pStyle)), { size: 22, className: "round" })}
+                      ${gameBadge("style", pg.sub_style_id, esc(initials(sStyle)), { size: 18, className: "round" })}
                     </span>
                     <div style="min-width:0">
                       <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pg.name)}</div>
-                      <div class="meta">${esc(pg.primary_style_name)} + ${esc(pg.sub_style_name)} · ${esc(pg.keystone_name)}</div>
+                      <div class="meta">${esc(pStyle)} + ${esc(sStyle)} · ${esc(pg.keystone_name)}</div>
                     </div>
                   </div>
-                  <span class="meta mono">${pg.current ? "ACTIVE" : (pg.is_preset ? "PRESET" : "EQUIP")}</span>
+                  <span class="meta mono">${pg.current ? t("activeTag") : (pg.is_preset ? t("presetTag") : t("equipTag"))}</span>
                 </button>`;
               }).join("")}
             </div>
           ` : `
             <div class="list-col">
-              <input id="custom-rune-name" class="search-input" type="text" value="${esc(ui.customName)}" placeholder="Rune page name">
-              <div class="meta mono">Primary Path</div>
+              <input id="custom-rune-name" class="search-input" type="text" value="${esc(ui.customName)}" placeholder="${esc(t("runeNamePh"))}">
+              <div class="meta mono">${t("priPath")}</div>
               <div class="perk-row cols-flex">
-                ${(cs.rune_trees || []).map(t => `<button class="perk-chip ${t.id === ui.customPrimary ? "active" : ""}" data-action="rune-pri" data-id="${t.id}">
-                  ${gameBadge("style", t.id, esc(initials(t.name)), { size: 20, className: "round" })}
-                  <span class="perk-chip-lbl">${esc(t.name)}</span>
-                </button>`).join("")}
+                ${(cs.rune_trees || []).map(tr => {
+                  const tname = styleName(tr.id, tr.name);
+                  return `<button class="perk-chip ${tr.id === ui.customPrimary ? "active" : ""}" data-action="rune-pri" data-id="${tr.id}">
+                    ${gameBadge("style", tr.id, esc(initials(tname)), { size: 20, className: "round" })}
+                    <span class="perk-chip-lbl">${esc(tname)}</span>
+                  </button>`;
+                }).join("")}
               </div>
               ${pTree ? `
-                <div class="meta mono">Keystone</div>
+                <div class="meta mono">${t("keystone")}</div>
                 <div class="perk-row ${pTree.keystones.length === 3 ? "" : "cols-flex"}">
                   ${pTree.keystones.map(k => `<button class="perk-chip ${ui.customPerks[0] === k.id ? "active" : ""}" data-action="rune-p" data-slot="0" data-id="${k.id}">
                     ${gameBadge("perk", k.id, esc(initials(k.name)), { size: 24, className: "round" })}
@@ -1769,12 +2211,15 @@ button:disabled {
                 `).join("")}
               ` : ""}
               <div class="divider"></div>
-              <div class="meta mono">Secondary Path (choose 2 from distinct rows)</div>
+              <div class="meta mono">${t("secPath")}</div>
               <div class="perk-row cols-flex">
-                ${(cs.rune_trees || []).filter(t => t.id !== ui.customPrimary).map(t => `<button class="perk-chip ${t.id === ui.customSub ? "sub-active" : ""}" data-action="rune-sub-tree" data-id="${t.id}">
-                  ${gameBadge("style", t.id, esc(initials(t.name)), { size: 20, className: "round" })}
-                  <span class="perk-chip-lbl">${esc(t.name)}</span>
-                </button>`).join("")}
+                ${(cs.rune_trees || []).filter(tr => tr.id !== ui.customPrimary).map(tr => {
+                  const tname = styleName(tr.id, tr.name);
+                  return `<button class="perk-chip ${tr.id === ui.customSub ? "sub-active" : ""}" data-action="rune-sub-tree" data-id="${tr.id}">
+                    ${gameBadge("style", tr.id, esc(initials(tname)), { size: 20, className: "round" })}
+                    <span class="perk-chip-lbl">${esc(tname)}</span>
+                  </button>`;
+                }).join("")}
               </div>
               ${sTree ? ["slot1", "slot2", "slot3"].map(rowKey => `
                 <div class="perk-row">
@@ -1788,16 +2233,16 @@ button:disabled {
                 </div>
               `).join("") : ""}
               <div class="divider"></div>
-              <div class="meta mono">Stat Shards (3 slots)</div>
+              <div class="meta mono">${t("statShards")}</div>
               ${STAT_SHARD_ROWS.map(sr => `
                 <div class="perk-row">
-                  ${sr.options.map(op => `<button class="perk-chip ${ui.customPerks[sr.slot] === op.id ? "active" : ""}" data-action="rune-shard" data-slot="${sr.slot}" data-id="${op.id}">
-                    ${gameBadge("perk", op.id, shardFallbackGlyph(op.id), { size: 20, className: "round" })}
-                    <span class="perk-chip-lbl">${esc(op.name)}</span>
+                  ${sr.options.map(id => `<button class="perk-chip ${ui.customPerks[sr.slot] === id ? "active" : ""}" data-action="rune-shard" data-slot="${sr.slot}" data-id="${id}">
+                    ${gameBadge("perk", id, shardFallbackGlyph(id), { size: 20, className: "round" })}
+                    <span class="perk-chip-lbl">${esc(shardName(id))}</span>
                   </button>`).join("")}
                 </div>
               `).join("")}
-              <button class="btn-primary" data-action="save-custom-runes">Save & Equip All 9 Perks</button>
+              <button class="btn-primary" data-action="save-custom-runes">${t("save9Runes")}</button>
             </div>
           `}
         </section>
@@ -1806,24 +2251,24 @@ button:disabled {
       // Tab: Team (Position Swaps, Pick Swaps, Champion Trades, Enemies)
       const incoming = cs.incoming_swaps || [];
       const spells = cs.available_spells || [];
-      const spellLabel = id => (spells.find(sp => sp.id === id) || {}).name || "";
+      const spellLabel = id => spellName(id, (spells.find(sp => sp.id === id) || {}).name || "");
       tabBody = `
         ${incoming.length ? `<section class="card card-spotlight">
-          <h3 class="h3">Incoming Requests</h3>
+          <h3 class="h3">${t("incomingReq")}</h3>
           ${incoming.map(sw => `
             <div class="row-card" style="flex-direction:column;align-items:stretch">
-              <div style="font-weight:800">${esc(sw.caller_name)} · ${esc(sw.kind.replace(/_/g, " "))}</div>
+              <div style="font-weight:800">${esc(sw.caller_name)} · ${esc(swapKindLabel(sw.kind))}</div>
               <div class="meta">${esc(sw.detail)}</div>
               <div class="row-2" style="margin-top:6px">
-                <button class="btn-secondary" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="1">Accept</button>
-                <button class="btn-danger" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="0">Decline</button>
+                <button class="btn-secondary" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="1">${t("accept")}</button>
+                <button class="btn-danger" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="0">${t("decline")}</button>
               </div>
             </div>
           `).join("")}
         </section>` : ""}
 
         <section class="card">
-          <h3 class="h3">Allies & Swaps</h3>
+          <h3 class="h3">${t("alliesSwaps")}</h3>
           <div class="list-col">
             ${(cs.my_team || []).map(a => {
               const role = laneInfo(a.assigned_position);
@@ -1834,7 +2279,7 @@ button:disabled {
                   <div style="display:flex;align-items:center;gap:10px;min-width:0">
                     ${champBadge(a.champion_id, a.champion_name, 38, true)}
                     <div style="min-width:0">
-                      <div style="font-weight:800">${esc(a.champion_name || "Pending")} ${a.is_self ? "(You)" : ""}</div>
+                      <div style="font-weight:800">${esc(a.champion_name || t("pending"))} ${a.is_self ? t("youTag") : ""}</div>
                       <div class="meta" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
                         <span style="display:inline-flex;align-items:center;gap:3px;color:${role.color}">${laneSvg(role.key, 12)}<span>${esc(role.label)}</span></span>
                         <span>· ${esc(a.summoner_name)}</span>
@@ -1848,19 +2293,19 @@ button:disabled {
                 ${!a.is_self ? `<div class="row-3" style="margin-top:6px">
                   ${a.position_swap_id != null && a.position_swap_state !== "INVALID" ? (
                     a.position_swap_state === "SENT"
-                      ? `<button class="btn-secondary" data-action="cancel-swap" data-kind="position" data-id="${a.position_swap_id}">Cancel Lane</button>`
-                      : `<button class="btn-secondary" data-action="req-swap" data-kind="position" data-id="${a.position_swap_id}">Swap Lane</button>`
-                  ) : `<button class="btn-secondary" disabled>Lane N/A</button>`}
+                      ? `<button class="btn-secondary" data-action="cancel-swap" data-kind="position" data-id="${a.position_swap_id}">${t("cancelLane")}</button>`
+                      : `<button class="btn-secondary" data-action="req-swap" data-kind="position" data-id="${a.position_swap_id}">${t("swapLane")}</button>`
+                  ) : `<button class="btn-secondary" disabled>${t("laneNA")}</button>`}
                   ${a.pick_swap_id != null && a.pick_swap_state !== "INVALID" ? (
                     a.pick_swap_state === "SENT"
-                      ? `<button class="btn-secondary" data-action="cancel-swap" data-kind="pick" data-id="${a.pick_swap_id}">Cancel Order</button>`
-                      : `<button class="btn-secondary" data-action="req-swap" data-kind="pick" data-id="${a.pick_swap_id}">Swap Order</button>`
-                  ) : `<button class="btn-secondary" disabled>Order N/A</button>`}
+                      ? `<button class="btn-secondary" data-action="cancel-swap" data-kind="pick" data-id="${a.pick_swap_id}">${t("cancelOrder")}</button>`
+                      : `<button class="btn-secondary" data-action="req-swap" data-kind="pick" data-id="${a.pick_swap_id}">${t("swapOrder")}</button>`
+                  ) : `<button class="btn-secondary" disabled>${t("orderNA")}</button>`}
                   ${a.trade_id != null && a.trade_state !== "INVALID" ? (
                     a.trade_state === "SENT"
-                      ? `<button class="btn-secondary" data-action="cancel-swap" data-kind="trade" data-id="${a.trade_id}">Cancel Trade</button>`
-                      : `<button class="btn-secondary" data-action="req-swap" data-kind="trade" data-id="${a.trade_id}">Trade Champ</button>`
-                  ) : `<button class="btn-secondary" disabled>Trade N/A</button>`}
+                      ? `<button class="btn-secondary" data-action="cancel-swap" data-kind="trade" data-id="${a.trade_id}">${t("cancelTrade")}</button>`
+                      : `<button class="btn-secondary" data-action="req-swap" data-kind="trade" data-id="${a.trade_id}">${t("tradeChamp")}</button>`
+                  ) : `<button class="btn-secondary" disabled>${t("tradeNA")}</button>`}
                 </div>` : ""}
               </div>`;
             }).join("")}
@@ -1868,9 +2313,9 @@ button:disabled {
         </section>
 
         <section class="card">
-          <h3 class="h3">Enemy Team</h3>
+          <h3 class="h3">${t("enemyTeam")}</h3>
           <div style="display:flex;flex-wrap:wrap;gap:6px">
-            ${(cs.their_team || []).map(e => `<span class="ban-chip red">${champBadge(e.champion_id, e.champion_name, 22, false)}<span>${esc(e.champion_name || "Pending")}</span></span>`).join("")}
+            ${(cs.their_team || []).map(e => `<span class="ban-chip red">${champBadge(e.champion_id, e.champion_name, 22, false)}<span>${esc(e.champion_name || t("pending"))}</span></span>`).join("")}
           </div>
         </section>
       `;
@@ -1880,8 +2325,8 @@ button:disabled {
       <section class="card ${isTurn ? "card-spotlight" : ""}">
         <div class="heading-row">
           <div>
-            <h2 class="h2">${isTurn ? "Your Turn to " + esc(actWord) : esc(cs.sub_phase.replace(/_/g, " "))}</h2>
-            <div class="meta">${esc(laneInfo(cs.assigned_position).label)} · ${esc(cs.queue_type.replace(/_/g, " "))}</div>
+            <h2 class="h2">${isTurn ? (isBan ? t("turnBan") : t("turnPick")) : esc(subPhaseLabel(cs.sub_phase))}</h2>
+            <div class="meta">${esc(laneInfo(cs.assigned_position).label)} · ${esc(queueLabel(cs.queue_type))}</div>
           </div>
           <div class="timer-inline">${esc(cs.time_left_sec)}s</div>
         </div>
@@ -1891,11 +2336,11 @@ button:disabled {
 
       <div class="tabs" role="tablist">
         ${[
-          { id: "pick", label: "Pick" },
-          { id: "skins", label: "Skins" },
-          { id: "loadout", label: "Loadout" },
-          { id: "team", label: "Team" }
-        ].map(t => `<button class="tab-btn ${ui.csTab === t.id ? "active" : ""}" role="tab" aria-selected="${ui.csTab === t.id}" data-action="cs-tab" data-tab="${t.id}">${esc(t.label)}</button>`).join("")}
+          { id: "pick", label: t("tabPick") },
+          { id: "skins", label: t("tabSkins") },
+          { id: "loadout", label: t("tabLoadout") },
+          { id: "team", label: t("tabTeam") }
+        ].map(tb => `<button class="tab-btn ${ui.csTab === tb.id ? "active" : ""}" role="tab" aria-selected="${ui.csTab === tb.id}" data-action="cs-tab" data-tab="${tb.id}">${esc(tb.label)}</button>`).join("")}
       </div>
 
       ${tabBody}
@@ -1906,7 +2351,7 @@ button:disabled {
     renderDock("");
     const lg = s.live_game;
     if (!lg) {
-      return `<section class="card"><h2 class="h2">Live Match</h2><div class="meta">Waiting for League Live Client Data on :2999...</div></section>`;
+      return `<section class="card"><h2 class="h2">${t("liveMatch")}</h2><div class="meta">${t("waitingLive")}</div></section>`;
     }
     const list = ui.liveTab === "allies" ? (lg.allies || []) : (lg.enemies || []);
     return `
@@ -1919,7 +2364,7 @@ button:disabled {
           </div>
           <div style="text-align:right">
             <div class="timer-inline mono">${esc(lg.clock)}</div>
-            <div class="meta mono">Towers ${lg.my_towers} / ${lg.enemy_towers}</div>
+            <div class="meta mono">${esc(t("towers", lg.my_towers, lg.enemy_towers))}</div>
           </div>
         </div>
         <div class="divider"></div>
@@ -1927,8 +2372,8 @@ button:disabled {
           <div style="display:flex;align-items:center;gap:10px;min-width:0">
             ${champBadge(lg.active_champion_id, lg.active_champion, 42, true)}
             <div>
-              <div style="font-weight:800;font-size:18px">${esc(lg.active_champion)} · Lvl ${lg.level}</div>
-              <div class="meta">${lg.cs} CS · ${lg.current_gold} Gold</div>
+              <div style="font-weight:800;font-size:18px">${esc(lg.active_champion)} · ${esc(t("lvl", lg.level))}</div>
+              <div class="meta">${lg.cs} CS · ${esc(t("gold", lg.current_gold))}</div>
             </div>
           </div>
           <span class="pill-btn signal mono" style="font-size:12px">${esc(lg.kda)}</span>
@@ -1936,7 +2381,7 @@ button:disabled {
       </section>
 
       ${(lg.objectives || []).length ? `<section class="card">
-        <h3 class="h3">Objectives</h3>
+        <h3 class="h3">${t("objectives")}</h3>
         <div class="obj-strip">
           ${(lg.objectives || []).map(o => `
             <span class="obj-chip ${o.mine ? "blue" : "red"}">
@@ -1948,7 +2393,7 @@ button:disabled {
       </section>` : ""}
 
       ${(lg.feed || []).length ? `<section class="card">
-        <h3 class="h3">Recent Match Events</h3>
+        <h3 class="h3">${t("recentEvents")}</h3>
         <div>
           ${lg.feed.map(f => `
             <div class="feed-item">
@@ -1961,8 +2406,8 @@ button:disabled {
       </section>` : ""}
 
       <div class="tabs tabs-2" role="tablist">
-        <button class="tab-btn ${ui.liveTab === "allies" ? "active" : ""}" data-action="live-tab" data-tab="allies">Allies</button>
-        <button class="tab-btn ${ui.liveTab === "enemies" ? "active" : ""}" data-action="live-tab" data-tab="enemies">Enemies</button>
+        <button class="tab-btn ${ui.liveTab === "allies" ? "active" : ""}" data-action="live-tab" data-tab="allies">${t("allies")}</button>
+        <button class="tab-btn ${ui.liveTab === "enemies" ? "active" : ""}" data-action="live-tab" data-tab="enemies">${t("enemies")}</button>
       </div>
 
       <section class="card">
@@ -1974,10 +2419,10 @@ button:disabled {
               <div style="display:flex;align-items:center;gap:10px;min-width:0">
                 ${champBadge(p.champion_id, p.champion, 34, mine)}
                 <div style="min-width:0">
-                  <div style="font-weight:800">${esc(p.champion)} ${p.is_self ? "(You)" : ""}</div>
+                  <div style="font-weight:800">${esc(p.champion)} ${p.is_self ? t("youTag") : ""}</div>
                   <div class="meta" style="display:flex;align-items:center;gap:5px">
                     <span style="display:inline-flex;align-items:center;gap:3px;color:${role.color}">${laneSvg(role.key, 12)}<span>${esc(role.label)}</span></span>
-                    <span>· ${p.dead ? `<span style="color:var(--red);font-weight:700">Respawn ${p.respawn_sec}s</span>` : `Lvl ${p.level} · ${p.cs} CS`}</span>
+                    <span>· ${p.dead ? `<span style="color:var(--red);font-weight:700">${esc(t("respawn", p.respawn_sec))}</span>` : `${esc(t("lvl", p.level))} · ${p.cs} CS`}</span>
                   </div>
                 </div>
               </div>
@@ -1991,27 +2436,31 @@ button:disabled {
 
   function renderIdle(s) {
     renderDock("");
-    const title = (s.phase === "EndOfGame" || s.phase === "PreEndOfGame")
-      ? "Match Completed"
-      : "Standing By";
-    const detail = (s.phase === "EndOfGame" || s.phase === "PreEndOfGame")
-      ? "Full post-game damage and gold telemetry is available on Hypatia Desktop."
-      : "Open a League lobby on your PC or toggle Demo mode to control draft from here.";
+    const eog = s.phase === "EndOfGame" || s.phase === "PreEndOfGame";
     return `
       <section class="card">
-        <h2 class="h2">${title}</h2>
-        <div class="meta">${detail}</div>
+        <h2 class="h2">${eog ? t("matchCompleted") : t("standingBy")}</h2>
+        <div class="meta">${eog ? t("eogDetail") : t("idleDetail")}</div>
       </section>
     `;
   }
 
   function renderState(s) {
+    if (s && (s.lang === "fr" || s.lang === "en")) {
+      if (ui.lastServerLang && ui.lastServerLang !== s.lang) {
+        ui.langOverride = "";
+        localStorage.removeItem("hypatia_lang_override");
+      }
+      ui.serverLang = s.lang;
+      ui.lastServerLang = s.lang;
+      localStorage.setItem("hypatia_last_server_lang", s.lang);
+    }
     ui.state = s;
+    applyStaticChrome();
     fireAlertIfNew(s);
-    updateAlertChrome();
 
     document.getElementById("summoner-line").textContent =
-      (s.summoner_name || "Hypatia") + " · " + (s.phase || "None");
+      (s.summoner_name || "Hypatia") + " · " + phaseLabel(s.phase);
     const avatarKey = `${s.profile_icon_id || 0}:${s.summoner_name || ""}`;
     if (ui.lastAvatarKey !== avatarKey) {
       ui.lastAvatarKey = avatarKey;
@@ -2061,6 +2510,19 @@ button:disabled {
   document.getElementById("theme-btn").addEventListener("click", () => {
     applyTheme(ui.theme === "dark" ? "light" : "dark");
   });
+  document.getElementById("lang-btn").addEventListener("click", () => {
+    const next = activeLang() === "fr" ? "en" : "fr";
+    if (next === ui.serverLang) {
+      ui.langOverride = "";
+      localStorage.removeItem("hypatia_lang_override");
+    } else {
+      ui.langOverride = next;
+      localStorage.setItem("hypatia_lang_override", next);
+    }
+    applyStaticChrome();
+    if (ui.state) renderState(ui.state);
+    showToast(t("langSwitched"));
+  });
   document.getElementById("demo-toggle-btn").addEventListener("click", () => {
     ui.demoOpen = !ui.demoOpen;
     localStorage.setItem("hypatia_demo_open", ui.demoOpen ? "1" : "0");
@@ -2073,6 +2535,7 @@ button:disabled {
       if (ui.state) renderState(ui.state);
     } else if (ev.target.id === "custom-rune-name") {
       ui.customName = ev.target.value;
+      ui.customNameEdited = true;
     }
   });
 
@@ -2193,7 +2656,7 @@ button:disabled {
     } else if (act === "save-custom-runes") {
       sendCmd({
         cmd: "save_rune_page",
-        name: (ui.customName || "Hypatia Page").trim(),
+        name: (ui.customName || t("defaultSaveName")).trim(),
         primary_style_id: ui.customPrimary,
         sub_style_id: ui.customSub,
         selected_perk_ids: ui.customPerks.slice(0, 9)
@@ -2215,6 +2678,7 @@ button:disabled {
     }
   });
 
+  applyStaticChrome();
   fetchState();
   connectWs();
 })();

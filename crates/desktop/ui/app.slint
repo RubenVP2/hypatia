@@ -193,7 +193,7 @@ component RosterRow inherits Rectangle {
                     spacing: 8px;
                     alignment: start;
                     Text {
-                        text: root.ally.champion != "" ? root.ally.champion : "Waiting for pick";
+                        text: root.ally.champion != "" ? root.ally.champion : (Theme.fr ? "En attente de choix" : "Waiting for pick");
                         color: root.ally.champion != "" ? Theme.text : Theme.muted;
                         font-size: Type.name;
                         font-weight: 800;
@@ -207,7 +207,7 @@ component RosterRow inherits Rectangle {
                         border-radius: 3px;
                         background: Theme.signal;
                         turn-lbl := Text {
-                            text: "ACTING NOW";
+                            text: Theme.fr ? "À SON TOUR" : "ACTING NOW";
                             color: #0f1116;
                             font-family: Type.mono-family;
                             font-size: 11px;
@@ -280,9 +280,9 @@ component RosterRow inherits Rectangle {
             Text {
                 text: Theme.lane-name(root.ally.lane)
                     + " · "
-                    + (root.ally.is-self ? "You · " : "")
+                    + (root.ally.is-self ? (Theme.fr ? "Vous · " : "You · ") : "")
                     + root.ally.player
-                    + (root.ally.is-premade ? " (Premade)" : "")
+                    + (root.ally.is-premade ? (Theme.fr ? " (Groupe)" : " (Premade)") : "")
                     + (!root.ally.hidden && root.ally.rank != "" ? " · " + root.ally.rank : "");
                 color: Theme.muted;
                 font-size: Type.small;
@@ -320,7 +320,7 @@ component ChampSelectScreen inherits Flickable {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: stretch;
-                    SectionLabel { text: "ALLIES DRAFT"; vertical-alignment: center; }
+                    SectionLabel { text: Theme.fr ? "DRAFT DES ALLIÉS" : "ALLIES DRAFT"; vertical-alignment: center; }
                     if root.cs.anonymized: Rectangle {
                         height: 20px;
                         width: anon-lbl.preferred-width + 14px;
@@ -329,7 +329,7 @@ component ChampSelectScreen inherits Flickable {
                         border-width: 1px;
                         border-color: Theme.rule-strong;
                         anon-lbl := Text {
-                            text: "Solo/Duo Anonymized";
+                            text: Theme.fr ? "Solo/Duo anonymisé" : "Solo/Duo Anonymized";
                             color: Theme.muted;
                             font-size: 11px;
                             font-weight: 700;
@@ -378,9 +378,9 @@ component ChampSelectScreen inherits Flickable {
                         spacing: 10px;
                         HorizontalLayout {
                             alignment: stretch;
-                            SectionLabel { text: "ENEMY TEAM"; vertical-alignment: center; }
+                            SectionLabel { text: Theme.fr ? "ÉQUIPE ENNEMIE" : "ENEMY TEAM"; vertical-alignment: center; }
                             if root.cs.enemies-to-come > 0: Text {
-                                text: root.cs.enemies-to-come + " to pick";
+                                text: root.cs.enemies-to-come + (Theme.fr ? " à choisir" : " to pick");
                                 color: Theme.muted;
                                 font-size: 11px;
                                 horizontal-alignment: right;
@@ -420,13 +420,13 @@ component ChampSelectScreen inherits Flickable {
                     VerticalLayout {
                         padding: 14px;
                         spacing: 8px;
-                        SectionLabel { text: "BANS"; }
+                        SectionLabel { text: Theme.fr ? "BANNISSEMENTS" : "BANS"; }
                         if root.cs.my-ban-list.length > 0: HorizontalLayout {
                             spacing: 6px;
                             alignment: start;
                             Text {
-                                text: "Blue";
-                                width: 38px;
+                                text: Theme.fr ? "Bleu" : "Blue";
+                                width: 44px;
                                 color: Theme.blue-soft;
                                 font-size: 11px;
                                 font-weight: 700;
@@ -438,8 +438,8 @@ component ChampSelectScreen inherits Flickable {
                             spacing: 6px;
                             alignment: start;
                             Text {
-                                text: "Red";
-                                width: 38px;
+                                text: Theme.fr ? "Rouge" : "Red";
+                                width: 44px;
                                 color: Theme.red-soft;
                                 font-size: 11px;
                                 font-weight: 700;
@@ -448,7 +448,7 @@ component ChampSelectScreen inherits Flickable {
                             for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
                         }
                         if root.cs.my-ban-list.length == 0 && root.cs.their-ban-list.length == 0: Text {
-                            text: "No champions banned yet";
+                            text: Theme.fr ? "Aucun champion banni pour l'instant" : "No champions banned yet";
                             color: Theme.muted;
                             font-size: 12px;
                         }
@@ -460,7 +460,7 @@ component ChampSelectScreen inherits Flickable {
         // Stacked single-column mode for narrow split pane
         if root.compact: VerticalLayout {
             spacing: 14px;
-            SectionLabel { text: "ALLIES DRAFT"; }
+            SectionLabel { text: Theme.fr ? "DRAFT DES ALLIÉS" : "ALLIES DRAFT"; }
             for ally in root.cs.allies: RosterRow { ally: ally; }
 
             Rectangle {
@@ -490,7 +490,7 @@ component ChampSelectScreen inherits Flickable {
                 VerticalLayout {
                     padding: 12px;
                     spacing: 8px;
-                    SectionLabel { text: "ENEMY PICKS & BANS"; }
+                    SectionLabel { text: Theme.fr ? "CHOIX ET BANNISSEMENTS ENNEMIS" : "ENEMY PICKS & BANS"; }
                     HorizontalLayout {
                         spacing: 8px;
                         for e in root.cs.enemies: ChampPlate {
@@ -500,7 +500,7 @@ component ChampSelectScreen inherits Flickable {
                             mine: false;
                         }
                         if root.cs.enemies-to-come > 0: Text {
-                            text: "+" + root.cs.enemies-to-come + " pending";
+                            text: "+" + root.cs.enemies-to-come + (Theme.fr ? " en attente" : " pending");
                             color: Theme.muted;
                             font-size: 12px;
                             vertical-alignment: center;
@@ -510,7 +510,7 @@ component ChampSelectScreen inherits Flickable {
                         spacing: 5px;
                         alignment: start;
                         Text {
-                            text: "Blue:";
+                            text: Theme.fr ? "Bleu :" : "Blue:";
                             color: Theme.blue-soft;
                             font-size: 11px;
                             font-weight: 700;
@@ -522,7 +522,7 @@ component ChampSelectScreen inherits Flickable {
                         spacing: 5px;
                         alignment: start;
                         Text {
-                            text: "Red:";
+                            text: Theme.fr ? "Rouge :" : "Red:";
                             color: Theme.red-soft;
                             font-size: 11px;
                             font-weight: 700;
@@ -666,22 +666,22 @@ component LiveScreen inherits Flickable {
             VerticalLayout {
                 horizontal-stretch: 1;
                 spacing: 6px;
-                SectionLabel { text: "ALLIES"; }
+                SectionLabel { text: Theme.fr ? "ALLIÉS" : "ALLIES"; }
                 for p in root.live.my-players: PlayerRow { p: p; mine: true; }
             }
             VerticalLayout {
                 horizontal-stretch: 1;
                 spacing: 6px;
-                SectionLabel { text: "ENEMIES"; }
+                SectionLabel { text: Theme.fr ? "ENNEMIS" : "ENEMIES"; }
                 for p in root.live.enemy-players: PlayerRow { p: p; mine: false; }
             }
         }
 
         if root.compact: VerticalLayout {
             spacing: 10px;
-            SectionLabel { text: "ALLIES"; }
+            SectionLabel { text: Theme.fr ? "ALLIÉS" : "ALLIES"; }
             for p in root.live.my-players: PlayerRow { p: p; mine: true; }
-            SectionLabel { text: "ENEMIES"; }
+            SectionLabel { text: Theme.fr ? "ENNEMIS" : "ENEMIES"; }
             for p in root.live.enemy-players: PlayerRow { p: p; mine: false; }
         }
 
@@ -719,12 +719,12 @@ component LiveScreen inherits Flickable {
                 VerticalLayout {
                     padding: 14px;
                     spacing: 10px;
-                    SectionLabel { text: "OBJECTIVES & FEED"; }
+                    SectionLabel { text: Theme.fr ? "OBJECTIFS ET FIL EN DIRECT" : "OBJECTIVES & FEED"; }
                     HorizontalLayout {
                         spacing: 12px;
                         Text {
-                            text: "Blue";
-                            width: 44px;
+                            text: Theme.fr ? "Bleu" : "Blue";
+                            width: 48px;
                             color: Theme.blue-soft;
                             font-size: 12px;
                             font-weight: 700;
@@ -735,8 +735,8 @@ component LiveScreen inherits Flickable {
                     HorizontalLayout {
                         spacing: 12px;
                         Text {
-                            text: "Red";
-                            width: 44px;
+                            text: Theme.fr ? "Rouge" : "Red";
+                            width: 48px;
                             color: Theme.red-soft;
                             font-size: 12px;
                             font-weight: 700;
@@ -761,9 +761,9 @@ component LiveScreen inherits Flickable {
             VerticalLayout {
                 padding: 12px;
                 spacing: 8px;
-                SectionLabel { text: "OBJECTIVES & FEED"; }
-                ObjectiveRow { chips: root.live.my-objectives; empty-text: "No blue objectives"; }
-                ObjectiveRow { chips: root.live.enemy-objectives; empty-text: "No red objectives"; }
+                SectionLabel { text: Theme.fr ? "OBJECTIFS ET FIL EN DIRECT" : "OBJECTIVES & FEED"; }
+                ObjectiveRow { chips: root.live.my-objectives; empty-text: Theme.fr ? "Aucun objectif bleu" : "No blue objectives"; }
+                ObjectiveRow { chips: root.live.enemy-objectives; empty-text: Theme.fr ? "Aucun objectif rouge" : "No red objectives"; }
                 Rectangle { height: 1px; background: Theme.rule; }
                 for line in root.live.feed: FeedRow { line: line; }
             }
@@ -811,7 +811,11 @@ component WaitScreen inherits Flickable {
                 VerticalLayout {
                     padding: 16px;
                     spacing: 10px;
-                    SectionLabel { text: root.show-party ? "PARTY ROSTER" : "SUMMONER TELEMETRY"; }
+                    SectionLabel {
+                        text: root.show-party
+                            ? (Theme.fr ? "MEMBRES DU GROUPE" : "PARTY ROSTER")
+                            : (Theme.fr ? "TÉLÉMÉTRIE DE L'INVOCATEUR" : "SUMMONER TELEMETRY");
+                    }
                     if root.show-party: VerticalLayout {
                         spacing: 6px;
                         for m in root.party: Rectangle {
@@ -825,7 +829,7 @@ component WaitScreen inherits Flickable {
                                 padding-right: 12px;
                                 spacing: 8px;
                                 Text {
-                                    text: m.name + (m.is-leader ? " · Leader" : "");
+                                    text: m.name + (m.is-leader ? (Theme.fr ? " · Chef" : " · Leader") : "");
                                     color: Theme.text;
                                     font-size: Type.body;
                                     font-weight: m.is-self ? 800 : 600;
@@ -906,14 +910,14 @@ component WaitScreen inherits Flickable {
                 VerticalLayout {
                     padding: 16px;
                     spacing: 12px;
-                    SectionLabel { text: "PIT-WALL CONTROLS"; }
+                    SectionLabel { text: Theme.fr ? "CONTRÔLES RAPIDES" : "PIT-WALL CONTROLS"; }
                     if root.show-party: VerticalLayout {
                         for n in root.wait.notes: NoteRow { note: n; }
                     }
                     Text {
                         text: root.demo
-                            ? "Synthetic fixture stream active. Jump across any match phase from the left rail."
-                            : "Riot local APIs are polled strictly in read-only mode unless Mobile Remote actions are sent.";
+                            ? (Theme.fr ? "Flux de démonstration actif. Naviguez entre les phases depuis le menu de gauche." : "Synthetic fixture stream active. Jump across any match phase from the left rail.")
+                            : (Theme.fr ? "Les API locales Riot sont interrogées strictement en lecture seule, sauf action depuis l'App Mobile." : "Riot local APIs are polled strictly in read-only mode unless Mobile Remote actions are sent.");
                         color: Theme.muted;
                         font-size: Type.small;
                         wrap: word-wrap;
@@ -922,17 +926,17 @@ component WaitScreen inherits Flickable {
                         spacing: 8px;
                         alignment: start;
                         if !root.demo: Action {
-                            text: "Try Demo Mode";
+                            text: Theme.fr ? "Essayer le Mode Démo" : "Try Demo Mode";
                             primary-signal: true;
                             selected: true;
                             clicked => { root.toggle-demo(); }
                         }
                         if !root.remote-panel-open: Action {
-                            text: "Pair Phone QR";
+                            text: Theme.fr ? "Associer via QR" : "Pair Phone QR";
                             clicked => { root.toggle-remote-panel(); }
                         }
                         if !root.telemetry-enabled: Action {
-                            text: "Telemetry Lab";
+                            text: Theme.fr ? "Labo Télémétrie" : "Telemetry Lab";
                             clicked => { root.toggle-telemetry(); }
                         }
                     }
@@ -950,7 +954,11 @@ component WaitScreen inherits Flickable {
                 VerticalLayout {
                     padding: 14px;
                     spacing: 8px;
-                    SectionLabel { text: root.show-party ? "PARTY ROSTER" : "SUMMONER TELEMETRY"; }
+                    SectionLabel {
+                        text: root.show-party
+                            ? (Theme.fr ? "MEMBRES DU GROUPE" : "PARTY ROSTER")
+                            : (Theme.fr ? "TÉLÉMÉTRIE DE L'INVOCATEUR" : "SUMMONER TELEMETRY");
+                    }
                     if !root.show-party && root.wait.summoner-name != "": HorizontalLayout {
                         spacing: 10px;
                         GameIconBadge {
@@ -973,7 +981,7 @@ component WaitScreen inherits Flickable {
                             spacing: 8px;
                             Text {
                                 horizontal-stretch: 1;
-                                text: m.name + (m.is-leader ? " · Leader" : "");
+                                text: m.name + (m.is-leader ? (Theme.fr ? " · Chef" : " · Leader") : "");
                                 color: Theme.text;
                                 font-size: Type.small;
                                 font-weight: m.is-self ? 800 : 600;
@@ -1169,7 +1177,7 @@ component TelemetryInspector inherits Rectangle {
             VerticalLayout {
                 horizontal-stretch: 1;
                 Text {
-                    text: root.telemetry.inspector-title != "" ? root.telemetry.inspector-title : "Payload Inspector";
+                    text: root.telemetry.inspector-title != "" ? root.telemetry.inspector-title : (Theme.fr ? "Inspecteur de Données" : "Payload Inspector");
                     color: Theme.text;
                     font-family: Type.mono-family;
                     font-size: 12px;
@@ -1177,7 +1185,7 @@ component TelemetryInspector inherits Rectangle {
                     overflow: elide;
                 }
                 Text {
-                    text: root.telemetry.inspector-meta != "" ? root.telemetry.inspector-meta : "Select any stream row to inspect redacted JSON or state diffs";
+                    text: root.telemetry.inspector-meta != "" ? root.telemetry.inspector-meta : (Theme.fr ? "Sélectionnez une ligne du flux pour inspecter le JSON masqué ou les diffs d'état" : "Select any stream row to inspect redacted JSON or state diffs");
                     color: Theme.muted;
                     font-size: 11px;
                     overflow: elide;
@@ -1196,12 +1204,12 @@ component TelemetryInspector inherits Rectangle {
                     clicked => { root.inspector-mode = 1; }
                 }
                 Action {
-                    text: "Prev";
+                    text: Theme.fr ? "Préc." : "Prev";
                     selected: root.inspector-mode == 2;
                     clicked => { root.inspector-mode = 2; }
                 }
                 if root.telemetry.inspector-has-secrets: Action {
-                    text: root.telemetry.secrets-revealed ? "Mask" : "Reveal";
+                    text: root.telemetry.secrets-revealed ? (Theme.fr ? "Masquer" : "Mask") : (Theme.fr ? "Révéler" : "Reveal");
                     selected: root.telemetry.secrets-revealed;
                     primary-signal: true;
                     clicked => { root.toggle-reveal-secrets(); }
@@ -1233,7 +1241,7 @@ component TelemetryInspector inherits Rectangle {
                     color: Theme.text;
                     text: root.telemetry.inspector-payload != ""
                         ? root.telemetry.inspector-payload
-                        : "// No event selected yet.\n// Click any item above to view its live payload or structural JSON diff.";
+                        : (Theme.fr ? "// Aucun événement sélectionné.\n// Cliquez sur une ligne ci-dessus pour voir son JSON en direct ou son diff structurel." : "// No event selected yet.\n// Click any item above to view its live payload or structural JSON diff.");
                 }
             }
         }
@@ -1258,7 +1266,7 @@ component TelemetryEventsList inherits Rectangle {
             padding: 8px;
             spacing: 4px;
             if root.telemetry.events.length == 0: Text {
-                text: "No telemetry events captured for current filter.";
+                text: Theme.fr ? "Aucun événement de télémétrie capturé pour ce filtre." : "No telemetry events captured for current filter.";
                 color: Theme.muted;
                 font-size: Type.small;
                 horizontal-alignment: center;
@@ -1323,7 +1331,7 @@ component TelemetryEndpointRow inherits Rectangle {
             }
         }
         Text {
-            text: "Use GET";
+            text: Theme.fr ? "Tester GET" : "Use GET";
             color: touch.has-hover ? Theme.signal-text : Theme.muted;
             font-size: 11px;
             font-weight: 700;
@@ -1355,7 +1363,7 @@ component TelemetryEndpointsList inherits Rectangle {
             padding: 8px;
             spacing: 4px;
             if root.telemetry.endpoints.length == 0: Text {
-                text: "No API endpoints matched filter.";
+                text: Theme.fr ? "Aucun point d'API ne correspond au filtre." : "No API endpoints matched filter.";
                 color: Theme.muted;
                 font-size: Type.small;
                 horizontal-alignment: center;
@@ -1385,9 +1393,9 @@ component TelemetrySystemView inherits Rectangle {
             padding: 12px;
             spacing: 14px;
 
-            SectionLabel { text: "RIOT PROCESSES (" + root.telemetry.processes.length + ")"; }
+            SectionLabel { text: (Theme.fr ? "PROCESSUS RIOT (" : "RIOT PROCESSES (") + root.telemetry.processes.length + ")"; }
             if root.telemetry.processes.length == 0: Text {
-                text: "No active Riot or League processes detected.";
+                text: Theme.fr ? "Aucun processus Riot ou League actif détecté." : "No active Riot or League processes detected.";
                 color: Theme.muted;
                 font-size: Type.small;
             }
@@ -1420,7 +1428,7 @@ component TelemetrySystemView inherits Rectangle {
                 }
             }
 
-            SectionLabel { text: "LISTENING SOCKETS (" + root.telemetry.sockets.length + ")"; }
+            SectionLabel { text: (Theme.fr ? "PORTS EN ÉCOUTE (" : "LISTENING SOCKETS (") + root.telemetry.sockets.length + ")"; }
             for s in root.telemetry.sockets: Rectangle {
                 height: 32px;
                 background: Theme.panel;
@@ -1449,7 +1457,7 @@ component TelemetrySystemView inherits Rectangle {
                 }
             }
 
-            SectionLabel { text: "ACTIVE CONNECTIONS (" + root.telemetry.connections.length + ")"; }
+            SectionLabel { text: (Theme.fr ? "CONNEXIONS ACTIVES (" : "ACTIVE CONNECTIONS (") + root.telemetry.connections.length + ")"; }
             for c in root.telemetry.connections: Rectangle {
                 height: 32px;
                 background: Theme.panel;
@@ -1527,7 +1535,7 @@ component TelemetryPanel inherits Rectangle {
                     spacing: 8px;
                     alignment: start;
                     Text {
-                        text: "TELEMETRY LAB";
+                        text: Theme.fr ? "LABO TÉLÉMÉTRIE" : "TELEMETRY LAB";
                         color: Theme.text;
                         font-family: Type.display-family;
                         font-size: 20px;
@@ -1564,12 +1572,12 @@ component TelemetryPanel inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 Action {
-                    text: root.split ? "Full View" : "Split View";
+                    text: root.split ? (Theme.fr ? "Pleine Vue" : "Full View") : (Theme.fr ? "Vue Scindée" : "Split View");
                     selected: !root.split;
                     clicked => { root.split = !root.split; }
                 }
                 Action {
-                    text: "Hide";
+                    text: Theme.fr ? "Masquer" : "Hide";
                     clicked => { root.close-telemetry(); }
                 }
             }
@@ -1586,19 +1594,19 @@ component TelemetryPanel inherits Rectangle {
             spacing: 6px;
             alignment: stretch;
             Action {
-                text: "Live Stream";
+                text: Theme.fr ? "Flux en Direct" : "Live Stream";
                 selected: root.tab == 0;
                 primary-signal: true;
                 clicked => { root.tab = 0; }
             }
             Action {
-                text: "API Catalog (" + root.telemetry.endpoints-total + ")";
+                text: (Theme.fr ? "Catalogue API (" : "API Catalog (") + root.telemetry.endpoints-total + ")";
                 selected: root.tab == 1;
                 primary-signal: true;
                 clicked => { root.tab = 1; }
             }
             Action {
-                text: "System";
+                text: Theme.fr ? "Système" : "System";
                 selected: root.tab == 2;
                 primary-signal: true;
                 clicked => { root.tab = 2; }
@@ -1612,27 +1620,27 @@ component TelemetryPanel inherits Rectangle {
 
             HorizontalLayout {
                 spacing: 4px;
-                Action { text: "All"; selected: root.source-filter == 0; clicked => { root.source-filter = 0; } }
+                Action { text: Theme.fr ? "Tous" : "All"; selected: root.source-filter == 0; clicked => { root.source-filter = 0; } }
                 Action { text: "LCU"; selected: root.source-filter == 1; clicked => { root.source-filter = 1; } }
                 Action { text: "RC"; selected: root.source-filter == 2; clicked => { root.source-filter = 2; } }
-                Action { text: "Game"; selected: root.source-filter == 3; clicked => { root.source-filter = 3; } }
+                Action { text: Theme.fr ? "Jeu" : "Game"; selected: root.source-filter == 3; clicked => { root.source-filter = 3; } }
                 Rectangle { horizontal-stretch: 1; }
                 Action {
-                    text: root.paused ? "Resume" : "Pause";
+                    text: root.paused ? (Theme.fr ? "Reprendre" : "Resume") : "Pause";
                     selected: root.paused;
                     primary-signal: true;
                     clicked => { root.paused = !root.paused; }
                 }
-                Action { text: "Clear"; clicked => { root.clear-events(); } }
+                Action { text: Theme.fr ? "Vider" : "Clear"; clicked => { root.clear-events(); } }
             }
 
             HorizontalLayout {
                 spacing: 4px;
-                Action { text: "All types"; selected: root.kind-filter == 0; clicked => { root.kind-filter = 0; } }
-                Action { text: "Update"; selected: root.kind-filter == 1; clicked => { root.kind-filter = 1; } }
-                Action { text: "Create"; selected: root.kind-filter == 2; clicked => { root.kind-filter = 2; } }
-                Action { text: "Delete"; selected: root.kind-filter == 3; clicked => { root.kind-filter = 3; } }
-                Action { text: "Call"; selected: root.kind-filter == 4; clicked => { root.kind-filter = 4; } }
+                Action { text: Theme.fr ? "Tous types" : "All types"; selected: root.kind-filter == 0; clicked => { root.kind-filter = 0; } }
+                Action { text: Theme.fr ? "MàJ" : "Update"; selected: root.kind-filter == 1; clicked => { root.kind-filter = 1; } }
+                Action { text: Theme.fr ? "Création" : "Create"; selected: root.kind-filter == 2; clicked => { root.kind-filter = 2; } }
+                Action { text: Theme.fr ? "Suppr." : "Delete"; selected: root.kind-filter == 3; clicked => { root.kind-filter = 3; } }
+                Action { text: Theme.fr ? "Appel" : "Call"; selected: root.kind-filter == 4; clicked => { root.kind-filter = 4; } }
             }
 
             TelemetryEventsList {
@@ -1708,7 +1716,7 @@ component TelemetryPanel inherits Rectangle {
                     Text {
                         x: 10px;
                         height: 100%;
-                        text: root.endpoint-filter == "" ? "Filter APIs (summoner, lobby, champ-select...)" : "";
+                        text: root.endpoint-filter == "" ? (Theme.fr ? "Filtrer les API (summoner, lobby, champ-select...)" : "Filter APIs (summoner, lobby, champ-select...)") : "";
                         color: Theme.muted;
                         font-size: 12px;
                         vertical-alignment: center;
@@ -1811,7 +1819,7 @@ component EndScreen inherits Flickable {
             VerticalLayout {
                 padding: 18px;
                 spacing: 8px;
-                SectionLabel { text: "MATCH TELEMETRY SUMMARY"; }
+                SectionLabel { text: Theme.fr ? "RÉSUMÉ TÉLÉMÉTRIQUE DU MATCH" : "MATCH TELEMETRY SUMMARY"; }
                 if root.end.champion-name != "": HorizontalLayout {
                     spacing: 12px;
                     height: 48px;
@@ -1895,6 +1903,7 @@ export component MainWindow inherits Window {
     callback rotate-remote-token();
     callback disable-remote();
     callback set-dark(bool);
+    callback set-fr(bool);
     callback toggle-telemetry();
     callback toggle-demo();
     callback select-demo-phase(string);
@@ -1918,7 +1927,7 @@ export component MainWindow inherits Window {
 
         // Persistent Left Pit-Wall Workspace Rail
         Rectangle {
-            width: 196px;
+            width: 216px;
             background: Theme.shell;
 
             Rectangle {
@@ -1965,7 +1974,7 @@ export component MainWindow inherits Window {
                             letter-spacing: 0.9px;
                         }
                         Text {
-                            text: "PIT WALL";
+                            text: Theme.fr ? "POSTE DE PILOTAGE" : "PIT WALL";
                             color: Theme.signal-text;
                             font-family: Type.mono-family;
                             font-size: 11px;
@@ -1977,10 +1986,10 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: 1px; background: Theme.rule; }
 
-                SectionLabel { text: "WORKSPACE"; }
+                SectionLabel { text: Theme.fr ? "ESPACE DE TRAVAIL" : "WORKSPACE"; }
 
                 RailNavItem {
-                    label: "Companion";
+                    label: Theme.fr ? "Compagnon" : "Companion";
                     icon-path: "M 3 12 L 12 3 L 21 12 M 5 10 V 20 H 19 V 10";
                     active: (!root.telemetry-enabled || root.telemetry-split) && !root.remote-panel-open;
                     clicked => {
@@ -1992,10 +2001,10 @@ export component MainWindow inherits Window {
                 }
 
                 RailNavItem {
-                    label: "Telemetry Lab";
+                    label: Theme.fr ? "Télémétrie" : "Telemetry Lab";
                     icon-path: "M 3 12 H 7 L 10 5 L 14 19 L 17 12 H 21";
                     active: root.telemetry-enabled;
-                    badge: root.telemetry-enabled ? (root.telemetry-split ? "SPLIT" : "FULL") : "";
+                    badge: root.telemetry-enabled ? (root.telemetry-split ? (Theme.fr ? "DIV." : "SPLIT") : (Theme.fr ? "PLEIN" : "FULL")) : "";
                     clicked => {
                         root.remote-panel-open = false;
                         root.toggle-telemetry();
@@ -2003,7 +2012,7 @@ export component MainWindow inherits Window {
                 }
 
                 RailNavItem {
-                    label: "Mobile Remote";
+                    label: Theme.fr ? "App Mobile" : "Mobile Remote";
                     icon-path: "M 7 3 H 17 V 21 H 7 Z M 11 18 H 13";
                     active: root.remote-panel-open;
                     indicator-live: root.remote-enabled;
@@ -2017,7 +2026,7 @@ export component MainWindow inherits Window {
                     label: "Mini Widget";
                     icon-path: "M 4 4 H 20 V 20 H 4 Z M 12 4 V 20 M 12 12 H 20";
                     active: root.widget-open;
-                    badge: root.widget-open ? "OPEN" : "";
+                    badge: root.widget-open ? (Theme.fr ? "OUVERT" : "OPEN") : "";
                     clicked => { root.toggle-widget(); }
                 }
 
@@ -2026,10 +2035,10 @@ export component MainWindow inherits Window {
                 SectionLabel { text: "SIMULATION"; }
 
                 RailNavItem {
-                    label: "Demo Mode";
+                    label: Theme.fr ? "Mode Démo" : "Demo Mode";
                     icon-path: "M 6 4 L 19 12 L 6 20 Z";
                     active: root.demo;
-                    badge: root.demo ? "ON" : "OFF";
+                    badge: root.demo ? (Theme.fr ? "ACTIF" : "ON") : "OFF";
                     clicked => { root.toggle-demo(); }
                 }
 
@@ -2039,14 +2048,14 @@ export component MainWindow inherits Window {
                         spacing: 4px;
                         Action {
                             horizontal-stretch: 1;
-                            text: "Lobby";
+                            text: Theme.fr ? "Salon" : "Lobby";
                             selected: root.view == 2;
                             primary-signal: true;
                             clicked => { root.select-demo-phase("Lobby"); }
                         }
                         Action {
                             horizontal-stretch: 1;
-                            text: "Queue";
+                            text: Theme.fr ? "File" : "Queue";
                             selected: root.view == 3;
                             primary-signal: true;
                             clicked => { root.select-demo-phase("Matchmaking"); }
@@ -2056,14 +2065,14 @@ export component MainWindow inherits Window {
                         spacing: 4px;
                         Action {
                             horizontal-stretch: 1;
-                            text: "Ready";
+                            text: Theme.fr ? "Prêt" : "Ready";
                             selected: root.view == 4;
                             primary-signal: true;
                             clicked => { root.select-demo-phase("ReadyCheck"); }
                         }
                         Action {
                             horizontal-stretch: 1;
-                            text: "Champ";
+                            text: Theme.fr ? "Champ." : "Champ";
                             selected: root.view == 5;
                             primary-signal: true;
                             clicked => { root.select-demo-phase("ChampSelect"); }
@@ -2073,14 +2082,14 @@ export component MainWindow inherits Window {
                         spacing: 4px;
                         Action {
                             horizontal-stretch: 1;
-                            text: "Live";
+                            text: Theme.fr ? "En jeu" : "Live";
                             selected: root.view == 6;
                             primary-signal: true;
                             clicked => { root.select-demo-phase("InProgress"); }
                         }
                         Action {
                             horizontal-stretch: 1;
-                            text: "Results";
+                            text: Theme.fr ? "Bilan" : "End";
                             selected: root.view == 7;
                             primary-signal: true;
                             clicked => { root.select-demo-phase("EndOfGame"); }
@@ -2092,41 +2101,60 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: 1px; background: Theme.rule; }
 
-                SectionLabel { text: "RIOT SOURCES"; }
+                SectionLabel { text: Theme.fr ? "SOURCES RIOT" : "RIOT SOURCES"; }
                 VerticalLayout {
                     spacing: 2px;
                     RailSourceRow {
-                        label: "LCU API";
-                        port: root.lcu-live && root.lcu-port != "" ? root.lcu-port : (root.lcu-live ? "ready" : "offline");
+                        label: Theme.fr ? "API LCU" : "LCU API";
+                        port: root.lcu-live && root.lcu-port != "" ? root.lcu-port : (root.lcu-live ? (Theme.fr ? "prêt" : "ready") : (Theme.fr ? "hors ligne" : "offline"));
                         live: root.lcu-live;
                     }
                     RailSourceRow {
-                        label: "Riot Client";
-                        port: root.rc-live && root.rc-port != "" ? root.rc-port : (root.rc-live ? "ready" : "offline");
+                        label: Theme.fr ? "Client Riot" : "Riot Client";
+                        port: root.rc-live && root.rc-port != "" ? root.rc-port : (root.rc-live ? (Theme.fr ? "prêt" : "ready") : (Theme.fr ? "hors ligne" : "offline"));
                         live: root.rc-live;
                     }
                     RailSourceRow {
-                        label: "Live Game";
-                        port: root.game-live ? ":2999" : "standby";
+                        label: Theme.fr ? "En jeu" : "Live Game";
+                        port: root.game-live ? ":2999" : (Theme.fr ? "en veille" : "idle");
                         live: root.game-live;
                     }
                 }
 
                 Rectangle { height: 1px; background: Theme.rule; }
 
+                // Language switcher (EN / FR)
+                HorizontalLayout {
+                    spacing: 4px;
+                    Action {
+                        horizontal-stretch: 1;
+                        text: "EN";
+                        selected: !Theme.fr;
+                        primary-signal: true;
+                        clicked => { root.set-fr(false); }
+                    }
+                    Action {
+                        horizontal-stretch: 1;
+                        text: "FR";
+                        selected: Theme.fr;
+                        primary-signal: true;
+                        clicked => { root.set-fr(true); }
+                    }
+                }
+
                 // Day / Night theme printing switch
                 HorizontalLayout {
                     spacing: 4px;
                     Action {
                         horizontal-stretch: 1;
-                        text: "Night";
+                        text: Theme.fr ? "Nuit" : "Dark";
                         selected: Theme.dark;
                         primary-signal: true;
                         clicked => { root.set-dark(true); }
                     }
                     Action {
                         horizontal-stretch: 1;
-                        text: "Day";
+                        text: Theme.fr ? "Jour" : "Light";
                         selected: !Theme.dark;
                         primary-signal: true;
                         clicked => { root.set-dark(false); }
@@ -2195,7 +2223,7 @@ export component MainWindow inherits Window {
                             border-width: 1px;
                             border-color: Theme.signal;
                             demo-tag := Text {
-                                text: "DEMO STREAM";
+                                text: Theme.fr ? "FLUX DÉMO" : "DEMO STREAM";
                                 color: Theme.signal-text;
                                 font-family: Type.mono-family;
                                 font-size: 11px;
@@ -2207,7 +2235,9 @@ export component MainWindow inherits Window {
 
                         if root.remote-enabled: Action {
                             y: (parent.height - self.height) / 2;
-                            text: root.remote-clients > 0 ? "Phone Live (" + root.remote-clients + ")" : "Remote Ready";
+                            text: root.remote-clients > 0
+                                ? (Theme.fr ? "Mobile connecté (" + root.remote-clients + ")" : "Mobile connected (" + root.remote-clients + ")")
+                                : (Theme.fr ? "App Mobile prête" : "Mobile Remote ready");
                             selected: root.remote-panel-open;
                             primary-signal: true;
                             clicked => { root.toggle-remote-panel(); }
@@ -2325,7 +2355,7 @@ export component MainWindow inherits Window {
                                     horizontal-stretch: 1;
                                     spacing: 2px;
                                     Text {
-                                        text: "MOBILE REMOTE PAIRING";
+                                        text: Theme.fr ? "ASSOCIATION APP MOBILE" : "MOBILE REMOTE PAIRING";
                                         color: Theme.text;
                                         font-family: Type.display-family;
                                         font-size: 22px;
@@ -2333,15 +2363,21 @@ export component MainWindow inherits Window {
                                     }
                                     Text {
                                         text: root.remote-clients > 0
-                                            ? root.remote-clients + " device connected over LAN WebSocket"
-                                            : "Waiting for QR scan on same Wi-Fi network";
+                                            ? (Theme.fr
+                                                ? (root.remote-clients > 1
+                                                    ? root.remote-clients + " appareils connectés sur le réseau local"
+                                                    : root.remote-clients + " appareil connecté sur le réseau local")
+                                                : (root.remote-clients > 1
+                                                    ? root.remote-clients + " phones connected on LAN"
+                                                    : root.remote-clients + " phone connected on LAN"))
+                                            : (Theme.fr ? "En attente du scan QR sur le même réseau Wi-Fi" : "Waiting for QR scan on same Wi-Fi");
                                         color: root.remote-clients > 0 ? Theme.live-green : Theme.muted;
                                         font-size: 12px;
                                         font-weight: 600;
                                     }
                                 }
                                 Action {
-                                    text: "Close";
+                                    text: Theme.fr ? "Fermer" : "Close";
                                     clicked => { root.remote-panel-open = false; }
                                 }
                             }
@@ -2375,7 +2411,9 @@ export component MainWindow inherits Window {
                                     spacing: 10px;
 
                                     Text {
-                                        text: "Scan the QR code to accept queues, lock picks & bans, swap lanes, edit runes, and watch live scores on your phone.";
+                                        text: Theme.fr
+                                            ? "Scannez le code QR pour accepter la file, verrouiller vos choix et bans, échanger de poste, modifier vos runes et suivre la partie depuis votre téléphone."
+                                            : "Scan the QR code to accept queues, lock picks & bans, swap roles/champions, switch runes, and view live objectives from your phone.";
                                         color: Theme.text;
                                         font-size: 13px;
                                         wrap: word-wrap;
@@ -2383,7 +2421,7 @@ export component MainWindow inherits Window {
 
                                     VerticalLayout {
                                         spacing: 4px;
-                                        SectionLabel { text: "DIRECT PAIRING URL (SELECT TO COPY)"; }
+                                        SectionLabel { text: Theme.fr ? "URL D'ASSOCIATION DIRECTE (SÉLECTIONNER POUR COPIER)" : "DIRECT PAIRING URL (SELECT TO COPY)"; }
                                         Rectangle {
                                             height: 32px;
                                             background: Theme.backdrop;
@@ -2409,13 +2447,13 @@ export component MainWindow inherits Window {
                                         spacing: 8px;
                                         alignment: start;
                                         Action {
-                                            text: "New QR Token";
+                                            text: Theme.fr ? "Nouveau jeton QR" : "Rotate QR Token";
                                             selected: true;
                                             primary-signal: true;
                                             clicked => { root.rotate-remote-token(); }
                                         }
                                         Action {
-                                            text: "Stop Server";
+                                            text: Theme.fr ? "Arrêter le serveur" : "Stop Server";
                                             clicked => { root.disable-remote(); }
                                         }
                                     }
@@ -2430,7 +2468,7 @@ export component MainWindow inherits Window {
 }
 
 export component MiniWidget inherits Window {
-    title: "Hypatia — Live";
+    title: Theme.fr ? "Hypatia — En direct" : "Hypatia — Live";
     icon: @image-url("../assets/hypatia.png");
     default-font-family: Type.family;
     preferred-width: 360px;
@@ -2441,8 +2479,10 @@ export component MiniWidget inherits Window {
     background: Theme.ground;
 
     in property <bool> in-game: false;
-    in property <string> wait-title: "Waiting for a game";
-    in property <string> wait-detail: "Live telemetry fills in when a match starts.";
+    in property <string> wait-title: Theme.fr ? "En attente d'une partie" : "Waiting for a match";
+    in property <string> wait-detail: Theme.fr
+        ? "La télémétrie en direct s'affichera au lancement de la partie."
+        : "Live match telemetry appears automatically when a game starts.";
     in property <LiveView> live;
 
     if !root.in-game: VerticalLayout {
@@ -2596,14 +2636,14 @@ export component MiniWidget inherits Window {
                 HorizontalLayout {
                     spacing: 8px;
                     height: 22px;
-                    Text { text: "BLUE"; width: 34px; color: Theme.blue-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
-                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.my-objectives; empty-text: "None"; }
+                    Text { text: Theme.fr ? "BLEU" : "BLUE"; width: 44px; color: Theme.blue-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.my-objectives; empty-text: Theme.fr ? "Aucun" : "None"; }
                 }
                 HorizontalLayout {
                     spacing: 8px;
                     height: 22px;
-                    Text { text: "RED"; width: 34px; color: Theme.red-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
-                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.enemy-objectives; empty-text: "None"; }
+                    Text { text: Theme.fr ? "ROUGE" : "RED"; width: 44px; color: Theme.red-soft; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                    ObjectiveRow { horizontal-stretch: 1; compact: true; chips: root.live.enemy-objectives; empty-text: Theme.fr ? "Aucun" : "None"; }
                 }
             }
         }
@@ -2620,7 +2660,7 @@ export component MiniWidget inherits Window {
             VerticalLayout {
                 padding: 10px;
                 spacing: 6px;
-                SectionLabel { text: "LIVE EVENT FEED"; }
+                SectionLabel { text: Theme.fr ? "FIL D'ÉVÉNEMENTS EN DIRECT" : "LIVE EVENT FEED"; }
                 Flickable {
                     vertical-stretch: 1;
                     content-height: mini-feed.preferred-height;

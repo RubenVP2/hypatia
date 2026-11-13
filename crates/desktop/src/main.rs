@@ -7,12 +7,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use clap::Parser;
-use hypatia_core::assets::GameAssetCache;
+use hypatia_core::assets::{load_persisted_or_detect_lang, save_persisted_lang, GameAssetCache};
 use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
-use hypatia_core::{compute_json_diff, AppState};
+use hypatia_core::{compute_json_diff_localized, AppState};
 use hypatia_shared::{
-    spell_name_from_id, ChampSelectSummary, EndOfGameSummary, EventKind, Lane, LiveBoard,
-    LiveGameSummary, ObjectiveKind, SourceId, SourceStatus, SummarySnapshot,
+    spell_name_from_id_localized, ChampSelectSummary, EndOfGameSummary, EventKind, Lane, Lang,
+    LiveBoard, LiveGameSummary, ObjectiveKind, SourceId, SourceStatus, SummarySnapshot,
 };
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
 use tracing::info;
@@ -20,9 +20,13 @@ use tracing::info;
 slint::include_modules!();
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "hypatia", version, about = "Local League of Legends companion & telemetry observatory")]
+#[command(
+    name = "hypatia",
+    version,
+    about = "Local League of Legends companion and telemetry observatory"
+)]
 struct Cli {
-    /// Start in demo mode with synthetic event streams
+    /// Start in Demo mode with simulated event streams
     #[arg(long)]
     demo: bool,
 
@@ -30,11 +34,15 @@ struct Cli {
     #[arg(long, default_value_t = 2.0)]
     demo_rate: f32,
 
-    /// Start with the League of Legends Telemetry Observatory open
+    /// Interface language override (en or fr)
+    #[arg(long, value_name = "LANG")]
+    lang: Option<String>,
+
+    /// Open Telemetry Lab observatory on launch
     #[arg(long)]
     telemetry: bool,
 
-    /// Start with Mobile Remote server enabled and QR code visible
+    /// Enable Mobile Remote server and show QR pairing drawer on launch
     #[arg(long)]
     remote: bool,
 
@@ -42,15 +50,15 @@ struct Cli {
     #[arg(long)]
     no_remote: bool,
 
-    /// Preferred LAN port for Mobile Remote server
+    /// Preferred LAN port for the Mobile Remote server
     #[arg(long, default_value_t = 7879)]
     remote_port: u16,
 
-    /// Start in Light (Day) theme instead of Dark (Night)
+    /// Start in Light (Day) theme instead of Dark (Night) theme
     #[arg(long)]
     light: bool,
 
-    /// Open the always-on-top Mini Widget on startup
+    /// Open the Always-on-Top Mini Widget on launch
     #[arg(long)]
     widget: bool,
 
@@ -70,9 +78,70 @@ fn lane_index(position: &str) -> i32 {
     }
 }
 
+fn queue_type_label(queue_type: &str, lang: Lang) -> String {
+    let trimmed = queue_type.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    match trimmed.to_ascii_uppercase().as_str() {
+        "RANKED_SOLO_5X5" | "RANKED SOLO 5X5" => {
+            lang.pick("Ranked Solo/Duo", "Classée Solo/Duo").to_string()
+        }
+        "RANKED_FLEX_SR" | "RANKED FLEX SR" => {
+            lang.pick("Ranked Flex", "Classée Flexible").to_string()
+        }
+        "NORMAL" | "NORMAL_DRAFT" | "DRAFT_PICK" => {
+            lang.pick("Normal Draft", "Faille · Draft").to_string()
+        }
+        "QUICKPLAY" | "SWIFTPLAY" => lang.pick("Quickplay", "Partie rapide").to_string(),
+        "ARAM" => "ARAM".to_string(),
+        "URF" | "ARURF" => "URF".to_string(),
+        "ARENA" | "CHERRY" => "Arena".to_string(),
+        "PRACTICETOOL" | "PRACTICE_TOOL" => {
+            lang.pick("Practice Tool", "Outil d'entraînement").to_string()
+        }
+        "CUSTOM" => lang.pick("Custom", "Partie personnalisée").to_string(),
+        _ => trimmed.replace('_', " "),
+    }
+}
+
+fn sub_phase_label(sub_phase: &str, lang: Lang) -> String {
+    let trimmed = sub_phase.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    match trimmed.to_ascii_uppercase().as_str() {
+        "PLANNING" => lang.pick("Planning", "Planification").to_string(),
+        "BAN_PICK" => lang.pick("Ban / Pick", "Bannissements & Choix").to_string(),
+        "FINALIZATION" => lang.pick("Finalization", "Finalisation").to_string(),
+        "GAME_STARTING" => lang.pick("Game Starting", "Lancement de la partie").to_string(),
+        _ => trimmed.replace('_', " "),
+    }
+}
+
+fn rank_tier_label(tier: &str, lang: Lang) -> &str {
+    match tier.trim().to_ascii_uppercase().as_str() {
+        "IRON" => lang.pick("Iron", "Fer"),
+        "BRONZE" => "Bronze",
+        "SILVER" => lang.pick("Silver", "Argent"),
+        "GOLD" => lang.pick("Gold", "Or"),
+        "PLATINUM" => lang.pick("Platinum", "Platine"),
+        "EMERALD" => lang.pick("Emerald", "Émeraude"),
+        "DIAMOND" => lang.pick("Diamond", "Diamant"),
+        "MASTER" => lang.pick("Master", "Maître"),
+        "GRANDMASTER" => lang.pick("Grandmaster", "Grand Maître"),
+        "CHALLENGER" => "Challenger",
+        _ => tier,
+    }
+}
+
 fn champ_initials(name: &str) -> SharedString {
     let trimmed = name.trim();
-    if trimmed.is_empty() || trimmed.starts_with("Selecting") || trimmed.starts_with("Choosing") {
+    if trimmed.is_empty()
+        || trimmed.starts_with("Selecting")
+        || trimmed.starts_with("Choosing")
+        || trimmed.starts_with("Sélection")
+    {
         return SharedString::default();
     }
     let words: Vec<&str> = trimmed
@@ -219,6 +288,7 @@ fn build_champ_select_view(
     cs: &ChampSelectSummary,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
+    lang: Lang,
 ) -> ChampSelectView {
     let mut allies = Vec::new();
     let mut map_allies = Vec::new();
@@ -228,7 +298,8 @@ fn build_champ_select_view(
         let lane = lane_index(&ally.assigned_position);
         let has_champ = ally.champion_id > 0
             && !ally.champion_name.is_empty()
-            && !ally.champion_name.starts_with("Selecting");
+            && !ally.champion_name.starts_with("Selecting")
+            && !ally.champion_name.starts_with("Sélection");
         let champ_str = if has_champ {
             ally.champion_name.as_str()
         } else {
@@ -242,16 +313,26 @@ fn build_champ_select_view(
                 2 => "mid laner",
                 3 => "bot laner",
                 4 => "support",
-                _ => "teammate",
+                _ => lang.pick("teammate", "coéquipier"),
             };
-            let verb = if cs.acting_type.as_deref() == Some("ban") {
-                "banning"
-            } else {
-                "picking"
-            };
+            let is_ban = cs.acting_type.as_deref() == Some("ban");
             acting_label = Some(if ally.is_self {
-                format!("Your turn — you are {verb}")
+                if is_ban {
+                    lang.pick("Your turn — ban a champion", "Votre tour — bannissez un champion")
+                        .to_string()
+                } else {
+                    lang.pick("Your turn — pick your champion", "Votre tour — choisissez votre champion")
+                        .to_string()
+                }
+            } else if lang.is_fr() {
+                let verb = if is_ban {
+                    "en train de bannir"
+                } else {
+                    "en train de choisir"
+                };
+                format!("Votre {role_word} est {verb}")
             } else {
+                let verb = if is_ban { "banning" } else { "picking" };
                 format!("Your {role_word} is {verb}")
             });
         }
@@ -262,12 +343,12 @@ fn build_champ_select_view(
             Image::default()
         };
         let spell1_name = if ally.spell1_id > 0 {
-            spell_name_from_id(ally.spell1_id)
+            spell_name_from_id_localized(ally.spell1_id, lang)
         } else {
             ""
         };
         let spell2_name = if ally.spell2_id > 0 {
-            spell_name_from_id(ally.spell2_id)
+            spell_name_from_id_localized(ally.spell2_id, lang)
         } else {
             ""
         };
@@ -282,7 +363,11 @@ fn build_champ_select_view(
             spell2_icon: loader.resolve(app_state, "spell", ally.spell2_id),
             spell2_name: SharedString::from(spell2_name),
             player: SharedString::from(ally.summoner_name.as_str()),
-            rank: SharedString::from(ally.rank_label.as_deref().unwrap_or("Unranked")),
+            rank: SharedString::from(
+                ally.rank_label
+                    .as_deref()
+                    .unwrap_or(lang.pick("Unranked", "Non classé")),
+            ),
             is_self: ally.is_self,
             is_premade: ally.is_premade,
             picking,
@@ -292,12 +377,12 @@ fn build_champ_select_view(
         let (x, y, label_pos) = map_coord_for_lane(lane);
         let map_label = if !champ_str.is_empty() {
             if ally.is_self {
-                format!("{champ_str} · you")
+                format!("{champ_str} · {}", lang.pick("you", "vous"))
             } else {
                 champ_str.to_string()
             }
         } else if ally.is_self {
-            "You".to_string()
+            lang.pick("You", "Vous").to_string()
         } else {
             ally.summoner_name.clone()
         };
@@ -329,15 +414,20 @@ fn build_champ_select_view(
 
     let title = acting_label.unwrap_or_else(|| {
         if cs.sub_phase == "FINALIZATION" {
-            "Prepare your runes and spells".to_string()
+            lang.pick("Prepare your runes & spells", "Préparez vos runes et sorts")
+                .to_string()
         } else {
-            "Champion select in progress".to_string()
+            lang.pick(
+                "Champion select in progress",
+                "Sélection des champions en cours",
+            )
+            .to_string()
         }
     });
     let detail = format!(
         "{} · {}",
-        cs.queue_type.replace('_', " "),
-        cs.sub_phase.replace('_', " ")
+        queue_type_label(&cs.queue_type, lang),
+        sub_phase_label(&cs.sub_phase, lang)
     );
 
     let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, app_state, loader);
@@ -365,6 +455,7 @@ fn build_live_view(
     board: Option<&LiveBoard>,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
+    lang: Lang,
 ) -> LiveView {
     let default_board = LiveBoard::default();
     let b = board.unwrap_or(&default_board);
@@ -468,17 +559,33 @@ fn build_live_view(
         .collect();
 
     let (title, detail) = if self_dead {
+        let respawn_secs = self_respawn.ceil() as i32;
         (
-            format!("Back in {}s", self_respawn.ceil() as i32),
-            format!("{} · You {}", lg.active_champion, self_kda),
+            if lang.is_fr() {
+                format!("Réapparition dans {}s", respawn_secs)
+            } else {
+                format!("Respawn in {}s", respawn_secs)
+            },
+            format!("{} · {} {}", lg.active_champion, lang.pick("You", "Vous"), self_kda),
         )
     } else {
         (
-            format!("Playing {} · Level {}", lg.active_champion, lg.level),
-            format!(
-                "You {} · {} CS · {} gold",
-                self_kda, lg.creep_score, lg.current_gold
-            ),
+            if lang.is_fr() {
+                format!("Vous jouez {} · Niveau {}", lg.active_champion, lg.level)
+            } else {
+                format!("Playing {} · Level {}", lg.active_champion, lg.level)
+            },
+            if lang.is_fr() {
+                format!(
+                    "Vous {} · {} CS · {} or",
+                    self_kda, lg.creep_score, lg.current_gold
+                )
+            } else {
+                format!(
+                    "You {} · {} CS · {} gold",
+                    self_kda, lg.creep_score, lg.current_gold
+                )
+            },
         )
     };
 
@@ -513,6 +620,7 @@ fn build_end_view(
     eog: &EndOfGameSummary,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
+    lang: Lang,
 ) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
     let cid = if eog.champion_id > 0 {
@@ -526,20 +634,24 @@ fn build_end_view(
             value: SharedString::from(eog.champion_name.as_str()),
         },
         StatLine {
-            label: SharedString::from("Match duration"),
+            label: SharedString::from(lang.pick("Game Length", "Durée de la partie")),
             value: format_mm_ss(eog.game_length_sec as f64),
         },
         StatLine {
-            label: SharedString::from("Gold earned"),
+            label: SharedString::from(lang.pick("Total Gold", "Or accumulé")),
             value: SharedString::from(format!("{}", eog.total_gold)),
         },
         StatLine {
-            label: SharedString::from("Damage to champions"),
+            label: SharedString::from(lang.pick("Damage to Champions", "Dégâts aux champions")),
             value: SharedString::from(format!("{}", eog.damage_to_champions)),
         },
     ];
     EndView {
-        title: SharedString::from(if victory { "Victory" } else { "Defeat" }),
+        title: SharedString::from(if victory {
+            lang.pick("Victory", "Victoire")
+        } else {
+            lang.pick("Defeat", "Défaite")
+        }),
         detail: SharedString::from(format!(
             "{} · {}",
             eog.champion_name,
@@ -561,6 +673,7 @@ fn apply_summary_to_windows(
     loader: &mut DesktopAssetLoader,
     snap: &SummarySnapshot,
 ) {
+    let lang = app_state.lang();
     let phase_str = snap
         .phase
         .as_ref()
@@ -627,7 +740,7 @@ fn apply_summary_to_windows(
         .or_else(|| {
             snap.champ_select
                 .as_ref()
-                .map(|c| c.queue_type.replace('_', " "))
+                .map(|c| queue_type_label(&c.queue_type, lang))
         })
         .unwrap_or_default();
     main_win.set_queue_label(SharedString::from(queue_label));
@@ -638,7 +751,7 @@ fn apply_summary_to_windows(
             .summoner
             .as_ref()
             .map(|s| format!("{}#{}", s.display_name, s.tag_line))
-            .unwrap_or_else(|| "Not signed in".to_string());
+            .unwrap_or_else(|| lang.pick("Not signed in", "Non connecté").to_string());
         let rank_label = snap
             .summoner
             .as_ref()
@@ -646,23 +759,39 @@ fn apply_summary_to_windows(
                 s.rank_tier.as_ref().map(|t| {
                     format!(
                         "{} {} · {} LP",
-                        t,
+                        rank_tier_label(t, lang),
                         s.rank_division.as_deref().unwrap_or(""),
                         s.rank_lp.unwrap_or(0)
                     )
                 })
             })
-            .unwrap_or_else(|| "Unranked".to_string());
+            .unwrap_or_else(|| lang.pick("Unranked", "Non classé").to_string());
 
         let (title, detail, specimen) = match view {
             0 => (
-                "Waiting for League of Legends".to_string(),
-                "Launch the Riot Client or League of Legends — Hypatia connects automatically.".to_string(),
+                lang.pick(
+                    "Waiting for League of Legends",
+                    "En attente de League of Legends",
+                )
+                .to_string(),
+                lang.pick(
+                    "Open the Riot Client or League of Legends — Hypatia connects automatically.",
+                    "Lancez le Client Riot ou League of Legends — Hypatia se connecte automatiquement.",
+                )
+                .to_string(),
                 SharedString::default(),
             ),
             1 => (
-                format!("Connected as {summoner_label}"),
-                "Open a lobby or start a queue to see your team and line map.".to_string(),
+                if lang.is_fr() {
+                    format!("Connecté en tant que {summoner_label}")
+                } else {
+                    format!("Signed in as {summoner_label}")
+                },
+                lang.pick(
+                    "Open a lobby or queue up to see your party and lane map.",
+                    "Ouvrez un salon ou lancez une file pour voir votre équipe et la carte des postes.",
+                )
+                .to_string(),
                 SharedString::default(),
             ),
             2 => {
@@ -670,10 +799,18 @@ fn apply_summary_to_windows(
                     .lobby
                     .as_ref()
                     .map(|l| l.queue_name.as_str())
-                    .unwrap_or("Lobby");
+                    .unwrap_or(lang.pick("Lobby", "Salon"));
                 (
-                    format!("In lobby · {qn}"),
-                    "Choose your primary and secondary lanes or scan Mobile Remote to start queue from your phone.".to_string(),
+                    if lang.is_fr() {
+                        format!("Dans le salon · {qn}")
+                    } else {
+                        format!("In Lobby · {qn}")
+                    },
+                    lang.pick(
+                        "Select your primary & secondary lanes, or scan the Mobile Remote QR to queue from your phone.",
+                        "Choisissez vos postes principal et secondaire, ou scannez le code QR de l'App Mobile pour lancer la file depuis votre téléphone.",
+                    )
+                    .to_string(),
                     SharedString::default(),
                 )
             }
@@ -684,8 +821,12 @@ fn apply_summary_to_windows(
                     .map(|m| (m.time_in_queue_sec, m.estimated_queue_time_sec))
                     .unwrap_or((0.0, 60.0));
                 (
-                    "Searching for a match".to_string(),
-                    format!("Estimated wait {}", format_mm_ss(est)),
+                    lang.pick("In Queue", "Recherche d'une partie").to_string(),
+                    if lang.is_fr() {
+                        format!("Temps estimé {}", format_mm_ss(est))
+                    } else {
+                        format!("Est. queue time {}", format_mm_ss(est))
+                    },
                     format_mm_ss(elapsed),
                 )
             }
@@ -697,31 +838,47 @@ fn apply_summary_to_windows(
                     .unwrap_or("None");
                 (
                     if resp == "Accepted" {
-                        "Match accepted — waiting for other players".to_string()
+                        lang.pick(
+                            "Match Accepted — waiting on other players",
+                            "Partie acceptée — en attente des autres joueurs",
+                        )
+                        .to_string()
                     } else {
-                        "Match found — accept now!".to_string()
+                        lang.pick(
+                            "Match Found — accept now!",
+                            "Partie trouvée — acceptez maintenant !",
+                        )
+                        .to_string()
                     },
-                    "You can accept directly from your phone with Mobile Remote.".to_string(),
-                    SharedString::from("READY"),
+                    lang.pick(
+                        "You can accept straight from your phone via Mobile Remote.",
+                        "Vous pouvez accepter directement depuis votre téléphone avec l'App Mobile.",
+                    )
+                    .to_string(),
+                    SharedString::from(lang.pick("READY", "PRÊT")),
                 )
             }
         };
 
         let mut notes = vec![
             StatLine {
-                label: SharedString::from("Summoner"),
+                label: SharedString::from(lang.pick("Summoner", "Invocateur")),
                 value: SharedString::from(summoner_label),
             },
             StatLine {
-                label: SharedString::from("Ranked standing"),
+                label: SharedString::from(lang.pick("Rank", "Classement")),
                 value: SharedString::from(rank_label),
             },
         ];
         if let Some(ref s) = snap.summoner {
             if s.summoner_level > 0 {
                 notes.push(StatLine {
-                    label: SharedString::from("Summoner level"),
-                    value: SharedString::from(format!("Level {}", s.summoner_level)),
+                    label: SharedString::from(lang.pick("Summoner Level", "Niveau d'invocateur")),
+                    value: SharedString::from(if lang.is_fr() {
+                        format!("Niveau {}", s.summoner_level)
+                    } else {
+                        format!("Level {}", s.summoner_level)
+                    }),
                 });
             }
         }
@@ -782,11 +939,11 @@ fn apply_summary_to_windows(
     }
 
     if let Some(ref cs) = snap.champ_select {
-        main_win.set_champ(build_champ_select_view(cs, app_state, loader));
+        main_win.set_champ(build_champ_select_view(cs, app_state, loader, lang));
     }
 
     if let Some(ref lg) = snap.live_game {
-        let lv = build_live_view(lg, snap.board.as_ref(), app_state, loader);
+        let lv = build_live_view(lg, snap.board.as_ref(), app_state, loader, lang);
         main_win.set_live(lv.clone());
         mini_win.set_in_game(true);
         mini_win.set_live(lv);
@@ -795,7 +952,7 @@ fn apply_summary_to_windows(
     }
 
     if let Some(ref eog) = snap.end_of_game {
-        main_win.set_end(build_end_view(eog, app_state, loader));
+        main_win.set_end(build_end_view(eog, app_state, loader, lang));
     }
 }
 
@@ -810,13 +967,13 @@ struct TelemetryUiState {
     call_version: u64,
     endpoint_filter: String,
     cached_events: Vec<TelemetryEventItem>,
-    last_events_sig: Option<(u64, usize, i32, i32)>,
-    last_inspector_sig: Option<(u64, i32, bool)>,
+    last_events_sig: Option<(u64, usize, i32, i32, Lang)>,
+    last_inspector_sig: Option<(u64, i32, bool, Lang)>,
     cached_inspector: (String, String, bool, String),
     cached_endpoints: Vec<TelemetryEndpointItem>,
     cached_endpoints_total: i32,
     cached_endpoints_summary: String,
-    last_catalog_sig: Option<(usize, String, u64)>,
+    last_catalog_sig: Option<(usize, String, u64, Lang)>,
     last_render_sig: Option<u64>,
 }
 
@@ -824,17 +981,18 @@ impl TelemetryUiState {
     fn invalidate_telemetry_cache(&mut self) {
         self.last_events_sig = None;
         self.last_inspector_sig = None;
+        self.last_catalog_sig = None;
         self.last_render_sig = None;
     }
 }
 
-fn format_bytes(bytes: u64) -> String {
+fn format_bytes(bytes: u64, lang: Lang) -> String {
     if bytes >= 1_048_576 {
-        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+        format!("{:.1} {}", bytes as f64 / 1_048_576.0, lang.pick("MB", "Mo"))
     } else if bytes >= 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
+        format!("{:.1} {}", bytes as f64 / 1024.0, lang.pick("KB", "Ko"))
     } else {
-        format!("{} B", bytes)
+        format!("{} {}", bytes, lang.pick("B", "o"))
     }
 }
 
@@ -846,11 +1004,11 @@ fn format_ts_hms(ts_ms: i64) -> String {
     format!("{:02}:{:02}:{:02}", h, m, s)
 }
 
-fn source_short_label(src: SourceId) -> (&'static str, i32) {
+fn source_short_label(src: SourceId, lang: Lang) -> (&'static str, i32) {
     match src {
         SourceId::RiotClient => ("RC", 0),
         SourceId::LeagueClient => ("LCU", 1),
-        SourceId::LiveGame => ("GAME", 2),
+        SourceId::LiveGame => (lang.pick("GAME", "JEU"), 2),
         SourceId::System => ("SYS", 3),
     }
 }
@@ -864,6 +1022,7 @@ fn apply_telemetry_to_window(
         return;
     }
 
+    let lang = app_state.lang();
     let snap = app_state.get_snapshot();
     let (rate, total_len) = {
         let guard = app_state.store.read().unwrap();
@@ -876,15 +1035,28 @@ fn apply_telemetry_to_window(
     let inspector_mode = main_win.get_inspector_mode();
 
     let catalog_len = app_state.catalog.read().unwrap().get_all().len();
-    let phase_label = snap
+    let raw_phase = snap
         .phase
         .as_ref()
         .map(|p| p.phase.as_str())
         .unwrap_or("None");
+    let phase_label = match raw_phase {
+        "Lobby" => lang.pick("Lobby", "Salon"),
+        "Matchmaking" => lang.pick("Matchmaking", "File d'attente"),
+        "ReadyCheck" => lang.pick("Ready Check", "Appel de partie"),
+        "ChampSelect" => lang.pick("Champ Select", "Sélection"),
+        "InProgress" => lang.pick("In Game", "En partie"),
+        "EndOfGame" | "PreEndOfGame" => lang.pick("End of Game", "Fin de partie"),
+        "WaitingForStats" => lang.pick("Waiting for Stats", "Attente des stats"),
+        "Reconnect" => lang.pick("Reconnect", "Reconnexion"),
+        "None" => lang.pick("None", "Aucune"),
+        other => other,
+    };
 
     // Fast signature check so idle 250ms ticks do zero allocations or Slint model rebuilds
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    lang.as_code().hash(&mut hasher);
     ((rate * 10.0).round() as u64).hash(&mut hasher);
     total_len.hash(&mut hasher);
     latest_id.hash(&mut hasher);
@@ -921,18 +1093,18 @@ fn apply_telemetry_to_window(
         .iter()
         .map(|s| {
             let name = match s.id {
-                SourceId::RiotClient => "Riot Client",
-                SourceId::LeagueClient => "League Client (LCU)",
-                SourceId::LiveGame => "Live Game :2999",
-                SourceId::System => "System Monitor",
+                SourceId::RiotClient => lang.pick("Riot Client", "Client Riot"),
+                SourceId::LeagueClient => lang.pick("League Client (LCU)", "Client League (LCU)"),
+                SourceId::LiveGame => lang.pick("Live Game :2999", "Partie en direct :2999"),
+                SourceId::System => lang.pick("System Monitor", "Moniteur système"),
             };
             let live = matches!(s.status, SourceStatus::Live | SourceStatus::Discovered);
             let status_str = match s.status {
-                SourceStatus::Live => "LIVE",
-                SourceStatus::Discovered => "READY",
-                SourceStatus::Connecting => "CONNECTING",
-                SourceStatus::Offline => "OFFLINE",
-                SourceStatus::Degraded { .. } => "DEGRADED",
+                SourceStatus::Live => lang.pick("LIVE", "DIRECT"),
+                SourceStatus::Discovered => lang.pick("READY", "PRÊT"),
+                SourceStatus::Connecting => lang.pick("CONNECTING", "CONNEXION"),
+                SourceStatus::Offline => lang.pick("OFFLINE", "HORS LIGNE"),
+                SourceStatus::Degraded { .. } => lang.pick("DEGRADED", "DÉGRADÉ"),
             };
             let port_str = match s.port {
                 Some(p) => format!(":{}", p),
@@ -943,13 +1115,26 @@ fn apply_telemetry_to_window(
                 None => String::new(),
             };
             let stats_str = if s.id == SourceId::System {
-                format!(
-                    "{} procs · {} ports",
-                    snap.system.processes.len(),
-                    snap.system.sockets.len()
-                )
+                if lang.is_fr() {
+                    format!(
+                        "{} proc. · {} ports",
+                        snap.system.processes.len(),
+                        snap.system.sockets.len()
+                    )
+                } else {
+                    format!(
+                        "{} procs · {} sockets",
+                        snap.system.processes.len(),
+                        snap.system.sockets.len()
+                    )
+                }
             } else {
-                format!("{} evts · {}", s.events_total, format_bytes(s.bytes_total))
+                format!(
+                    "{} {} · {}",
+                    s.events_total,
+                    lang.pick("evts", "évts"),
+                    format_bytes(s.bytes_total, lang)
+                )
             };
             TelemetrySourceItem {
                 id: SharedString::from(s.id.to_string()),
@@ -963,7 +1148,7 @@ fn apply_telemetry_to_window(
         })
         .collect();
 
-    let events_sig = (latest_id, total_len, src_filter, kind_filter);
+    let events_sig = (latest_id, total_len, src_filter, kind_filter, lang);
     if (!paused && ui_state.last_events_sig != Some(events_sig)) || ui_state.cached_events.is_empty()
     {
         let filtered: Vec<TelemetryEventItem> = snap
@@ -985,13 +1170,13 @@ fn apply_telemetry_to_window(
             })
             .take(120)
             .map(|ev| {
-                let (short_src, src_idx) = source_short_label(ev.source);
+                let (short_src, src_idx) = source_short_label(ev.source, lang);
                 let kind_str = match ev.kind {
-                    EventKind::Create => "CREATE",
-                    EventKind::Update => "UPDATE",
-                    EventKind::Delete => "DELETE",
-                    EventKind::Poll => "POLL",
-                    EventKind::Call => "CALL",
+                    EventKind::Create => lang.pick("CREATE", "CRÉAT."),
+                    EventKind::Update => lang.pick("UPD", "MÀJ"),
+                    EventKind::Delete => lang.pick("DEL", "SUPPR."),
+                    EventKind::Poll => lang.pick("POLL", "SONDE"),
+                    EventKind::Call => lang.pick("CALL", "APPEL"),
                 };
                 TelemetryEventItem {
                     id: ev.id as i32,
@@ -1000,7 +1185,7 @@ fn apply_telemetry_to_window(
                     source_idx: src_idx,
                     kind: SharedString::from(kind_str),
                     uri: SharedString::from(ev.uri.as_str()),
-                    size: SharedString::from(format_bytes(ev.size as u64)),
+                    size: SharedString::from(format_bytes(ev.size as u64, lang)),
                     preview: SharedString::from(ev.preview.as_str()),
                     has_secrets: ev.has_secrets,
                 }
@@ -1018,21 +1203,37 @@ fn apply_telemetry_to_window(
 
     let desired_ins_sig = ui_state
         .selected_event_id
-        .map(|id| (id, inspector_mode, ui_state.secrets_revealed));
+        .map(|id| (id, inspector_mode, ui_state.secrets_revealed, lang));
     if ui_state.last_inspector_sig != desired_ins_sig
         || (ui_state.selected_event_id.is_some() && ui_state.cached_inspector.0.is_empty())
     {
         ui_state.cached_inspector = if let Some(sel_id) = ui_state.selected_event_id {
             let stored_opt = app_state.store.read().unwrap().get_event(sel_id);
             if let Some(stored) = stored_opt {
-                let (short_src, _) = source_short_label(stored.meta.source);
+                let (short_src, _) = source_short_label(stored.meta.source, lang);
                 let title = format!("#{} · {} · {}", stored.meta.id, short_src, stored.meta.uri);
-                let meta = format!(
-                    "Kind: {:?} · {} · Time: {}",
-                    stored.meta.kind,
-                    format_bytes(stored.meta.size as u64),
-                    format_ts_hms(stored.meta.ts)
-                );
+                let kind_lbl = match stored.meta.kind {
+                    EventKind::Create => lang.pick("Create", "Création"),
+                    EventKind::Update => lang.pick("Update", "Mise à jour"),
+                    EventKind::Delete => lang.pick("Delete", "Suppression"),
+                    EventKind::Poll => lang.pick("Poll", "Sondage"),
+                    EventKind::Call => lang.pick("Call", "Appel"),
+                };
+                let meta = if lang.is_fr() {
+                    format!(
+                        "Type : {} · {} · Heure : {}",
+                        kind_lbl,
+                        format_bytes(stored.meta.size as u64, lang),
+                        format_ts_hms(stored.meta.ts)
+                    )
+                } else {
+                    format!(
+                        "Kind: {} · {} · Time: {}",
+                        kind_lbl,
+                        format_bytes(stored.meta.size as u64, lang),
+                        format_ts_hms(stored.meta.ts)
+                    )
+                };
                 let curr_val = if ui_state.secrets_revealed {
                     app_state.reveal_secrets_in_value(&stored.payload)
                 } else {
@@ -1046,12 +1247,17 @@ fn apply_telemetry_to_window(
                     }
                 });
                 let body = match inspector_mode {
-                    1 => compute_json_diff(prev_val.as_ref(), &curr_val),
+                    1 => compute_json_diff_localized(prev_val.as_ref(), &curr_val, lang),
                     2 => match prev_val {
                         Some(ref pv) => {
                             serde_json::to_string_pretty(pv).unwrap_or_else(|_| "{}".to_string())
                         }
-                        None => "(No previous state recorded for this URI)".to_string(),
+                        None => lang
+                            .pick(
+                                "(No previous state recorded for this URI)",
+                                "(Aucun état précédent enregistré pour cette URI)",
+                            )
+                            .to_string(),
                     },
                     _ => serde_json::to_string_pretty(&curr_val)
                         .unwrap_or_else(|_| "{}".to_string()),
@@ -1059,7 +1265,11 @@ fn apply_telemetry_to_window(
                 (title, meta, stored.meta.has_secrets, body)
             } else {
                 (
-                    format!("Event #{} evicted from ring buffer", sel_id),
+                    if lang.is_fr() {
+                        format!("Événement #{} éjecté du tampon", sel_id)
+                    } else {
+                        format!("Event #{} evicted from buffer", sel_id)
+                    },
                     String::new(),
                     false,
                     String::new(),
@@ -1077,6 +1287,7 @@ fn apply_telemetry_to_window(
         catalog_len,
         ui_state.endpoint_filter.clone(),
         ui_state.call_version,
+        lang,
     );
     if ui_state.last_catalog_sig.as_ref() != Some(&catalog_sig) {
         let filter_lc = ui_state.endpoint_filter.trim().to_ascii_lowercase();
@@ -1088,7 +1299,7 @@ fn apply_telemetry_to_window(
                 if filter_lc.is_empty() {
                     return true;
                 }
-                let (short_src, _) = source_short_label(ep.source);
+                let (short_src, _) = source_short_label(ep.source, lang);
                 ep.path_template.to_ascii_lowercase().contains(&filter_lc)
                     || ep.namespace.to_ascii_lowercase().contains(&filter_lc)
                     || short_src.to_ascii_lowercase().contains(&filter_lc)
@@ -1113,7 +1324,7 @@ fn apply_telemetry_to_window(
             .into_iter()
             .take(MAX_DISPLAYED_ENDPOINTS)
             .map(|ep| {
-                let (short_src, _) = source_short_label(ep.source);
+                let (short_src, _) = source_short_label(ep.source, lang);
                 let call_src_idx = match ep.source {
                     SourceId::LeagueClient => 0,
                     SourceId::RiotClient => 1,
@@ -1122,9 +1333,10 @@ fn apply_telemetry_to_window(
                 };
                 let origin_str = format!("{:?}", ep.origin);
                 let stats_str = format!(
-                    "{} hits · {}",
+                    "{} {} · {}",
                     ep.event_count,
-                    format_bytes(ep.bytes_total)
+                    lang.pick("calls", "appels"),
+                    format_bytes(ep.bytes_total, lang)
                 );
                 TelemetryEndpointItem {
                     source: SharedString::from(short_src),
@@ -1140,7 +1352,23 @@ fn apply_telemetry_to_window(
             .collect();
 
         ui_state.cached_endpoints_summary = if matching_total > items.len() {
-            format!("Showing {} of {} ({} total)", items.len(), matching_total, all.len())
+            if lang.is_fr() {
+                format!(
+                    "Affichage de {} sur {} ({} au total)",
+                    items.len(),
+                    matching_total,
+                    all.len()
+                )
+            } else {
+                format!(
+                    "Showing {} of {} ({} total)",
+                    items.len(),
+                    matching_total,
+                    all.len()
+                )
+            }
+        } else if lang.is_fr() {
+            format!("{} sur {} endpoints", matching_total, all.len())
         } else {
             format!("{} of {} endpoints", matching_total, all.len())
         };
@@ -1162,7 +1390,7 @@ fn apply_telemetry_to_window(
                     .unwrap_or_else(|| "riot".to_string()),
             ),
             cpu: SharedString::from(format!("{:.1}% CPU", p.cpu)),
-            mem: SharedString::from(format_bytes(p.mem_bytes)),
+            mem: SharedString::from(format_bytes(p.mem_bytes, lang)),
             exe: SharedString::from(p.exe.as_deref().unwrap_or("")),
         })
         .collect();
@@ -1175,7 +1403,7 @@ fn apply_telemetry_to_window(
             proto: SharedString::from(s.proto.as_str()),
             address: SharedString::from(format!("{}:{}", s.local, s.port)),
             pid: SharedString::from(s.pid.to_string()),
-            state: SharedString::from("LISTEN"),
+            state: SharedString::from(lang.pick("LISTEN", "ÉCOUTE")),
         })
         .collect();
 
@@ -1192,8 +1420,16 @@ fn apply_telemetry_to_window(
         .collect();
 
     main_win.set_telemetry(TelemetryView {
-        rate: SharedString::from(format!("{:.1} evt/s", rate)),
-        total_events: SharedString::from(format!("{} buffered", total_len)),
+        rate: SharedString::from(if lang.is_fr() {
+            format!("{:.1} évt/s", rate)
+        } else {
+            format!("{:.1} evt/s", rate)
+        }),
+        total_events: SharedString::from(if lang.is_fr() {
+            format!("{} en mémoire", total_len)
+        } else {
+            format!("{} stored", total_len)
+        }),
         phase: SharedString::from(phase_label),
         sources: ModelRc::new(VecModel::from(sources)),
         events: ModelRc::new(VecModel::from(ui_state.cached_events.clone())),
@@ -1230,7 +1466,17 @@ fn main() {
         .expect("Failed to start Tokio runtime");
     let _guard = rt.enter();
 
-    let app_state = AppState::start(cli.demo, cli.demo_rate);
+    let initial_lang = match cli.lang.as_deref() {
+        Some(raw) => match Lang::from_code(raw) {
+            Some(parsed) => parsed,
+            None => {
+                tracing::warn!("Unknown --lang value '{}', falling back to saved/OS locale", raw);
+                load_persisted_or_detect_lang()
+            }
+        },
+        None => load_persisted_or_detect_lang(),
+    };
+    let app_state = AppState::start_with_lang(cli.demo, cli.demo_rate, initial_lang);
 
     if let Some(ref pinned) = cli.phase {
         let normalized = match pinned.to_ascii_lowercase().as_str() {
@@ -1260,6 +1506,8 @@ fn main() {
         Theme::get(&main_win).set_dark(false);
         Theme::get(&mini_win).set_dark(false);
     }
+    Theme::get(&main_win).set_fr(initial_lang.is_fr());
+    Theme::get(&mini_win).set_fr(initial_lang.is_fr());
 
     let widget_open = Rc::new(RefCell::new(false));
     if cli.widget {
@@ -1281,6 +1529,35 @@ fn main() {
             }
             if let Some(w) = mini_weak.upgrade() {
                 Theme::get(&w).set_dark(dark);
+            }
+        });
+    }
+
+    {
+        let main_weak = main_win.as_weak();
+        let mini_weak = mini_win.as_weak();
+        let app_state = app_state.clone();
+        let ui_state = telemetry_ui_state.clone();
+        let assets_loader = desktop_assets.clone();
+        main_win.on_set_fr(move |fr| {
+            let next = if fr { Lang::Fr } else { Lang::En };
+            save_persisted_lang(next);
+            app_state.set_lang(next);
+            ui_state.borrow_mut().invalidate_telemetry_cache();
+            if let Some(m) = main_weak.upgrade() {
+                Theme::get(&m).set_fr(fr);
+                if let Some(w) = mini_weak.upgrade() {
+                    Theme::get(&w).set_fr(fr);
+                    let snap = app_state.get_summary();
+                    apply_summary_to_windows(
+                        &m,
+                        &w,
+                        &app_state,
+                        &mut assets_loader.borrow_mut(),
+                        &snap,
+                    );
+                }
+                apply_telemetry_to_window(&m, &app_state, &mut ui_state.borrow_mut());
             }
         });
     }
@@ -1454,19 +1731,32 @@ fn main() {
                 st.invalidate_telemetry_cache();
                 match res {
                     Ok((status, body, ev_id)) => {
+                        let lang = app_state.lang();
                         let pretty = serde_json::to_string_pretty(&body)
                             .unwrap_or_else(|_| "{}".to_string());
-                        st.call_status = format!(
-                            "HTTP {} · {} · Event #{}",
-                            status,
-                            format_bytes(pretty.len() as u64),
-                            ev_id
-                        );
+                        st.call_status = if lang.is_fr() {
+                            format!(
+                                "HTTP {} · {} · Événement #{}",
+                                status,
+                                format_bytes(pretty.len() as u64, lang),
+                                ev_id
+                            )
+                        } else {
+                            format!(
+                                "HTTP {} · {} · Event #{}",
+                                status,
+                                format_bytes(pretty.len() as u64, lang),
+                                ev_id
+                            )
+                        };
                         st.call_response = pretty;
                         st.selected_event_id = Some(ev_id);
                     }
                     Err(err) => {
-                        st.call_status = "Request Failed".to_string();
+                        let lang = app_state.lang();
+                        st.call_status = lang
+                            .pick("Request Failed", "Échec de la requête")
+                            .to_string();
                         st.call_response = err;
                     }
                 }
@@ -1701,5 +1991,21 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn desktop_localization_labels_cover_both_languages() {
+        assert_eq!(queue_type_label("RANKED_SOLO_5X5", Lang::En), "Ranked Solo/Duo");
+        assert_eq!(queue_type_label("RANKED_SOLO_5X5", Lang::Fr), "Classée Solo/Duo");
+        assert_eq!(sub_phase_label("BAN_PICK", Lang::En), "Ban / Pick");
+        assert_eq!(sub_phase_label("BAN_PICK", Lang::Fr), "Bannissements & Choix");
+        assert_eq!(rank_tier_label("EMERALD", Lang::En), "Emerald");
+        assert_eq!(rank_tier_label("EMERALD", Lang::Fr), "Émeraude");
+        assert_eq!(format_bytes(2048, Lang::En), "2.0 KB");
+        assert_eq!(format_bytes(2048, Lang::Fr), "2.0 Ko");
+        assert_eq!(format_bytes(512, Lang::En), "512 B");
+        assert_eq!(format_bytes(512, Lang::Fr), "512 o");
+        assert_eq!(source_short_label(SourceId::LiveGame, Lang::En), ("GAME", 2));
+        assert_eq!(source_short_label(SourceId::LiveGame, Lang::Fr), ("JEU", 2));
     }
 }

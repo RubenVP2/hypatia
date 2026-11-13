@@ -1,0 +1,870 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"POT-Creation-Date: 2026-11-13 12:57+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: ui/app.slint:194
+msgctxt "RosterRow"
+msgid "no pick yet"
+msgstr "pas encore choisi"
+
+#: ui/app.slint:195
+msgctxt "RosterRow"
+msgid ", you"
+msgstr ", vous"
+
+#: ui/app.slint:196
+msgctxt "RosterRow"
+msgid ", acting now"
+msgstr ", à son tour"
+
+#: ui/app.slint:238
+msgctxt "RosterRow"
+msgid "Waiting for pick"
+msgstr "En attente de choix"
+
+#: ui/app.slint:253
+msgctxt "RosterRow"
+msgid "YOUR TURN"
+msgstr "À VOUS"
+
+#: ui/app.slint:254
+msgctxt "RosterRow"
+msgid "ACTING NOW"
+msgstr "À SON TOUR"
+
+#: ui/app.slint:327
+msgctxt "RosterRow"
+msgid "You · "
+msgstr "Vous · "
+
+#: ui/app.slint:329
+msgctxt "RosterRow"
+msgid " (Premade)"
+msgstr " (Groupe)"
+
+#: ui/app.slint:373 ui/app.slint:500
+msgctxt "ChampSelectScreen"
+msgid "ALLIES DRAFT"
+msgstr "DRAFT DES ALLIÉS"
+
+#: ui/app.slint:382
+msgctxt "ChampSelectScreen"
+msgid "Solo/Duo Anonymized"
+msgstr "Solo/Duo anonymisé"
+
+#: ui/app.slint:422
+msgctxt "ChampSelectScreen"
+msgid "ENEMY TEAM"
+msgstr "ÉQUIPE ENNEMIE"
+
+#: ui/app.slint:424
+msgctxt "ChampSelectScreen"
+msgid "{0} to pick"
+msgstr "{0} à choisir"
+
+#: ui/app.slint:460
+msgctxt "ChampSelectScreen"
+msgid "BANS"
+msgstr "BANNISSEMENTS"
+
+#: ui/app.slint:465
+msgctxt "ChampSelectScreen"
+msgid "Blue"
+msgstr "Bleu"
+
+#: ui/app.slint:478
+msgctxt "ChampSelectScreen"
+msgid "Red"
+msgstr "Rouge"
+
+#: ui/app.slint:488
+msgctxt "ChampSelectScreen"
+msgid "No champions banned yet"
+msgstr "Aucun champion banni pour l'instant"
+
+#: ui/app.slint:522
+msgctxt "ChampSelectScreen"
+msgid "ENEMY PICKS & BANS"
+msgstr "CHOIX ET BANNISSEMENTS ENNEMIS"
+
+#: ui/app.slint:532
+msgctxt "ChampSelectScreen"
+msgid "+{0} pending"
+msgstr "+{0} en attente"
+
+#: ui/app.slint:542
+msgctxt "ChampSelectScreen"
+msgid "Blue:"
+msgstr "Bleu :"
+
+#: ui/app.slint:554
+msgctxt "ChampSelectScreen"
+msgid "Red:"
+msgstr "Rouge :"
+
+#: ui/app.slint:574
+msgctxt "ScoreSpecimen"
+msgid "Score: allies {0}, enemies {1}"
+msgstr "Score : alliés {0}, ennemis {1}"
+
+#: ui/app.slint:701 ui/app.slint:714
+msgctxt "LiveScreen"
+msgid "ALLIES"
+msgstr "ALLIÉS"
+
+#: ui/app.slint:707 ui/app.slint:716
+msgctxt "LiveScreen"
+msgid "ENEMIES"
+msgstr "ENNEMIS"
+
+#: ui/app.slint:746 ui/app.slint:784
+msgctxt "LiveScreen"
+msgid "OBJECTIVES & FEED"
+msgstr "OBJECTIFS ET FIL EN DIRECT"
+
+#: ui/app.slint:750
+msgctxt "LiveScreen"
+msgid "Blue"
+msgstr "Bleu"
+
+#: ui/app.slint:762
+msgctxt "LiveScreen"
+msgid "Red"
+msgstr "Rouge"
+
+#: ui/app.slint:785
+msgctxt "LiveScreen"
+msgid "No blue objectives"
+msgstr "Aucun objectif bleu"
+
+#: ui/app.slint:786
+msgctxt "LiveScreen"
+msgid "No red objectives"
+msgstr "Aucun objectif rouge"
+
+#: ui/app.slint:839 ui/app.slint:974
+msgctxt "WaitScreen"
+msgid "PARTY ROSTER"
+msgstr "MEMBRES DU GROUPE"
+
+#: ui/app.slint:840 ui/app.slint:975
+msgctxt "WaitScreen"
+msgid "YOUR ACCOUNT"
+msgstr "VOTRE COMPTE"
+
+#: ui/app.slint:855 ui/app.slint:999
+msgctxt "WaitScreen"
+msgid " · Leader"
+msgstr " · Chef"
+
+#: ui/app.slint:933
+msgctxt "WaitScreen"
+msgid "GET STARTED"
+msgstr "POUR COMMENCER"
+
+#: ui/app.slint:939
+msgctxt "WaitScreen"
+msgid "Demo mode: simulated matches, nothing comes from your account. Switch phases from the left rail."
+msgstr "Mode démo : des parties simulées, rien ne vient de votre compte. Changez de phase depuis le menu de gauche."
+
+#: ui/app.slint:940
+msgctxt "WaitScreen"
+msgid "Hypatia only reads what League already shows on this PC. Nothing leaves your machine."
+msgstr "Hypatia lit seulement ce que League affiche déjà sur ce PC. Rien ne quitte votre machine."
+
+#: ui/app.slint:949
+msgctxt "WaitScreen"
+msgid "Try Demo Mode"
+msgstr "Essayer le Mode Démo"
+
+#: ui/app.slint:954
+msgctxt "WaitScreen"
+msgid "Pair Phone QR"
+msgstr "Associer via QR"
+
+#: ui/app.slint:958
+msgctxt "WaitScreen"
+msgid "Observatory"
+msgstr "Observatoire"
+
+#: ui/app.slint:1195
+msgctxt "TelemetryInspector"
+msgid "Payload Inspector"
+msgstr "Inspecteur de Données"
+
+#: ui/app.slint:1203
+msgctxt "TelemetryInspector"
+msgid "Select any stream row to inspect redacted JSON or state diffs"
+msgstr "Sélectionnez une ligne du flux pour inspecter le JSON masqué ou les diffs d'état"
+
+#: ui/app.slint:1222
+msgctxt "TelemetryInspector"
+msgid "Prev"
+msgstr "Préc."
+
+#: ui/app.slint:1227
+msgctxt "TelemetryInspector"
+msgid "Mask"
+msgstr "Masquer"
+
+#: ui/app.slint:1227
+msgctxt "TelemetryInspector"
+msgid "Reveal"
+msgstr "Révéler"
+
+#: ui/app.slint:1247
+msgctxt "TelemetryInspector"
+msgid "Event payload"
+msgstr "Données de l'événement"
+
+#: ui/app.slint:1259
+msgctxt "TelemetryInspector"
+msgid "// No event selected yet.\n// Click any item above to view its live payload or structural JSON diff."
+msgstr "// Aucun événement sélectionné.\n// Cliquez sur une ligne ci-dessus pour voir son JSON en direct ou son diff structurel."
+
+#: ui/app.slint:1284
+msgctxt "TelemetryEventsList"
+msgid "No events captured for this filter."
+msgstr "Aucun événement capturé pour ce filtre."
+
+#: ui/app.slint:1307
+msgctxt "TelemetryEndpointRow"
+msgid "Use GET {0} {1}"
+msgstr "Tester GET {0} {1}"
+
+#: ui/app.slint:1352
+msgctxt "TelemetryEndpointRow"
+msgid "Use GET"
+msgstr "Tester GET"
+
+#: ui/app.slint:1384
+msgctxt "TelemetryEndpointsList"
+msgid "No API endpoints matched filter."
+msgstr "Aucun point d'API ne correspond au filtre."
+
+#: ui/app.slint:1414
+msgctxt "TelemetrySystemView"
+msgid "RIOT PROCESSES ({0})"
+msgstr "PROCESSUS RIOT ({0})"
+
+#: ui/app.slint:1416
+msgctxt "TelemetrySystemView"
+msgid "No active Riot or League processes detected."
+msgstr "Aucun processus Riot ou League actif détecté."
+
+#: ui/app.slint:1449
+msgctxt "TelemetrySystemView"
+msgid "LISTENING SOCKETS ({0})"
+msgstr "PORTS EN ÉCOUTE ({0})"
+
+#: ui/app.slint:1478
+msgctxt "TelemetrySystemView"
+msgid "ACTIVE CONNECTIONS ({0})"
+msgstr "CONNEXIONS ACTIVES ({0})"
+
+#: ui/app.slint:1556
+msgctxt "TelemetryPanel"
+msgid "OBSERVATORY"
+msgstr "OBSERVATOIRE"
+
+#: ui/app.slint:1593
+msgctxt "TelemetryPanel"
+msgid "Full View"
+msgstr "Pleine Vue"
+
+#: ui/app.slint:1593
+msgctxt "TelemetryPanel"
+msgid "Split View"
+msgstr "Vue Scindée"
+
+#: ui/app.slint:1598
+msgctxt "TelemetryPanel"
+msgid "Hide"
+msgstr "Masquer"
+
+#: ui/app.slint:1615
+msgctxt "TelemetryPanel"
+msgid "Live Stream"
+msgstr "Flux en Direct"
+
+#: ui/app.slint:1620
+msgctxt "TelemetryPanel"
+msgid "API Catalog ({0})"
+msgstr "Catalogue API ({0})"
+
+#: ui/app.slint:1625
+msgctxt "TelemetryPanel"
+msgid "System"
+msgstr "Système"
+
+#: ui/app.slint:1638
+msgctxt "TelemetryPanel"
+msgid "All"
+msgstr "Tous"
+
+#: ui/app.slint:1641
+msgctxt "TelemetryPanel"
+msgid "Game"
+msgstr "Jeu"
+
+#: ui/app.slint:1644
+msgctxt "TelemetryPanel"
+msgid "Resume"
+msgstr "Reprendre"
+
+#: ui/app.slint:1648
+msgctxt "TelemetryPanel"
+msgid "Clear"
+msgstr "Vider"
+
+#: ui/app.slint:1653
+msgctxt "TelemetryPanel"
+msgid "All types"
+msgstr "Tous types"
+
+#: ui/app.slint:1654
+msgctxt "TelemetryPanel"
+msgid "Update"
+msgstr "MàJ"
+
+#: ui/app.slint:1655
+msgctxt "TelemetryPanel"
+msgid "Create"
+msgstr "Création"
+
+#: ui/app.slint:1656
+msgctxt "TelemetryPanel"
+msgid "Delete"
+msgstr "Suppr."
+
+#: ui/app.slint:1657
+msgctxt "TelemetryPanel"
+msgid "Call"
+msgstr "Appel"
+
+#: ui/app.slint:1704
+msgctxt "TelemetryPanel"
+msgid "GET request path"
+msgstr "Chemin de l'appel GET"
+
+#: ui/app.slint:1733
+msgctxt "TelemetryPanel"
+msgid "Filter APIs (summoner, lobby, champ-select...)"
+msgstr "Filtrer les API (summoner, lobby, champ-select...)"
+
+#: ui/app.slint:1743
+msgctxt "TelemetryPanel"
+msgid "Filter APIs"
+msgstr "Filtrer les API"
+
+#: ui/app.slint:1790
+msgctxt "TelemetryPanel"
+msgid "Call response"
+msgstr "Réponse de l'appel"
+
+#: ui/app.slint:1833
+msgctxt "EndScreen"
+msgid "MATCH SUMMARY"
+msgstr "RÉSUMÉ DU MATCH"
+
+#: ui/app.slint:2007
+msgctxt "MainWindow"
+msgid "LOL COMPANION"
+msgstr "COMPAGNON LOL"
+
+#: ui/app.slint:2019
+msgctxt "MainWindow"
+msgid "WORKSPACE"
+msgstr "ESPACE DE TRAVAIL"
+
+#: ui/app.slint:2022
+msgctxt "MainWindow"
+msgid "Companion"
+msgstr "Compagnon"
+
+#: ui/app.slint:2034
+msgctxt "MainWindow"
+msgid "Observatory"
+msgstr "Observatoire"
+
+#: ui/app.slint:2037
+msgctxt "MainWindow"
+msgid "SPLIT"
+msgstr "DIV."
+
+#: ui/app.slint:2037
+msgctxt "MainWindow"
+msgid "FULL"
+msgstr "PLEIN"
+
+#: ui/app.slint:2045
+msgctxt "MainWindow"
+msgid "Mobile Remote"
+msgstr "App Mobile"
+
+#: ui/app.slint:2059
+msgctxt "MainWindow"
+msgid "OPEN"
+msgstr "OUVERT"
+
+#: ui/app.slint:2067
+msgctxt "MainWindow"
+msgid "ECO"
+msgstr "ÉCO"
+
+#: ui/app.slint:2079
+msgctxt "MainWindow"
+msgid "Demo Mode"
+msgstr "Mode Démo"
+
+#: ui/app.slint:2082
+msgctxt "MainWindow"
+msgid "ON"
+msgstr "ACTIF"
+
+#: ui/app.slint:2092
+msgctxt "MainWindow"
+msgid "Lobby"
+msgstr "Salon"
+
+#: ui/app.slint:2098
+msgctxt "MainWindow"
+msgid "Queue"
+msgstr "File"
+
+#: ui/app.slint:2107
+msgctxt "MainWindow"
+msgid "Ready"
+msgstr "Prêt"
+
+#: ui/app.slint:2113
+msgctxt "MainWindow"
+msgid "Champ"
+msgstr "Champ."
+
+#: ui/app.slint:2122
+msgctxt "MainWindow"
+msgid "Live"
+msgstr "En jeu"
+
+#: ui/app.slint:2128
+msgctxt "MainWindow"
+msgid "End"
+msgstr "Bilan"
+
+#: ui/app.slint:2139
+msgctxt "MainWindow"
+msgid "RIOT SOURCES"
+msgstr "SOURCES RIOT"
+
+#: ui/app.slint:2143
+msgctxt "MainWindow"
+msgid "LCU API"
+msgstr "API LCU"
+
+#: ui/app.slint:2144 ui/app.slint:2149
+msgctxt "MainWindow"
+msgid "ready"
+msgstr "prêt"
+
+#: ui/app.slint:2144 ui/app.slint:2149
+msgctxt "MainWindow"
+msgid "offline"
+msgstr "hors ligne"
+
+#: ui/app.slint:2148
+msgctxt "MainWindow"
+msgid "Riot Client"
+msgstr "Client Riot"
+
+#: ui/app.slint:2153
+msgctxt "MainWindow"
+msgid "Live Game"
+msgstr "En jeu"
+
+#: ui/app.slint:2154
+msgctxt "MainWindow"
+msgid "idle"
+msgstr "en veille"
+
+#: ui/app.slint:2183
+msgctxt "MainWindow"
+msgid "Dark"
+msgstr "Nuit"
+
+#: ui/app.slint:2189
+msgctxt "MainWindow"
+msgid "Light"
+msgstr "Jour"
+
+#: ui/app.slint:2258
+msgctxt "MainWindow"
+msgid "DEMO"
+msgstr "DÉMO"
+
+#: ui/app.slint:2271
+msgctxt "MainWindow"
+msgid "Mobile connected ({0})"
+msgstr "Mobile connecté ({0})"
+
+#: ui/app.slint:2272
+msgctxt "MainWindow"
+msgid "Mobile Remote ready"
+msgstr "App Mobile prête"
+
+#: ui/app.slint:2410
+msgctxt "MainWindow"
+msgid "MOBILE REMOTE PAIRING"
+msgstr "ASSOCIATION APP MOBILE"
+
+#: ui/app.slint:2418
+msgctxt "MainWindow"
+msgid "{n} phone connected on LAN"
+msgid_plural "{n} phones connected on LAN"
+msgstr[0] "{n} appareil connecté sur le réseau local"
+msgstr[1] "{n} appareils connectés sur le réseau local"
+
+#: ui/app.slint:2419
+msgctxt "MainWindow"
+msgid "Waiting for QR scan on same Wi-Fi"
+msgstr "En attente du scan QR sur le même réseau Wi-Fi"
+
+#: ui/app.slint:2426 ui/app.slint:2583
+msgctxt "MainWindow"
+msgid "Close"
+msgstr "Fermer"
+
+#: ui/app.slint:2460
+msgctxt "MainWindow"
+msgid "Scan the QR code to accept queues, lock picks & bans, swap roles/champions, switch runes, and view live objectives from your phone."
+msgstr "Scannez le code QR pour accepter la file, verrouiller vos choix et bans, échanger de poste, modifier vos runes et suivre la partie depuis votre téléphone."
+
+#: ui/app.slint:2468
+msgctxt "MainWindow"
+msgid "DIRECT PAIRING URL (SELECT TO COPY)"
+msgstr "URL D'ASSOCIATION DIRECTE (SÉLECTIONNER POUR COPIER)"
+
+#: ui/app.slint:2482
+msgctxt "MainWindow"
+msgid "Pairing URL"
+msgstr "URL d'association"
+
+#: ui/app.slint:2495
+msgctxt "MainWindow"
+msgid "New QR code"
+msgstr "Nouveau code QR"
+
+#: ui/app.slint:2500
+msgctxt "MainWindow"
+msgid "Confirm stop"
+msgstr "Confirmer l'arrêt"
+
+#: ui/app.slint:2501
+msgctxt "MainWindow"
+msgid "Stop server"
+msgstr "Arrêter le serveur"
+
+#: ui/app.slint:2568
+msgctxt "MainWindow"
+msgid "PERFORMANCE & FEATURES"
+msgstr "PERFORMANCE ET FONCTIONS"
+
+#: ui/app.slint:2575
+msgctxt "MainWindow"
+msgid "Switch off what you do not need: a disabled feature costs nothing."
+msgstr "Désactivez ce dont vous n'avez pas besoin : une fonction éteinte ne consomme rien."
+
+#: ui/app.slint:2589
+msgctxt "MainWindow"
+msgid "COMPANION"
+msgstr "COMPAGNON"
+
+#: ui/app.slint:2592
+msgctxt "MainWindow"
+msgid "Live game board"
+msgstr "Suivi de partie en direct"
+
+#: ui/app.slint:2593
+msgctxt "MainWindow"
+msgid "Polls the game once per second while you play (score, towers, objectives, mini widget)."
+msgstr "Interroge le jeu une fois par seconde pendant la partie (score, tours, objectifs, mini widget)."
+
+#: ui/app.slint:2598
+msgctxt "MainWindow"
+msgid "Game icons"
+msgstr "Icônes du jeu"
+
+#: ui/app.slint:2599
+msgctxt "MainWindow"
+msgid "Fetches and shows champion portraits, spells and profile icons. Otherwise: initials."
+msgstr "Télécharge et affiche les portraits de champions, sorts et icônes de profil. Sinon : initiales."
+
+#: ui/app.slint:2604
+msgctxt "MainWindow"
+msgid "Riot Client connection"
+msgstr "Connexion au Client Riot"
+
+#: ui/app.slint:2605
+msgctxt "MainWindow"
+msgid "Keeps a second WebSocket open to the Riot Client (chat presence)."
+msgstr "Garde un second WebSocket ouvert vers le Client Riot (présence du chat)."
+
+#: ui/app.slint:2610
+msgctxt "MainWindow"
+msgid "Mobile Remote at launch"
+msgstr "App Mobile au démarrage"
+
+#: ui/app.slint:2611
+msgctxt "MainWindow"
+msgid "Starts the local pairing server. Off: no port is opened on your network."
+msgstr "Démarre le serveur local d'association. Éteint : aucun port ouvert sur le réseau."
+
+#: ui/app.slint:2616
+msgctxt "MainWindow"
+msgid "Eco mode"
+msgstr "Mode éco"
+
+#: ui/app.slint:2617
+msgctxt "MainWindow"
+msgid "Halves refresh rates (interface, detection, live game)."
+msgstr "Divise par deux les fréquences de rafraîchissement (interface, détection, partie en direct)."
+
+#: ui/app.slint:2622
+msgctxt "MainWindow"
+msgid "Reduce motion"
+msgstr "Réduire les animations"
+
+#: ui/app.slint:2623
+msgctxt "MainWindow"
+msgid "Turns every animation off. The Windows animation setting is honoured either way."
+msgstr "Coupe toutes les animations. Le réglage d'animations de Windows est respecté dans tous les cas."
+
+#: ui/app.slint:2630
+msgctxt "MainWindow"
+msgid "OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)"
+msgstr "OBSERVATOIRE (ACTIF UNIQUEMENT QUAND IL EST OUVERT)"
+
+#: ui/app.slint:2634
+msgctxt "MainWindow"
+msgid "System footprint"
+msgstr "Empreinte système"
+
+#: ui/app.slint:2635
+msgctxt "MainWindow"
+msgid "Samples Riot process CPU / RAM and lists their ports and connections."
+msgstr "Mesure CPU / RAM des processus Riot et liste leurs ports et connexions."
+
+#: ui/app.slint:2640
+msgctxt "MainWindow"
+msgid "Endpoint catalog"
+msgstr "Catalogue des endpoints"
+
+#: ui/app.slint:2641
+msgctxt "MainWindow"
+msgid "Imports the clients' Swagger / help listing (several thousand entries)."
+msgstr "Importe la liste Swagger / help des clients (plusieurs milliers d'entrées)."
+
+#: ui/app.slint:2646
+msgctxt "MainWindow"
+msgid "Replay API probe"
+msgstr "Sonde API Replay"
+
+#: ui/app.slint:2647
+msgctxt "MainWindow"
+msgid "Queries /replay/game every 5 seconds during a game."
+msgstr "Interroge /replay/game toutes les 5 secondes pendant une partie."
+
+#: ui/app.slint:2671
+msgctxt "MiniAllyRow"
+msgid "no pick yet"
+msgstr "pas encore choisi"
+
+#: ui/app.slint:2672
+msgctxt "MiniAllyRow"
+msgid ", acting now"
+msgstr ", à son tour"
+
+#: ui/app.slint:2695
+msgctxt "MiniAllyRow"
+msgid "Waiting"
+msgstr "En attente"
+
+#: ui/app.slint:2704
+msgctxt "MiniAllyRow"
+msgid "YOUR TURN"
+msgstr "À VOUS"
+
+#: ui/app.slint:2704
+msgctxt "MiniAllyRow"
+msgid "PICKING"
+msgstr "CHOISIT"
+
+#: ui/app.slint:2705
+msgctxt "MiniAllyRow"
+msgid "YOU"
+msgstr "VOUS"
+
+#: ui/app.slint:2723
+msgctxt "MiniPlayerCell"
+msgid "{0}, dead, respawn {1}"
+msgstr "{0}, mort, réapparition {1}"
+
+#: ui/app.slint:2738
+msgctxt "MiniPlayerCell"
+msgid "Lv {0}"
+msgstr "Niv {0}"
+
+#: ui/app.slint:2748
+msgctxt "MiniWidget"
+msgid "Hypatia — Live"
+msgstr "Hypatia — En direct"
+
+#: ui/app.slint:2775
+msgctxt "MiniWidget"
+msgid "Waiting for a match"
+msgstr "En attente d'une partie"
+
+#: ui/app.slint:2776
+msgctxt "MiniWidget"
+msgid "Champion select and your game show up here automatically."
+msgstr "La sélection des champions et la partie s'afficheront ici automatiquement."
+
+#: ui/app.slint:2830
+msgctxt "MiniWidget"
+msgid "Score: {0} - {1}"
+msgstr "Score : {0} - {1}"
+
+#: ui/app.slint:2964
+msgctxt "MiniWidget"
+msgid "BLUE"
+msgstr "BLEU"
+
+#: ui/app.slint:2965 ui/app.slint:2967
+msgctxt "MiniWidget"
+msgid "None"
+msgstr "Aucun"
+
+#: ui/app.slint:2966
+msgctxt "MiniWidget"
+msgid "RED"
+msgstr "ROUGE"
+
+#: ui/app.slint:2980
+msgctxt "MiniWidget"
+msgid "RECENT EVENTS"
+msgstr "DERNIERS ÉVÉNEMENTS"
+
+#: ui/parts.slint:360
+msgctxt "ClockReadout"
+msgid "Time: {0}"
+msgstr "Temps : {0}"
+
+#: ui/parts.slint:615
+msgctxt "PhaseLine"
+msgid "Current phase: {0}"
+msgstr "Phase actuelle : {0}"
+
+#: ui/parts.slint:616
+msgctxt "PhaseLine"
+msgid "Lobby"
+msgstr "Salon"
+
+#: ui/parts.slint:616
+msgctxt "PhaseLine"
+msgid "Queue"
+msgstr "File d'attente"
+
+#: ui/parts.slint:616
+msgctxt "PhaseLine"
+msgid "Champ Select"
+msgstr "Sélection des champions"
+
+#: ui/parts.slint:617
+msgctxt "PhaseLine"
+msgid "Live Game"
+msgstr "En jeu"
+
+#: ui/parts.slint:617
+msgctxt "PhaseLine"
+msgid "Results"
+msgstr "Résultats"
+
+#: ui/parts.slint:617
+msgctxt "PhaseLine"
+msgid "Waiting"
+msgstr "Aucune partie en cours"
+
+#: ui/parts.slint:618
+msgctxt "PhaseLine"
+msgid "LOBBY"
+msgstr "SALON"
+
+#: ui/parts.slint:618
+msgctxt "PhaseLine"
+msgid "QUEUE"
+msgstr "FILE"
+
+#: ui/parts.slint:618
+msgctxt "PhaseLine"
+msgid "CHAMPIONS"
+msgstr "CHAMPIONS"
+
+#: ui/parts.slint:618
+msgctxt "PhaseLine"
+msgid "LIVE"
+msgstr "EN JEU"
+
+#: ui/parts.slint:618
+msgctxt "PhaseLine"
+msgid "RESULTS"
+msgstr "RÉSULTATS"
+
+#: ui/parts.slint:677
+msgctxt "LineMap"
+msgid "Three-lane map"
+msgstr "Carte des trois voies"
+
+#: ui/parts.slint:788
+msgctxt "ObjectiveRow"
+msgid "No objectives yet"
+msgstr "Aucun objectif pris"
+
+#: ui/parts.slint:920
+msgctxt "PlayerRow"
+msgid "{0}, you"
+msgstr "{0}, vous"
+
+#: ui/parts.slint:922
+msgctxt "PlayerRow"
+msgid ", dead, respawn in {0}"
+msgstr ", mort, réapparition dans {0}"
+
+#: ui/parts.slint:947
+msgctxt "PlayerRow"
+msgid "{0} (you)"
+msgstr "{0} (vous)"
+
+#: ui/parts.slint:955
+msgctxt "PlayerRow"
+msgid "Respawn {0}"
+msgstr "Réapp. dans {0}"
+
+#: ui/parts.slint:956
+msgctxt "PlayerRow"
+msgid "Lvl {0} · {1} CS"
+msgstr "Niv. {0} · {1} CS"
+
+#: ui/theme.slint:82
+msgctxt "Theme"
+msgid "Fill"
+msgstr "Tous postes"

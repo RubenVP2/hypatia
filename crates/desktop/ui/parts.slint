@@ -357,7 +357,7 @@ export component ClockReadout inherits Rectangle {
     min-height: figure.preferred-height + root.bar-room;
     accessible-role: text;
     accessible-label: root.seconds >= 0
-        ? (Theme.fr ? "Temps : " : "Time: ") + Theme.clock-text(root.seconds)
+        ? @tr("Time: {0}", Theme.clock-text(root.seconds))
         : root.fallback;
 
     figure := Text {
@@ -612,12 +612,10 @@ export component PhaseLine inherits Rectangle {
     in property <int> current: -1;
     height: 36px;
     accessible-role: text;
-    accessible-label: Theme.fr
-        ? ("Phase actuelle : " + (current == 0 ? "Salon" : current == 1 ? "File d'attente" : current == 2 ? "Sélection des champions" : current == 3 ? "En jeu" : current == 4 ? "Résultats" : "Aucune partie en cours"))
-        : ("Current phase: " + (current == 0 ? "Lobby" : current == 1 ? "Queue" : current == 2 ? "Champ Select" : current == 3 ? "Live Game" : current == 4 ? "Results" : "Waiting"));
-    property <[string]> stops: Theme.fr
-        ? ["SALON", "FILE", "CHAMPIONS", "EN JEU", "RÉSULTATS"]
-        : ["LOBBY", "QUEUE", "CHAMPIONS", "LIVE", "RESULTS"];
+    accessible-label: @tr("Current phase: {0}",
+        current == 0 ? @tr("Lobby") : current == 1 ? @tr("Queue") : current == 2 ? @tr("Champ Select")
+        : current == 3 ? @tr("Live Game") : current == 4 ? @tr("Results") : @tr("Waiting"));
+    property <[string]> stops: [@tr("LOBBY"), @tr("QUEUE"), @tr("CHAMPIONS"), @tr("LIVE"), @tr("RESULTS")];
 
     HorizontalLayout {
         alignment: start;
@@ -676,7 +674,7 @@ export component LineMap inherits Rectangle {
     in property <color> halo: Theme.panel;
     background: transparent;
     accessible-role: image;
-    accessible-label: Theme.fr ? "Carte des trois voies" : "Three-lane map";
+    accessible-label: @tr("Three-lane map");
 
     Path {
         width: 100%; height: 100%;
@@ -787,7 +785,7 @@ export component FeedRow inherits HorizontalLayout {
 // Objectives ramp: weighted icon chips combining emblem + objective label.
 export component ObjectiveRow inherits HorizontalLayout {
     in property <[ObjectiveChip]> chips;
-    in property <string> empty-text: Theme.fr ? "Aucun objectif pris" : "No objectives yet";
+    in property <string> empty-text: @tr("No objectives yet");
     in property <bool> compact: false;
     spacing: root.compact ? 6px : 8px;
     alignment: start;
@@ -919,9 +917,9 @@ export component PlayerRow inherits Rectangle {
     border-width: 1px;
     border-color: p.is-self ? Theme.rule-strong : Theme.rule;
     accessible-role: text;
-    accessible-label: root.p.champion + (root.p.is-self ? (Theme.fr ? ", vous" : ", you") : "")
+    accessible-label: (root.p.is-self ? @tr("{0}, you", root.p.champion) : root.p.champion)
         + ", " + root.p.kda
-        + (root.p.dead ? (Theme.fr ? ", mort, réapparition dans " : ", dead, respawn in ") + root.p.respawn : "");
+        + (root.p.dead ? @tr(", dead, respawn in {0}", root.p.respawn) : "");
     HorizontalLayout {
         padding-left: Space.md;
         padding-right: Space.md;
@@ -946,7 +944,7 @@ export component PlayerRow inherits Rectangle {
             alignment: center;
             spacing: 1px;
             Text {
-                text: root.p.champion + (root.p.is-self ? (Theme.fr ? " (vous)" : " (you)") : "");
+                text: (root.p.is-self ? @tr("{0} (you)", root.p.champion) : root.p.champion);
                 color: Theme.text;
                 font-size: Type.body;
                 font-weight: 800;
@@ -954,8 +952,8 @@ export component PlayerRow inherits Rectangle {
             }
             Text {
                 text: root.p.dead
-                    ? (Theme.fr ? "Réapp. dans " : "Respawn ") + root.p.respawn
-                    : (Theme.fr ? "Niv. " : "Lvl ") + root.p.level + " · " + root.p.cs + " CS";
+                    ? @tr("Respawn {0}", root.p.respawn)
+                    : @tr("Lvl {0} · {1} CS", root.p.level, root.p.cs);
                 color: root.p.dead ? Theme.danger : Theme.muted;
                 font-size: Type.small;
                 font-weight: root.p.dead ? 600 : 400;

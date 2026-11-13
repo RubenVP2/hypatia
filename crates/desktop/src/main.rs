@@ -145,8 +145,7 @@ impl Ui {
     fn set_lang(&self, lang: Lang) {
         save_persisted_lang(lang);
         self.app.set_lang(lang);
-        Theme::get(&self.main).set_fr(lang.is_fr());
-        Theme::get(&self.mini).set_fr(lang.is_fr());
+        apply_ui_language(&self.main, lang);
         self.telemetry.borrow_mut().invalidate_telemetry_cache();
         self.refresh();
     }
@@ -371,6 +370,15 @@ fn os_prefers_reduced_motion() -> bool {
     false
 }
 
+/// Switches every Slint window to `lang` through the bundled gettext catalogs.
+fn apply_ui_language(main: &MainWindow, lang: Lang) {
+    let code = if lang.is_fr() { "fr" } else { "en" };
+    if let Err(err) = slint::select_bundled_translation(code) {
+        tracing::warn!("Could not select UI language '{code}': {err}");
+    }
+    main.set_language(code.into());
+}
+
 fn initial_lang(cli: &Cli) -> Lang {
     match cli.lang.as_deref() {
         Some(raw) => Lang::from_code(raw).unwrap_or_else(|| {
@@ -386,7 +394,11 @@ fn wire_callbacks(ui: &Rc<Ui>) {
     let main = &ui.main;
 
     main.on_set_dark(|dark| with_ui(|ui| ui.set_dark(dark)));
-    main.on_set_fr(|fr| with_ui(|ui| ui.set_lang(if fr { Lang::Fr } else { Lang::En })));
+    main.on_select_language(|code| {
+        if let Some(lang) = Lang::from_code(&code) {
+            with_ui(|ui| ui.set_lang(lang));
+        }
+    });
     main.on_toggle_telemetry(|| with_ui(|ui| ui.set_telemetry(!ui.main.get_telemetry_enabled())));
     main.on_toggle_demo(|| with_ui(|ui| ui.toggle_demo()));
     main.on_select_demo_phase(|phase| {
@@ -513,8 +525,7 @@ fn main() {
     let dark = !(ui.cli.light || ui.settings.borrow().light_theme);
     ui.set_dark(dark);
     ui.apply_motion();
-    Theme::get(&ui.main).set_fr(lang.is_fr());
-    Theme::get(&ui.mini).set_fr(lang.is_fr());
+    apply_ui_language(&ui.main, lang);
     if let Some(phase) = ui.cli.pinned_phase() {
         ui.set_demo_phase(phase);
     }

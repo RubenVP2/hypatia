@@ -2,7 +2,6 @@
 
 export global Theme {
     in-out property <bool> dark: true;
-    in-out property <bool> fr: false;
     // False when the OS asks for reduced motion (or `--reduce-motion`): every duration drops to 0.
     in-out property <bool> motion: true;
 
@@ -80,7 +79,7 @@ export global Theme {
         if (lane == 2) { return "Mid"; }
         if (lane == 3) { return "Bot"; }
         if (lane == 4) { return "Support"; }
-        return self.fr ? "Tous postes" : "Fill";
+        return @tr("Fill");
     }
 
     public pure function lane-icon-path(lane: int) -> string {

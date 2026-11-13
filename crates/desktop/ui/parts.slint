@@ -389,6 +389,155 @@ export component SplashBackdrop inherits Rectangle {
     }
 }
 
+// The ready check, centre stage: the client's valley medallion inside a countdown ring that
+// loses one notch per second (no tween: see the drain bar). On arrival it scales in and an amber
+// halo pulses twice, then everything holds still. Accepting turns the ring Hextech cyan with a
+// check; declining turns it red with a cross. The medallion is always a dark object, in Day too.
+export component ReadyMedallion inherits Rectangle {
+    in property <int> seconds: -1;
+    in property <int> total: 10;
+    // 0 waiting for the player, 1 accepted, 2 declined.
+    in property <int> state: 0;
+    in property <length> size: 220px;
+    width: root.size;
+    height: root.size;
+    accessible-role: text;
+    accessible-label: root.state == 1
+        ? @tr("Match accepted")
+        : (root.state == 2 ? @tr("Match declined") : @tr("Match found, {0} left", Theme.clock-text(Math.max(0, root.seconds))));
+
+    property <bool> fired: false;
+    init => { self.fired = true; }
+    // Share of the ring still lit, and where its arc ends (100-unit viewbox, radius 49).
+    property <float> left: root.state != 0 ? 1 : Math.clamp(root.seconds / Math.max(1, root.total), 0, 1);
+    property <float> end-x: 50 + 49 * Math.sin(root.left * 360deg);
+    property <float> end-y: 50 - 49 * Math.cos(root.left * 360deg);
+    property <color> ink: root.state == 1
+        ? Theme.accent
+        : (root.state == 2 ? Theme.red : Theme.urgency-color(Theme.clock-urgency(root.seconds, true)));
+
+    body := Rectangle {
+        opacity: root.fired ? 1 : 0;
+        transform-scale: root.fired ? 1 : 0.86;
+        animate opacity, transform-scale { duration: Theme.dur-slow; easing: ease-out; }
+
+        // Arrival: an amber halo fades out twice, then stays invisible.
+        Rectangle {
+            x: -10px;
+            y: -10px;
+            width: parent.width + 20px;
+            height: parent.height + 20px;
+            border-radius: self.width / 2;
+            border-width: 3px;
+            border-color: Theme.signal;
+            opacity: root.fired ? 0 : 0.9;
+            animate opacity { duration: Theme.dur-pulse; iteration-count: 2; easing: ease-out; }
+        }
+
+        // Ring track.
+        Rectangle {
+            border-radius: self.width / 2;
+            border-width: 4px;
+            border-color: Theme.rule;
+        }
+
+        // The valley medallion, clipped to its circle (the client image carries two stand
+        // legs below the disc).
+        Rectangle {
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            height: self.width;
+            border-radius: self.width / 2;
+            clip: true;
+            background: #182334;
+            if ClientArt.ready-check.width > 0: Image {
+                x: -parent.width * 0.0125;
+                y: 0px;
+                width: parent.width * 1.025;
+                height: self.width;
+                source: ClientArt.ready-check;
+                image-fit: fill;
+            }
+            Rectangle {
+                background: @radial-gradient(circle, #05080dd9 0%, #05080d80 55%, #05080d00 100%);
+            }
+        }
+
+        // Countdown ring: a full circle when lit all round, an arc otherwise.
+        if root.left >= 0.999: Rectangle {
+            border-radius: self.width / 2;
+            border-width: 4px;
+            border-color: root.ink;
+            animate border-color { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        if root.left > 0.001 && root.left < 0.999: Path {
+            width: 100%;
+            height: 100%;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            fill: transparent;
+            stroke: root.ink;
+            stroke-width: 4px;
+            MoveTo {
+                x: 50;
+                y: 1;
+            }
+            ArcTo {
+                x: root.end-x;
+                y: root.end-y;
+                radius-x: 49;
+                radius-y: 49;
+                large-arc: root.left > 0.5;
+                sweep: true;
+            }
+        }
+
+        if root.state == 0: Text {
+            text: root.seconds >= 0 ? Theme.clock-text(root.seconds) : "!";
+            color: #eef0f5;
+            font-family: Type.display-family;
+            font-size: root.size * 0.26;
+            font-weight: 800;
+            letter-spacing: -1px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if root.state == 1: Path {
+            property <bool> shown: false;
+            init => { self.shown = true; }
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: root.size * 0.34;
+            height: self.width;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            fill: transparent;
+            stroke: #0ac8b9;
+            stroke-width: 5px;
+            commands: "M 4 12.5 L 9.5 18 L 20 6.5";
+            opacity: self.shown ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        if root.state == 2: Path {
+            property <bool> shown: false;
+            init => { self.shown = true; }
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: root.size * 0.3;
+            height: self.width;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            fill: transparent;
+            stroke: #f0605a;
+            stroke-width: 5px;
+            commands: "M 6 6 L 18 18 M 18 6 L 6 18";
+            opacity: self.shown ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+    }
+}
+
 // Full-bleed splash behind a screen's header (the player's own skin), shown at the strength
 // the client gives it, veiled on the left for the headline and fading into the page below.
 // The image keeps its own ratio and is shifted up so the band with the champion's face shows.

@@ -916,6 +916,13 @@ fn apply_summary(
             })
             .unwrap_or_else(|| lang.pick("Unranked", "Non classé").to_string());
 
+        // The player's answer to the ready check: 0 pending, 1 accepted, 2 declined.
+        let ready_state = match snap.matchmaking.as_ref().and_then(|m| m.player_response.as_deref()) {
+            _ if view != Screen::ReadyCheck => 0,
+            Some("Accepted") => 1,
+            Some("Declined") => 2,
+            _ => 0,
+        };
         let (title, detail, specimen) = match view {
             Screen::Offline => (
                 lang.pick(
@@ -981,30 +988,35 @@ fn apply_summary(
                 )
             }
             _ => {
-                let resp = snap
-                    .matchmaking
-                    .as_ref()
-                    .and_then(|m| m.player_response.as_deref())
-                    .unwrap_or("None");
-                (
-                    if resp == "Accepted" {
+                let (title, detail) = match ready_state {
+                    1 => (
                         lang.pick(
                             "Match Accepted — waiting on other players",
                             "Partie acceptée — en attente des autres joueurs",
-                        )
-                        .to_string()
-                    } else {
+                        ),
                         lang.pick(
-                            "Match Found — accept now!",
-                            "Partie trouvée — acceptez maintenant !",
-                        )
-                        .to_string()
-                    },
-                    lang.pick(
-                        "You can accept straight from your phone via Mobile Remote.",
-                        "Vous pouvez accepter directement depuis votre téléphone avec l'App Mobile.",
-                    )
-                    .to_string(),
+                            "Champion select starts once all ten players accept.",
+                            "La sélection des champions démarre quand les dix joueurs ont accepté.",
+                        ),
+                    ),
+                    2 => (
+                        lang.pick("Match Declined", "Partie refusée"),
+                        lang.pick(
+                            "You declined this match; the queue stops here.",
+                            "Vous avez refusé cette partie ; la file s'arrête ici.",
+                        ),
+                    ),
+                    _ => (
+                        lang.pick("Match Found — accept now!", "Partie trouvée — acceptez maintenant !"),
+                        lang.pick(
+                            "Accept in the League client, or straight from your phone via Mobile Remote.",
+                            "Acceptez dans le client League, ou directement depuis votre téléphone avec l'App Mobile.",
+                        ),
+                    ),
+                };
+                (
+                    title.to_string(),
+                    detail.to_string(),
                     SharedString::from(lang.pick("READY", "PRÊT")),
                 )
             }
@@ -1054,6 +1066,7 @@ fn apply_summary(
             title: SharedString::from(title),
             detail: SharedString::from(detail),
             specimen,
+            ready_state,
             summoner_name: summoner_header_name,
             summoner_initials,
             summoner_icon,

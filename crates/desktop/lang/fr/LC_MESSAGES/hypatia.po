@@ -35,6 +35,18 @@ msgctxt "EnemySlot"
 msgid "Enemy not picked yet"
 msgstr "Ennemi pas encore choisi"
 
+msgctxt "ReadyMedallion"
+msgid "Match accepted"
+msgstr "Partie acceptée"
+
+msgctxt "ReadyMedallion"
+msgid "Match declined"
+msgstr "Partie refusée"
+
+msgctxt "ReadyMedallion"
+msgid "Match found, {0} left"
+msgstr "Partie trouvée, {0} restantes"
+
 #: ui/app.slint:238
 msgctxt "RosterRow"
 msgid "Waiting for pick"

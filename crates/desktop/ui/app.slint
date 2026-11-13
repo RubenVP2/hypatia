@@ -3,7 +3,7 @@ import {
     AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
-    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
+    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, ReadyMedallion, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
     PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
@@ -52,6 +52,8 @@ export struct WaitView {
     summoner-icon: image,
     rank-tier: string,
     notes: [StatLine],
+    // Ready check answer: 0 pending, 1 accepted, 2 declined.
+    ready-state: int,
 }
 
 export struct ChampSelectView {
@@ -942,16 +944,45 @@ component WaitScreen inherits Flickable {
         padding: Theme.gutter;
         spacing: Space.xl;
 
-        Header {
+        // Ready check: the medallion takes the stage and carries the clock.
+        if root.is-ready-check: VerticalLayout {
+            spacing: Space.md;
+            HorizontalLayout {
+                alignment: center;
+                ReadyMedallion {
+                    seconds: root.clock-seconds;
+                    total: root.clock-total;
+                    state: root.wait.ready-state;
+                    size: root.compact ? 168px : 220px;
+                }
+            }
+            Text {
+                text: root.wait.title;
+                color: root.wait.ready-state == 0 ? Theme.signal-text : Theme.text;
+                font-family: Type.display-family;
+                font-size: Type.headline;
+                font-weight: 800;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+                animate color { duration: Theme.dur-slow; easing: ease-out; }
+            }
+            Text {
+                text: root.wait.detail;
+                color: Theme.muted;
+                font-size: Type.body;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        if !root.is-ready-check: Header {
             title: root.wait.title;
             detail: root.wait.detail;
             specimen: root.wait.specimen;
             clock-seconds: root.clock-seconds;
             clock-total: root.clock-total;
             clock-down: root.clock-down;
-            active-turn: root.is-ready-check;
             compact: root.compact;
-            splash-tint: root.is-ready-check ? Theme.signal : Theme.accent;
         }
 
         if !root.compact: HorizontalLayout {

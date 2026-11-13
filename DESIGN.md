@@ -184,7 +184,8 @@ One direction, Hextech: Hypatia's instrument grammar dressed in League's own mat
 Imagery comes only from the player's own League client, fetched read-only over the LCU and never bundled or redistributed (`hypatia_core::art`, asset category `art`):
 - **Painted Summoner's Rift** (`map-south` / `map-north`, beam on the player's base) behind the `LineMap` markers; the vector rift remains the fallback.
 - **Rift valley backdrop** (`gameflow-background`), pre-blurred, behind the pre-draft phase headers.
-- **Ready-check medallion, victory and defeat crests**, prepared for the phase redesigns.
+- **Ready-check medallion**: the client's round valley disc takes the centre of the ready check (`ReadyMedallion`), clipped to its circle, inside a countdown ring that loses one notch per second. The ring is amber, then red under 5 s; Hextech cyan with a check once accepted; red with a cross if declined. The medallion stays a dark object in Day as well.
+- **Victory and defeat crests**, prepared for the Results redesign.
 - **Champion splash art** behind phase headers once a champion is known. In Champion Select it runs full-bleed behind the header (the player's own skin, veiled on the left, fading into the page), and the headline plate turns translucent (`glass`) instead of carrying its own copy.
 - **Draft banners** (asset category `banner`): a 480x120 strip cut from each ally's chosen-skin splash fills the right of their draft row and melts into it from the left. A hovered champion shows at 40%, a locked pick at full strength.
 Each piece is cropped, downscaled to about twice its largest on-screen size, and blurred if needed **once in Rust** before it reaches the disk cache; the UI never scales a full-size texture or blurs at render time. The *Client artwork* switch (with *Game icons*) turns all of it off.
@@ -259,6 +260,7 @@ Motion marks a change of state that matters to the player; nothing loops and not
 
 **The Idle Budget Rule.** At rest the window draws nothing new: no animation may run while nothing changes. Transitions are triggered by an event, last under `400ms`, and only touch opacity, position, or scale (never layout). A loop is allowed only while the player must act (their turn, a ready check) and stops under reduced motion or eco mode. Every visual change is measured with `bench/measure.ps1` (idle, champ select, live game) before it ships.
 
+- **Ready check arrival:** the medallion scales in from 86% (`240ms`) and an amber halo fades out twice (`650ms` x2), then holds still; the answer swaps the ring color and fades in the check or cross (`240ms`).
 - **Turn start:** the phase plate fades to amber (`180ms`) and a 2px ring around it fades out twice (`650ms` x2), then holds still. On mobile the spotlight card's outline does the same.
 - **Countdown:** the urgency ramp colors fade over `240ms`; the drain bar steps down once per second with no tween: under Slint 1.18 any `animate` on it kept the window repainting at ~36 fps for the whole draft, and a few-pixel step does not need one. Clocks are extrapolated locally between Riot events (desktop: a 250ms Slint timer; mobile: a 250ms interval), so they never freeze.
 - **Rows and plates:** the acting row's tint fades in and out (`180ms`); a player who dies fades to 45% (`240ms`).

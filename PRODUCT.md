@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Native cross-platform desktop application (Windows, macOS, Linux), no browser and no webview. Rust everywhere: the existing backend crates (lockfile discovery, Riot HTTP client, WAMP, Live Client Data on port 2999, redaction) feed a **Slint** UI. The current Leptos/WASM frontend and the Axum HTTP server that serves it are being replaced. The design language is Hypatia's own, not per-OS native conventions (Platform is recorded as `web` for that reason).
+Native cross-platform desktop application (Windows, macOS, Linux), no browser and no webview. Rust everywhere: the existing backend crates (lockfile discovery, Riot HTTP client, WAMP, Live Client Data on port 2999, redaction) feed a **Slint** UI. An embedded Axum server exists only to serve the opt-in Mobile Remote page on the LAN. The design language is Hypatia's own, not per-OS native conventions (Platform is recorded as `web` for that reason).
 
 Two window forms of the same app:
 - **Main window**: the full app.
@@ -20,7 +20,7 @@ Any League of Legends player on PC, regardless of technical knowledge. They open
 - **Champion select**: to understand their team at a glance (roles, picks, bans, timer, visible info about allies).
 - **During the game**: on a second monitor or glanced at between fights, to follow the match state (score, objectives, key events, players).
 
-A minority of curious or technical players want to see what the Riot client exposes locally; they are served by a hidden Advanced mode.
+A minority of curious or technical players want to see what the Riot client exposes locally; they are served by the **Observatory**, an opt-in advanced view.
 
 ## Product Purpose
 
@@ -32,7 +32,7 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 - **100 % local, no account**: nothing leaves the machine, no sign-up, no ads, no telemetry.
 - **Safe for the account**: read-only, no overlay injected into the game, no automation of any kind.
 - **Light and discreet**: fast start, low CPU and memory, does not cost FPS.
-- **Transparent**: shows exactly what the Riot client exposes, with an Advanced mode for those who want to look under the hood.
+- **Transparent**: shows exactly what the Riot client exposes, with the Observatory for those who want to look under the hood.
 
 ## Operating Context
 
@@ -46,8 +46,8 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 - **Read-only by default, with an explicit opt-in Mobile Remote exception for accessibility**: the desktop observatory (`ReadOnlyRiotClient`) performs strictly `GET` requests and passive WebSocket subscriptions. When the user explicitly activates **Mobile Remote** (via the desktop UI toggle or `--remote`), a separate `LcuActionClient` and local LAN server paired via a 128-bit QR token allow one-handed mobile control of lobby role selection, queue start/stop, ready-check accept/decline, champion hover/lock, summoner spells, skins, rune pages, and role/pick-order/champion swaps. Every LCU write belongs to a closed enum allowlist (`RemoteCommand`) and requires an explicit user tap — zero background automation.
 - **Local data only**: every piece of information comes from local Riot APIs. No external stats services (champion win rates, builds, match history from third-party sites) unless this is revisited explicitly.
 - **Respect Riot anonymization**: in Ranked Solo/Duo champion select, ally identities are hidden by Riot; Hypatia must never try to reveal them.
-- Secrets (lockfile passwords, tokens, JWTs, PUUIDs) masked by default; only relevant in Advanced mode.
-- **Advanced mode** (off by default, enabled in settings): live WAMP event stream, `GET` endpoint catalog and runner, JSON inspector and diff, Riot processes and ports.
+- Secrets (lockfile passwords, tokens, JWTs, PUUIDs) masked by default; only revealable in the Observatory.
+- **Observatory** (closed by default, opened from the left rail or `--telemetry`): live WAMP event stream, `GET` endpoint catalog and runner, JSON inspector and diff, Riot processes and ports.
 - Interface language: English & French (live `EN | FR` switcher in Desktop & Mobile Remote, persisted locally with OS auto-detection and `--lang <en|fr>` CLI override).
 
 ## Evidence on Hand
@@ -66,4 +66,4 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 
 ## Accessibility & Inclusion
 
-WCAG AA contrast in both **Dark (Night)** and **Light (Day)** themes, full keyboard navigation on desktop, `prefers-reduced-motion` equivalent honored, text legible at a glance from a second monitor, and one-handed mobile ergonomics (56px+ touch targets, bottom thumb-zone navigation, audio/vibration/notification alerts for Match Found and draft turns).
+WCAG AA contrast in both **Dark (Night)** and **Light (Day)** themes, full keyboard navigation on desktop, `prefers-reduced-motion` equivalent honored, text legible at a glance from a second monitor, and one-handed mobile ergonomics (44px+ touch targets, bottom thumb-zone navigation, audio/vibration/notification alerts for Match Found and draft turns).

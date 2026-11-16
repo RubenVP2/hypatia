@@ -1,10 +1,39 @@
 //! Decoded game icons for the desktop views, backed by the core disk cache.
 
 use std::collections::HashMap;
+use std::path::Path;
 
-use hypatia_core::assets::GameAssetCache;
 use hypatia_core::AppState;
 use slint::Image;
+
+/// Seam for resolving decoded Slint icons so view builders stay testable in-process.
+pub trait IconLookup {
+    fn resolve_icon(&mut self, category: &'static str, id: i64) -> Image;
+}
+
+/// Deterministic no-op icon lookup for in-process desktop view tests.
+#[cfg(test)]
+#[derive(Default)]
+pub struct NoopIconLookup;
+
+#[cfg(test)]
+impl IconLookup for NoopIconLookup {
+    fn resolve_icon(&mut self, _category: &'static str, _id: i64) -> Image {
+        Image::default()
+    }
+}
+
+/// Live adapter tying [`DesktopAssetLoader`] to [`AppState::resolve_cached_asset`].
+pub struct AppIconLookup<'a> {
+    pub app: &'a AppState,
+    pub loader: &'a mut DesktopAssetLoader,
+}
+
+impl IconLookup for AppIconLookup<'_> {
+    fn resolve_icon(&mut self, category: &'static str, id: i64) -> Image {
+        self.loader.resolve(self.app, category, id)
+    }
+}
 
 #[derive(Default)]
 pub struct DesktopAssetLoader {
@@ -18,23 +47,26 @@ impl DesktopAssetLoader {
         if !app_state.flags.game_icons() {
             return Image::default();
         }
-        if let Some(img) = self.load_cached_only(&app_state.assets, category, id) {
-            return img;
+        let key = format!("{category}/{id}");
+        if let Some(img) = self.images.get(&key) {
+            return img.clone();
         }
-        if id > 0 || (category == "profile" && id >= 0) {
-            app_state.assets.prefetch_if_missing(
-                category,
-                id,
-                &app_state.discovery,
-                &app_state.riot_client,
-            );
-        }
-        Image::default()
+        let Some(path) = app_state.resolve_cached_asset(category, id) else {
+            return Image::default();
+        };
+        self.insert_from_path(key, &path).unwrap_or_default()
     }
 
+    fn insert_from_path(&mut self, key: String, path: &Path) -> Option<Image> {
+        let img = Image::load_from_path(path).ok()?;
+        self.images.insert(key, img.clone());
+        Some(img)
+    }
+
+    #[cfg(test)]
     fn load_cached_only(
         &mut self,
-        cache: &GameAssetCache,
+        cache: &hypatia_core::assets::GameAssetCache,
         category: &str,
         id: i64,
     ) -> Option<Image> {
@@ -46,15 +78,14 @@ impl DesktopAssetLoader {
             return Some(img.clone());
         }
         let path = cache.cached_image_path(category, id)?;
-        let img = Image::load_from_path(&path).ok()?;
-        self.images.insert(key, img.clone());
-        Some(img)
+        self.insert_from_path(key, &path)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hypatia_core::assets::GameAssetCache;
 
     #[test]
     fn desktop_asset_loader_loads_valid_png_from_disk_cache() {

@@ -5,12 +5,17 @@ use serde_json::Value;
 
 use crate::board::{extract_live_board_localized, LiveBoard};
 use crate::champions::{
-    extract_raw_champion_alias, is_champion_placeholder, ChampionLookup, Position,
+    builtin_skins_for_localized, extract_raw_champion_alias, is_champion_placeholder,
+    keystone_name_from_id_localized, recommended_pages_for_localized, rune_style_name_localized,
+    ChampionLookup, Position,
 };
 use crate::event::GamePhase;
 use crate::i18n::Lang;
-use crate::remote::RemoteActiveAction;
-use crate::source::SourceState;
+use crate::remote::{
+    RemoteActiveAction, RemoteChampionOption, RemoteIncomingSwap, RemoteRunePage,
+    RemoteSkinOption,
+};
+use crate::source::{SourceId, SourceState};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SummonerSummary {
@@ -162,6 +167,18 @@ pub struct ChampSelectSummary {
     pub local_cell_id: i64,
     #[serde(default)]
     pub local_action: Option<RemoteActiveAction>,
+    #[serde(default)]
+    pub incoming_swaps: Vec<RemoteIncomingSwap>,
+    #[serde(default)]
+    pub champions: Vec<RemoteChampionOption>,
+    #[serde(default)]
+    pub available_skins: Vec<RemoteSkinOption>,
+    #[serde(default)]
+    pub rune_pages: Vec<RemoteRunePage>,
+    #[serde(default)]
+    pub recommended_rune_pages: Vec<RemoteRunePage>,
+    #[serde(default)]
+    pub editable_rune_page_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -243,6 +260,8 @@ pub struct SummarySnapshot {
     pub lobby: Option<LobbySummary>,
     pub matchmaking: Option<MatchmakingSummary>,
     pub champ_select: Option<ChampSelectSummary>,
+    #[serde(default)]
+    pub editable_rune_page_id: Option<i64>,
     pub live_game: Option<LiveGameSummary>,
     #[serde(default)]
     pub board: Option<LiveBoard>,
@@ -261,10 +280,138 @@ pub struct MatchInputs<'a> {
     pub matchmaking_search: Option<&'a Value>,
     pub ready_check: Option<&'a Value>,
     pub champ_select: Option<&'a Value>,
+    pub pickable_champion_ids: Option<&'a Value>,
+    pub bannable_champion_ids: Option<&'a Value>,
+    pub skin_carousel: Option<&'a Value>,
+    pub rune_pages: Option<&'a Value>,
     pub live_allgame: Option<&'a Value>,
     pub live_active: Option<&'a Value>,
     pub live_events: Option<&'a Value>,
     pub end_of_game: Option<&'a Value>,
+}
+
+/// Localized queue-type display label shared across Desktop and Mobile Remote.
+pub fn queue_type_label(queue_type: &str, lang: Lang) -> String {
+    let trimmed = queue_type.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    match trimmed.to_ascii_uppercase().as_str() {
+        "RANKED_SOLO_5X5" | "RANKED SOLO 5X5" => {
+            lang.pick("Ranked Solo/Duo", "Classée Solo/Duo").to_string()
+        }
+        "RANKED_FLEX_SR" | "RANKED FLEX SR" => {
+            lang.pick("Ranked Flex", "Classée Flexible").to_string()
+        }
+        "NORMAL" | "NORMAL_DRAFT" | "DRAFT_PICK" => {
+            lang.pick("Normal Draft", "Faille · Draft").to_string()
+        }
+        "QUICKPLAY" | "SWIFTPLAY" => lang.pick("Quickplay", "Partie rapide").to_string(),
+        "ARAM" => "ARAM".to_string(),
+        "URF" | "ARURF" => "URF".to_string(),
+        "ARENA" | "CHERRY" => "Arena".to_string(),
+        "PRACTICETOOL" | "PRACTICE_TOOL" => {
+            lang.pick("Practice Tool", "Outil d'entraînement").to_string()
+        }
+        "CUSTOM" => lang.pick("Custom", "Partie personnalisée").to_string(),
+        _ => trimmed.replace('_', " "),
+    }
+}
+
+/// Localized champion-select sub-phase label (`PLANNING`, `BAN_PICK`, `FINALIZATION`, ...).
+pub fn sub_phase_label(sub_phase: &str, lang: Lang) -> String {
+    let trimmed = sub_phase.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    match trimmed.to_ascii_uppercase().as_str() {
+        "PLANNING" => lang.pick("Planning", "Planification").to_string(),
+        "BAN_PICK" => lang.pick("Ban / Pick", "Bannissements & Choix").to_string(),
+        "FINALIZATION" => lang.pick("Finalization", "Finalisation").to_string(),
+        "GAME_STARTING" => lang.pick("Game Starting", "Lancement de la partie").to_string(),
+        _ => trimmed.replace('_', " "),
+    }
+}
+
+/// Localized ranked tier label (`IRON` -> `"Iron"` / `"Fer"`, etc.).
+pub fn rank_tier_label(tier: &str, lang: Lang) -> &str {
+    match tier.trim().to_ascii_uppercase().as_str() {
+        "IRON" => lang.pick("Iron", "Fer"),
+        "BRONZE" => "Bronze",
+        "SILVER" => lang.pick("Silver", "Argent"),
+        "GOLD" => lang.pick("Gold", "Or"),
+        "PLATINUM" => lang.pick("Platinum", "Platine"),
+        "EMERALD" => lang.pick("Emerald", "Émeraude"),
+        "DIAMOND" => lang.pick("Diamond", "Diamant"),
+        "MASTER" => lang.pick("Master", "Maître"),
+        "GRANDMASTER" => lang.pick("Grandmaster", "Grand Maître"),
+        "CHALLENGER" => "Challenger",
+        _ => tier,
+    }
+}
+
+/// Two-letter uppercase monogram initials for a champion or summoner name (empty on placeholders).
+pub fn champ_initials_str(name: &str) -> String {
+    let trimmed = name.trim();
+    if is_champion_placeholder(trimmed) {
+        return String::new();
+    }
+    let words: Vec<&str> = trimmed
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let s: String = if words.len() >= 2 {
+        words
+            .iter()
+            .take(2)
+            .filter_map(|w| w.chars().next())
+            .collect()
+    } else {
+        trimmed.chars().take(2).collect()
+    };
+    s.to_uppercase()
+}
+
+/// Formats `seconds` as `m:ss` (truncated whole seconds, e.g. `4:05`).
+pub fn format_mm_ss_str(seconds: f64) -> String {
+    let total = seconds.max(0.0) as u64;
+    format!("{}:{:02}", total / 60, total % 60)
+}
+
+/// Formats `seconds` as zero-padded `mm:ss` (rounded whole seconds, e.g. `04:05`).
+pub fn format_clock_mm_ss(seconds: f64) -> String {
+    let total = seconds.max(0.0).round() as u64;
+    format!("{:02}:{:02}", total / 60, total % 60)
+}
+
+/// Formats a byte count with localized SI units (`B`/`o`, `KB`/`Ko`, `MB`/`Mo`).
+pub fn format_bytes(bytes: u64, lang: Lang) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} {}", bytes as f64 / 1_048_576.0, lang.pick("MB", "Mo"))
+    } else if bytes >= 1024 {
+        format!("{:.1} {}", bytes as f64 / 1024.0, lang.pick("KB", "Ko"))
+    } else {
+        format!("{} {}", bytes, lang.pick("B", "o"))
+    }
+}
+
+/// Formats a millisecond epoch timestamp as `HH:MM:SS`.
+pub fn format_ts_hms(ts_ms: i64) -> String {
+    let total_secs = (ts_ms.max(0) / 1000) % 86_400;
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    format!("{:02}:{:02}:{:02}", h, m, s)
+}
+
+/// Short localized badge label and index for a [`SourceId`].
+pub fn source_short_label(src: SourceId, lang: Lang) -> (&'static str, i32) {
+    match src {
+        SourceId::RiotClient => ("RC", 0),
+        SourceId::LeagueClient => ("LCU", 1),
+        SourceId::LiveGame => (lang.pick("GAME", "JEU"), 2),
+        SourceId::System => ("SYS", 3),
+    }
 }
 
 /// Returns the localized human-readable queue name for a Riot `queueId` (`""` when `queue_id <= 0`).
@@ -307,12 +454,16 @@ pub fn project_match(
         lang,
     );
     let champ_select = extract_champ_select_summary(
-        inputs.champ_select,
+        inputs,
         summoner.as_ref(),
         lobby.as_ref(),
         champions,
         lang,
     );
+    let editable_rune_page_id = champ_select
+        .as_ref()
+        .and_then(|cs| cs.editable_rune_page_id)
+        .or_else(|| extract_rune_pages(inputs.rune_pages, lang).1);
     let live_game = extract_live_game_summary(
         inputs.live_allgame,
         inputs.live_active,
@@ -332,6 +483,7 @@ pub fn project_match(
         lobby,
         matchmaking,
         champ_select,
+        editable_rune_page_id,
         live_game,
         board,
         end_of_game,
@@ -790,13 +942,13 @@ fn parse_champ_select_actions(
 }
 
 fn extract_champ_select_summary(
-    cs_val: Option<&Value>,
+    inputs: &MatchInputs<'_>,
     summoner: Option<&SummonerSummary>,
     lobby: Option<&LobbySummary>,
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> Option<ChampSelectSummary> {
-    let cs = cs_val?;
+    let cs = inputs.champ_select?;
     let timer = cs.get("timer");
     let sub_phase = timer
         .and_then(|t| t.get("phase"))
@@ -995,12 +1147,117 @@ fn extract_champ_select_summary(
         }
     }
 
+    let self_ally = my_team.iter().find(|m| m.is_self);
+    let assigned_position = self_ally
+        .map(|m| m.assigned_position.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("FILL");
+    let local_champ_id = self_ally.map(|m| m.champion_id).unwrap_or(0);
+    let selected_skin_id = self_ally.map(|m| m.selected_skin_id).unwrap_or(0);
+    let my_pos_label = Position::parse(assigned_position)
+        .unwrap_or(Position::Fill)
+        .display_label(lang);
+
+    let mut incoming_swaps = Vec::new();
+    for ally in &my_team {
+        if let (Some(id), Some(ref st)) = (ally.position_swap_id, &ally.position_swap_state) {
+            if st == "RECEIVED" {
+                let their_pos = Position::parse(&ally.assigned_position)
+                    .unwrap_or(Position::Fill)
+                    .display_label(lang);
+                incoming_swaps.push(RemoteIncomingSwap {
+                    id,
+                    kind: "position".to_string(),
+                    caller_name: ally.summoner_name.clone(),
+                    detail: if lang.is_fr() {
+                        format!(
+                            "veut échanger vers votre poste {my_pos_label} (actuellement {their_pos})"
+                        )
+                    } else {
+                        format!("wants to swap for your {my_pos_label} (currently {their_pos})")
+                    },
+                });
+            }
+        }
+        if let (Some(id), Some(ref st)) = (ally.pick_swap_id, &ally.pick_swap_state) {
+            if st == "RECEIVED" {
+                incoming_swaps.push(RemoteIncomingSwap {
+                    id,
+                    kind: "pick_order".to_string(),
+                    caller_name: ally.summoner_name.clone(),
+                    detail: lang
+                        .pick(
+                            "wants to swap pick order with you",
+                            "veut échanger l'ordre de sélection avec vous",
+                        )
+                        .to_string(),
+                });
+            }
+        }
+        if let (Some(id), Some(ref st)) = (ally.trade_id, &ally.trade_state) {
+            if st == "RECEIVED" {
+                let champ_label = if ally.has_champion() {
+                    ally.champion_name.as_str()
+                } else {
+                    lang.pick("Ally", "Allié")
+                };
+                incoming_swaps.push(RemoteIncomingSwap {
+                    id,
+                    kind: "champion".to_string(),
+                    caller_name: ally.summoner_name.clone(),
+                    detail: format!(
+                        "{} ({champ_label})",
+                        lang.pick("wants to trade champions", "veut échanger de champion")
+                    ),
+                });
+            }
+        }
+    }
+
+    let pickable_ids = parse_id_list(inputs.pickable_champion_ids);
+    let bannable_ids = parse_id_list(inputs.bannable_champion_ids);
+    let mut catalog = champions.champion_catalog();
+    for c in &mut catalog {
+        if let Some(ref pids) = pickable_ids {
+            if !pids.is_empty() {
+                c.pickable = pids.contains(&c.id);
+            }
+        }
+        if let Some(ref bids) = bannable_ids {
+            if !bids.is_empty() {
+                c.bannable = bids.contains(&c.id);
+            }
+        }
+    }
+
+    let champ_for_skins = if local_champ_id > 0 {
+        local_champ_id
+    } else {
+        local_action.as_ref().map(|a| a.champion_id).unwrap_or(0)
+    };
+    let available_skins = extract_available_skins(
+        inputs.skin_carousel,
+        champ_for_skins,
+        selected_skin_id,
+        champions,
+        lang,
+    );
+    let (rune_pages, editable_rune_page_id) = extract_rune_pages(inputs.rune_pages, lang);
+    let recommended_rune_pages =
+        recommended_pages_for_localized(champ_for_skins, assigned_position, lang);
+
     Some(ChampSelectSummary {
         their_team,
         acting_cell_id,
         acting_type,
         local_cell_id,
         local_action,
+        incoming_swaps,
+        champions: catalog,
+        available_skins,
+        rune_pages,
+        recommended_rune_pages,
+        editable_rune_page_id,
         sub_phase,
         time_left_sec,
         total_time_sec,
@@ -1012,6 +1269,94 @@ fn extract_champ_select_summary(
         my_team_ban_ids,
         their_team_ban_ids,
     })
+}
+
+fn parse_id_list(val: Option<&Value>) -> Option<Vec<i64>> {
+    val.and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|x| x.as_i64()).collect())
+}
+
+fn extract_available_skins(
+    skins_val: Option<&Value>,
+    champ_for_skins: i64,
+    selected_skin_id: i64,
+    champions: &dyn ChampionLookup,
+    lang: Lang,
+) -> Vec<RemoteSkinOption> {
+    let from_lcu = skins_val
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
+                .filter_map(|s| {
+                    let id = s.get("id")?.as_i64()?;
+                    let name = s.get("name")?.as_str()?.to_string();
+                    let tile_path = s
+                        .get("tilePath")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    Some(RemoteSkinOption {
+                        id,
+                        name,
+                        selected: id == selected_skin_id,
+                        tile_path,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|v| !v.is_empty());
+
+    from_lcu.unwrap_or_else(|| {
+        let cname = champions.resolve_champion_name_localized(champ_for_skins, lang);
+        builtin_skins_for_localized(champ_for_skins, &cname, selected_skin_id, lang)
+    })
+}
+
+fn extract_rune_pages(pages_val: Option<&Value>, lang: Lang) -> (Vec<RemoteRunePage>, Option<i64>) {
+    let Some(arr) = pages_val.and_then(|v| v.as_array()) else {
+        return (Vec::new(), None);
+    };
+    let mut editable_id = None;
+    let pages = arr
+        .iter()
+        .filter_map(|p| {
+            let id = p.get("id")?.as_i64()?;
+            let name = p.get("name")?.as_str()?.to_string();
+            let primary_style_id = p.get("primaryStyleId").and_then(|v| v.as_i64()).unwrap_or(8000);
+            let sub_style_id = p.get("subStyleId").and_then(|v| v.as_i64()).unwrap_or(8400);
+            let selected_perk_ids: Vec<i64> = p
+                .get("selectedPerkIds")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_i64()).collect())
+                .unwrap_or_default();
+            let current = p.get("current").and_then(|v| v.as_bool()).unwrap_or(false);
+            let explicit_editable = p.get("isEditable").and_then(|v| v.as_bool());
+            if explicit_editable == Some(true) && editable_id.is_none() {
+                editable_id = Some(id);
+            }
+            let is_preset = !explicit_editable.unwrap_or(true);
+            let keystone_name = selected_perk_ids
+                .first()
+                .copied()
+                .map(|kid| keystone_name_from_id_localized(kid, lang))
+                .unwrap_or(lang.pick("Keystone", "Rune fondamentale"))
+                .to_string();
+            Some(RemoteRunePage {
+                id,
+                name,
+                primary_style_id,
+                primary_style_name: rune_style_name_localized(primary_style_id, lang).to_string(),
+                sub_style_id,
+                sub_style_name: rune_style_name_localized(sub_style_id, lang).to_string(),
+                keystone_name,
+                selected_perk_ids,
+                current,
+                is_preset,
+            })
+        })
+        .collect();
+    (pages, editable_id)
 }
 
 fn extract_ban_list(
@@ -1564,5 +1909,58 @@ mod tests {
         assert_eq!(eog.game_length_sec, 0);
         assert_eq!(eog.champion_id, 0);
         assert_eq!(eog.champion_name, "");
+    }
+
+    #[test]
+    fn projects_champ_select_remote_controls_swaps_skins_and_runes() {
+        let cs = json!({
+            "localPlayerCellId": 1,
+            "timer": {"phase": "BAN_PICK", "adjustedTimeLeftInPhase": 19_500, "totalTimeInPhase": 30_000},
+            "actions": [[
+                {"id": 10, "actorCellId": 1, "type": "pick", "championId": 103, "completed": false, "isInProgress": true}
+            ]],
+            "positionSwaps": [{"id": 5, "cellId": 0, "state": "RECEIVED"}],
+            "myTeam": [
+                {"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 0, "puuid": ""},
+                {"cellId": 1, "assignedPosition": "MIDDLE", "championId": 103, "selectedSkinId": 103027, "summonerId": 1, "puuid": "p-self"}
+            ]
+        });
+        let pickable = json!([103, 157]);
+        let bannable = json!([238]);
+        let skins = json!([
+            {"id": 103000, "name": "Classic Ahri", "unlocked": true, "tilePath": "/lol-game-data/assets/v1/champion-tiles/103/103000.jpg"},
+            {"id": 103027, "name": "Spirit Blossom Ahri", "unlocked": true, "tilePath": "/lol-game-data/assets/v1/champion-tiles/103/103027.jpg"},
+            {"id": 103099, "name": "Locked Ahri", "unlocked": false}
+        ]);
+        let perks = json!([
+            {"id": 10, "name": "Preset", "primaryStyleId": 8000, "subStyleId": 8400, "selectedPerkIds": [8010], "current": false},
+            {"id": 42, "name": "Ahri Burst", "primaryStyleId": 8100, "subStyleId": 8200, "selectedPerkIds": [8112], "current": true, "isEditable": true}
+        ]);
+
+        let snap = project_match(
+            &MatchInputs {
+                champ_select: Some(&cs),
+                pickable_champion_ids: Some(&pickable),
+                bannable_champion_ids: Some(&bannable),
+                skin_carousel: Some(&skins),
+                rune_pages: Some(&perks),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        assert_eq!(snap.editable_rune_page_id, Some(42));
+        let p = snap.champ_select.unwrap();
+        assert_eq!(p.incoming_swaps.len(), 1);
+        assert_eq!(p.incoming_swaps[0].kind, "position");
+        assert!(p.champions.iter().find(|c| c.id == 103).unwrap().pickable);
+        assert!(!p.champions.iter().find(|c| c.id == 266).unwrap().pickable);
+        assert!(p.champions.iter().find(|c| c.id == 238).unwrap().bannable);
+        assert_eq!(p.available_skins.len(), 2);
+        assert!(p.available_skins[1].selected);
+        assert_eq!(p.editable_rune_page_id, Some(42));
+        assert_eq!(p.rune_pages[1].name, "Ahri Burst");
+        assert_eq!(p.rune_pages[1].keystone_name, "Électrocution");
+        assert!(!p.recommended_rune_pages.is_empty());
     }
 }

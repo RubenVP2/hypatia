@@ -261,6 +261,7 @@ pub fn extract_live_board_localized(
                     None => {}
                 }
                 let killer_is_self = matches!(&killer_info, Some((_, _, true, _)));
+                let victim_is_self = matches!(&victim_info, Some((_, _, true, _)));
                 let whom = match &victim_info {
                     Some((_, _, true, _)) => lang.pick("you", "vous").to_string(),
                     Some((.., champ)) => champ.clone(),
@@ -274,7 +275,12 @@ pub fn extract_live_board_localized(
                             Some((.., champ)) => champ.clone(),
                             None => killer.to_string(),
                         };
-                        format!("{who} a éliminé {whom}")
+                        // French puts the object pronoun before the verb.
+                        if victim_is_self {
+                            format!("{who} vous a éliminé")
+                        } else {
+                            format!("{who} a éliminé {whom}")
+                        }
                     }
                 } else {
                     let who = match &killer_info {
@@ -491,5 +497,20 @@ mod tests {
         assert_eq!(board_fr.feed[0].text, "Votre équipe a pris le Dragon infernal");
         assert_eq!(board_fr.feed[1].text, "Votre tourelle extérieure bot est tombée");
         assert_eq!(board_fr.feed[2].text, "Vous avez éliminé Zed");
+    }
+
+    #[test]
+    fn a_kill_on_the_player_reads_naturally_in_french() {
+        let l = live(vec![
+            player("Ezo#EUW", "Ahri", "CHAOS", "MIDDLE", 0, true),
+            player("Foe#EUW", "Zed", "ORDER", "MIDDLE", 1, false),
+        ]);
+        let events = json!({"Events": [
+            {"EventName": "ChampionKill", "EventTime": 600.0, "KillerName": "Foe", "VictimName": "Ezo"}
+        ]});
+        let fr = extract_live_board_localized(None, Some(&events), &l, Lang::Fr);
+        assert_eq!(fr.feed[0].text, "Zed vous a éliminé");
+        let en = extract_live_board_localized(None, Some(&events), &l, Lang::En);
+        assert_eq!(en.feed[0].text, "Zed killed you");
     }
 }

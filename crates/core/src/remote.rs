@@ -843,6 +843,27 @@ mod tests {
                 .map(|a| a.len()),
             Some(5)
         );
+        assert!(live_body["state"]["end_of_game"].is_null());
+
+        // 7. Demo switch to EndOfGame hands the phone the post-game block, champions only
+        let end_phase: serde_json::Value = client
+            .post(format!("http://127.0.0.1:{}/api/action", handle.port))
+            .header("X-Hypatia-Token", &new_qr.token)
+            .json(&RemoteCommand::DemoSetPhase {
+                phase: "EndOfGame".to_string(),
+            })
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let eog = &end_phase["state"]["end_of_game"];
+        assert!(matches!(eog["result"].as_str(), Some("Victory" | "Defeat")));
+        assert!(eog["champion_id"].as_i64().unwrap_or(0) > 0);
+        let teams = eog["teams"].as_array().expect("both teams");
+        assert_eq!(teams.len(), 2);
+        assert!(teams[0]["players"][0].get("summoner_name").is_none());
     }
 
     #[tokio::test]

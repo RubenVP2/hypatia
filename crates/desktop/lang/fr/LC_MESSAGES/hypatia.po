@@ -393,8 +393,20 @@ msgstr "Réponse de l'appel"
 
 #: ui/app.slint:1833
 msgctxt "EndScreen"
-msgid "MATCH SUMMARY"
-msgstr "RÉSUMÉ DU MATCH"
+msgid "ALLIES"
+msgstr "ALLIÉS"
+
+msgctxt "EndScreen"
+msgid "ENEMIES"
+msgstr "ENNEMIS"
+
+msgctxt "ResultCrest"
+msgid "Victory crest"
+msgstr "Blason de victoire"
+
+msgctxt "ResultCrest"
+msgid "Defeat crest"
+msgstr "Blason de défaite"
 
 #: ui/app.slint:2007
 msgctxt "MainWindow"

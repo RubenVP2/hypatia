@@ -185,7 +185,7 @@ Imagery comes only from the player's own League client, fetched read-only over t
 - **Painted Summoner's Rift** (`map-south` / `map-north`, beam on the player's base) behind the `LineMap` markers; the vector rift remains the fallback.
 - **Rift valley backdrop** (`gameflow-background`), pre-blurred, behind the pre-draft phase headers.
 - **Ready-check medallion**: the client's round valley disc takes the centre of the ready check (`ReadyMedallion`), clipped to its circle, inside a countdown ring that loses one notch per second. The ring is amber, then red under 5 s; Hextech cyan with a check once accepted; red with a cross if declined. The medallion stays a dark object in Day as well.
-- **Victory and defeat crests**, prepared for the Results redesign.
+- **Victory and defeat crests** take the centre of Results (`ResultCrest`) over the player's own skin splash, above the outcome in `58px` display type: gold for a victory; cold grey for a defeat, with a cold veil over the splash, since red stays the enemy's color. Below come the player's figures as tiles (KDA ratio, CS per minute, gold, damage, vision) and both teams' rows with their skin banners, read from the client's post-game block.
 - **Champion splash art** behind phase headers once a champion is known. In Champion Select it runs full-bleed behind the header (the player's own skin, veiled on the left, fading into the page), and the headline plate turns translucent (`glass`) instead of carrying its own copy.
 - **Draft banners** (asset category `banner`): a 480x120 strip cut from each ally's chosen-skin splash fills the right of their draft row and melts into it from the left. A hovered champion shows at 40%, a locked pick at full strength. In game the same strip, from each player's `skinID`, fills the right of all ten scoreboard rows and goes out (10%) while that player is dead.
 - **In game**, the player's own skin splash runs full-bleed behind the live HUD, as in Champion Select; a dark red veil falls over it while the player is dead.
@@ -271,6 +271,7 @@ Motion marks a change of state that matters to the player; nothing loops and not
   - **Enemy reveal:** the portrait scales in from 80% and a red ring fades out.
 
   The draft row models live for the whole session and are updated in place (`DraftModels` in `companion.rs`), so a new model never rebuilds the rows and replays them. Between moments the window stays at the idle frame rate.
+- **Results arrival:** the crest settles from 115% with a fade (`360ms`); a victory adds one golden glow that fades out after it (`360ms`, `110ms` delay); the outcome title fades in just after (`240ms`). Then nothing moves.
 - **Live moments**, each played once on the event, never on a drop (`LiveModels` keep the rows in place):
   - **Kill:** the scoring team's figure swells to 130% and its plate lights in the team color (`110ms` up, `240ms` back).
   - **Objective taken:** the chip fades in (`240ms`) and a ring flares from its pit on the map and fades (`Ping`, `360ms`).

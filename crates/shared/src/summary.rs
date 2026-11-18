@@ -228,6 +228,32 @@ pub struct LiveGameSummary {
     pub players: Vec<LiveGamePlayerSummary>,
 }
 
+/// One player's line in the post-game block (champion only: no summoner names).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct EndOfGamePlayer {
+    pub champion_id: i64,
+    pub champion_name: String,
+    /// Full skin id (`championId * 1000 + skin`), read from the splash path; 0 when unknown.
+    #[serde(default)]
+    pub skin_id: i64,
+    /// Riot position (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`), empty when unknown.
+    pub position: String,
+    pub level: u32,
+    pub kills: u32,
+    pub deaths: u32,
+    pub assists: u32,
+    pub creep_score: u32,
+    pub is_self: bool,
+}
+
+/// One team of the post-game block.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct EndOfGameTeam {
+    pub is_player_team: bool,
+    pub won: bool,
+    pub players: Vec<EndOfGamePlayer>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EndOfGameSummary {
     pub result: String,
@@ -240,6 +266,17 @@ pub struct EndOfGameSummary {
     pub assists: u32,
     pub total_gold: u32,
     pub damage_to_champions: u32,
+    /// Full skin id of the player's champion; 0 when unknown.
+    #[serde(default)]
+    pub skin_id: i64,
+    /// Lane minions plus jungle monsters.
+    #[serde(default)]
+    pub creep_score: u32,
+    #[serde(default)]
+    pub vision_score: u32,
+    /// Both teams, the player's own first; empty when the block carries none.
+    #[serde(default)]
+    pub teams: Vec<EndOfGameTeam>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1336,13 +1373,67 @@ fn extract_live_game_summary(
     })
 }
 
+/// A post-game stat (`CHAMPIONS_KILLED`, `GOLD_EARNED`, ...) or 0.
+fn eog_stat(stats: Option<&Value>, key: &str) -> u32 {
+    stats
+        .and_then(|s| s.get(key))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32
+}
+
+/// Full skin id from a client splash path such as `.../champion-splashes/103/103027.jpg`.
+fn skin_id_from_splash_path(path: &str) -> i64 {
+    path.rsplit('/')
+        .next()
+        .and_then(|file| file.split('.').next())
+        .and_then(|id| id.parse().ok())
+        .unwrap_or(0)
+}
+
+fn eog_player(
+    p: &Value,
+    local_puuid: &str,
+    champions: &dyn ChampionLookup,
+    lang: Lang,
+) -> EndOfGamePlayer {
+    let (champion_id, champion_name) = resolve_champion_pair(
+        p.get("championId").and_then(|v| v.as_i64()).unwrap_or(0),
+        p.get("championName").and_then(|v| v.as_str()),
+        champions,
+        lang,
+        false,
+    );
+    let text = |key: &str| p.get(key).and_then(|v| v.as_str()).unwrap_or("");
+    let position = [text("detectedTeamPosition"), text("selectedPosition")]
+        .into_iter()
+        .find(|pos| !pos.is_empty() && *pos != "NONE")
+        .unwrap_or("")
+        .to_string();
+    let puuid = text("puuid");
+    let is_self = p.get("isLocalPlayer").and_then(|v| v.as_bool()).unwrap_or(false)
+        || (!local_puuid.is_empty() && puuid == local_puuid);
+    let stats = p.get("stats");
+    EndOfGamePlayer {
+        champion_id,
+        champion_name,
+        skin_id: skin_id_from_splash_path(text("skinSplashPath")),
+        position,
+        level: eog_stat(stats, "LEVEL"),
+        kills: eog_stat(stats, "CHAMPIONS_KILLED"),
+        deaths: eog_stat(stats, "NUM_DEATHS"),
+        assists: eog_stat(stats, "ASSISTS"),
+        creep_score: eog_stat(stats, "MINIONS_KILLED") + eog_stat(stats, "NEUTRAL_MINIONS_KILLED"),
+        is_self,
+    }
+}
+
 fn extract_eog_summary(
     eog_val: Option<&Value>,
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> Option<EndOfGameSummary> {
     let eog = eog_val?;
-    let result = eog
+    let mut result = eog
         .get("gameResult")
         .and_then(|v| v.as_str())
         .unwrap_or("")
@@ -1385,6 +1476,40 @@ fn extract_eog_summary(
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u32;
 
+    let local_puuid = local
+        .and_then(|l| l.get("puuid"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let mut teams: Vec<EndOfGameTeam> = eog
+        .get("teams")
+        .and_then(|v| v.as_array())
+        .map(|teams| {
+            teams
+                .iter()
+                .map(|t| {
+                    let players: Vec<EndOfGamePlayer> = t
+                        .get("players")
+                        .and_then(|v| v.as_array())
+                        .map(|ps| ps.iter().map(|p| eog_player(p, local_puuid, champions, lang)).collect())
+                        .unwrap_or_default();
+                    let is_player_team = t.get("isPlayerTeam").and_then(|v| v.as_bool()).unwrap_or(false)
+                        || players.iter().any(|p| p.is_self);
+                    EndOfGameTeam {
+                        is_player_team,
+                        won: t.get("isWinningTeam").and_then(|v| v.as_bool()).unwrap_or(false),
+                        players,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    teams.sort_by_key(|t| !t.is_player_team);
+    if result.is_empty() {
+        if let Some(mine) = teams.iter().find(|t| t.is_player_team) {
+            result = if mine.won { "Victory" } else { "Defeat" }.to_string();
+        }
+    }
+
     Some(EndOfGameSummary {
         result,
         game_length_sec,
@@ -1395,6 +1520,12 @@ fn extract_eog_summary(
         assists,
         total_gold,
         damage_to_champions,
+        skin_id: skin_id_from_splash_path(
+            local.and_then(|l| l.get("skinSplashPath")).and_then(|v| v.as_str()).unwrap_or(""),
+        ),
+        creep_score: eog_stat(stats, "MINIONS_KILLED") + eog_stat(stats, "NEUTRAL_MINIONS_KILLED"),
+        vision_score: eog_stat(stats, "VISION_SCORE"),
+        teams,
     })
 }
 
@@ -1603,6 +1734,49 @@ mod tests {
         assert_eq!(eog.game_length_sec, 0);
         assert_eq!(eog.champion_id, 0);
         assert_eq!(eog.champion_name, "");
+    }
+
+    #[test]
+    fn end_of_game_reads_both_teams_and_the_players_skin() {
+        let eog = json!({
+            "gameLength": 1500,
+            "localPlayer": {
+                "championId": 103,
+                "puuid": "me",
+                "skinSplashPath": "/lol-game-data/assets/v1/champion-splashes/103/103027.jpg",
+                "stats": {"CHAMPIONS_KILLED": 5, "MINIONS_KILLED": 180, "NEUTRAL_MINIONS_KILLED": 12, "VISION_SCORE": 31}
+            },
+            "teams": [
+                {"isPlayerTeam": false, "isWinningTeam": false, "players": [
+                    {"championId": 122, "detectedTeamPosition": "TOP", "stats": {"LEVEL": 15}}
+                ]},
+                {"isWinningTeam": true, "players": [
+                    {"championId": 103, "puuid": "me", "selectedPosition": "MIDDLE",
+                     "skinSplashPath": "/lol-game-data/assets/v1/champion-splashes/103/103027.jpg",
+                     "stats": {"CHAMPIONS_KILLED": 5, "NUM_DEATHS": 1, "ASSISTS": 7, "MINIONS_KILLED": 180, "NEUTRAL_MINIONS_KILLED": 12, "LEVEL": 16}},
+                    {"championId": 86, "detectedTeamPosition": "NONE", "selectedPosition": "TOP"}
+                ]}
+            ]
+        });
+        let summary = extract_eog_summary(Some(&eog), &BuiltinChampionCatalog, Lang::En).unwrap();
+
+        // No gameResult in the block: the player's team decides it.
+        assert_eq!(summary.result, "Victory");
+        assert_eq!(summary.skin_id, 103027);
+        assert_eq!(summary.creep_score, 192);
+        assert_eq!(summary.vision_score, 31);
+        assert_eq!(summary.teams.len(), 2);
+        let mine = &summary.teams[0];
+        assert!(mine.is_player_team && mine.won);
+        assert!(mine.players[0].is_self);
+        assert_eq!(mine.players[0].position, "MIDDLE");
+        assert_eq!(mine.players[0].skin_id, 103027);
+        assert_eq!((mine.players[0].kills, mine.players[0].deaths, mine.players[0].assists), (5, 1, 7));
+        assert_eq!(mine.players[0].creep_score, 192);
+        assert_eq!(mine.players[1].position, "TOP");
+        assert_eq!(mine.players[1].skin_id, 0);
+        assert!(!summary.teams[1].is_player_team);
+        assert_eq!(summary.teams[1].players[0].level, 15);
     }
 
     #[test]

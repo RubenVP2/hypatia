@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::time::Duration;
 
@@ -100,23 +100,63 @@ fn lock_if_active<'a>(
 /// Endpoint carrying the demo post-game summary.
 pub(crate) const DEMO_EOG_URI: &str = "/lol-end-of-game/v1/eog-stats-block";
 
-/// Post-game stats block for the demo match (Ahri, victory).
+/// Each demo post-game block alternates victory and defeat, so both results can be shown.
+static DEMO_EOG_ROUND: AtomicU32 = AtomicU32::new(0);
+
+/// Post-game stats block for the demo match (Ahri), with both teams of `DEMO_PLAYERS`.
+/// Victory first, then defeat on the next end of game, and so on.
 pub(crate) fn demo_eog_stats() -> serde_json::Value {
+    let victory = DEMO_EOG_ROUND.fetch_add(1, Ordering::Relaxed) % 2 == 0;
+    const IDS: [i64; 10] = [86, 64, 103, 222, 412, 122, 234, 238, 145, 111];
+    // (kills, deaths, assists, lane minions, jungle monsters, level, gold, damage, vision)
+    const LINES: [(u32, u32, u32, u32, u32, u32, u32, u32, u32); 10] = [
+        (4, 3, 6, 201, 4, 16, 11200, 18400, 14),
+        (6, 2, 11, 38, 168, 15, 11950, 15200, 31),
+        (9, 2, 14, 214, 12, 17, 14950, 34820, 28),
+        (7, 4, 8, 236, 10, 16, 13800, 27100, 17),
+        (1, 5, 17, 32, 0, 13, 8100, 6900, 64),
+        (5, 6, 2, 188, 6, 16, 10900, 21300, 12),
+        (3, 5, 6, 41, 152, 14, 9800, 12400, 26),
+        (6, 7, 3, 196, 8, 15, 10600, 22900, 15),
+        (3, 6, 5, 221, 6, 15, 11300, 19800, 13),
+        (1, 4, 9, 29, 0, 12, 7400, 7100, 52),
+    ];
+    let players: Vec<serde_json::Value> = DEMO_PLAYERS
+        .iter()
+        .enumerate()
+        .map(|(i, (_, champ, _, pos))| {
+            let (k, d, a, minions, monsters, level, gold, damage, vision) = LINES[i];
+            let skin = IDS[i] * 1000 + DEMO_SKINS[i];
+            json!({
+                "championId": IDS[i],
+                "championName": champ,
+                "detectedTeamPosition": pos,
+                "isLocalPlayer": i == 2,
+                "skinSplashPath": format!("/lol-game-data/assets/v1/champion-splashes/{}/{skin}.jpg", IDS[i]),
+                "stats": {
+                    "CHAMPIONS_KILLED": k,
+                    "NUM_DEATHS": d,
+                    "ASSISTS": a,
+                    "MINIONS_KILLED": minions,
+                    "NEUTRAL_MINIONS_KILLED": monsters,
+                    "LEVEL": level,
+                    "GOLD_EARNED": gold,
+                    "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": damage,
+                    "VISION_SCORE": vision
+                }
+            })
+        })
+        .collect();
     json!({
         "gameId": 894512301,
         "gameLength": 1694,
         "gameMode": "CLASSIC",
-        "gameResult": "Victory",
-        "localPlayer": {
-            "championName": "Ahri",
-            "stats": {
-                "CHAMPIONS_KILLED": 9,
-                "NUM_DEATHS": 2,
-                "ASSISTS": 14,
-                "GOLD_EARNED": 14950,
-                "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 34820
-            }
-        }
+        "gameResult": if victory { "Victory" } else { "Defeat" },
+        "localPlayer": players[2].clone(),
+        "teams": [
+            {"teamId": 100, "isPlayerTeam": true, "isWinningTeam": victory, "players": players[..5].to_vec()},
+            {"teamId": 200, "isPlayerTeam": false, "isWinningTeam": !victory, "players": players[5..].to_vec()}
+        ]
     })
 }
 

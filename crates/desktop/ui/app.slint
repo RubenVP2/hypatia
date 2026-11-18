@@ -3,7 +3,7 @@ import {
     AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
-    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, ReadyMedallion, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
+    Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, ReadyMedallion, ResultCrest, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
     PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
@@ -103,13 +103,12 @@ export struct LiveView {
 export struct EndView {
     title: string,
     detail: string,
-    kda: string,
     victory: bool,
-    champion-name: string,
-    champion-initials: string,
-    champion-icon: image,
     splash-icon: image,
-    stats: [StatLine],
+    // The player's figures (KDA, CS per minute, gold, damage, vision).
+    tiles: [StatLine],
+    allies: [PlayerLine],
+    enemies: [PlayerLine],
 }
 
 component NoteRow inherits Rectangle {
@@ -2008,18 +2007,65 @@ component TelemetryPanel inherits Rectangle {
     }
 }
 
+// One figure of the player's game on Results: the value large, its label beneath.
+component StatTile inherits Rectangle {
+    in property <StatLine> stat;
+    height: 76px;
+    min-width: 92px;
+    border-radius: Theme.radius;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.rule;
+    accessible-role: text;
+    accessible-label: root.stat.label + ": " + root.stat.value;
+    VerticalLayout {
+        padding: Space.md;
+        alignment: center;
+        spacing: Space.xxs;
+        Text {
+            text: root.stat.value;
+            color: Theme.text;
+            font-family: Type.display-family;
+            font-size: Type.title + 4px;
+            font-weight: 800;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.stat.label;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            letter-spacing: 1px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Results: the crest centre stage over the player's splash, the outcome in large type, the
+// player's figures, then both teams. A defeat is cold grey: red stays the enemy's colour.
 component EndScreen inherits Flickable {
     in property <EndView> end;
     in property <bool> compact: false;
     content-height: end-body.preferred-height;
 
-    SplashBackdrop {
+    HeroSplash {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: 210px;
+        height: 320px;
         splash: root.end.splash-icon;
-        tint: root.end.victory ? Theme.live-green : Theme.red;
+    }
+
+    // Defeat: a cold veil mutes the splash.
+    if !root.end.victory: Rectangle {
+        property <color> veil: Theme.dark ? #0b1119 : Theme.ground;
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 320px;
+        background: @linear-gradient(180deg, self.veil 0%, self.veil 60%, self.veil.with-alpha(0) 100%);
+        opacity: 0.6;
     }
 
     end-body := VerticalLayout {
@@ -2027,50 +2073,69 @@ component EndScreen inherits Flickable {
         padding: Theme.gutter;
         spacing: Space.xl;
 
-        Header {
-            title: root.end.title;
-            detail: root.end.detail;
-            specimen: root.end.kda;
-            compact: root.compact;
-            splash: root.end.splash-icon;
-            splash-tint: root.end.victory ? Theme.live-green : Theme.red;
+        VerticalLayout {
+            padding-top: Space.lg;
+            spacing: Space.sm;
+            HorizontalLayout {
+                alignment: center;
+                ResultCrest {
+                    victory: root.end.victory;
+                    size: root.compact ? 120px : 150px;
+                }
+            }
+            Text {
+                property <bool> shown: false;
+                init => { self.shown = true; }
+                text: root.end.title;
+                color: root.end.victory ? Theme.gold-bright : (Theme.dark ? #aeb6c2 : Theme.muted);
+                font-family: Type.display-family;
+                font-size: root.compact ? 44px : Type.display;
+                font-weight: 800;
+                letter-spacing: 3px;
+                horizontal-alignment: center;
+                opacity: self.shown ? 1 : 0;
+                animate opacity { duration: Theme.dur-slow; delay: Theme.dur-fast; easing: ease-out; }
+            }
+            Text {
+                text: root.end.detail;
+                color: Theme.muted;
+                font-size: Type.body;
+                font-weight: 600;
+                horizontal-alignment: center;
+            }
         }
 
-        Card {
-            VerticalLayout {
-                padding: Space.lg;
-                spacing: Space.sm;
-                SectionLabel { text: @tr("MATCH SUMMARY"); }
-                if root.end.champion-name != "": HorizontalLayout {
-                    spacing: Space.md;
-                    height: 48px;
-                    ChampPlate {
-                        y: (parent.height - self.height) / 2;
-                        size: 44px;
-                        label: root.end.champion-initials;
-                        icon: root.end.champion-icon;
-                        mine: true;
-                        is-self: true;
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        spacing: Space.xxs;
-                        Text {
-                            text: root.end.champion-name;
-                            color: Theme.text;
-                            font-size: Type.name;
-                            font-weight: 800;
-                        }
-                        Text {
-                            text: root.end.title + " · " + root.end.kda;
-                            color: root.end.victory ? Theme.live-green : Theme.muted;
-                            font-size: Type.small;
-                            font-weight: 600;
-                        }
-                    }
-                }
-                for st in root.end.stats: NoteRow { note: st; }
+        HorizontalLayout {
+            spacing: Space.md;
+            for t in root.end.tiles: StatTile {
+                horizontal-stretch: 1;
+                stat: t;
             }
+        }
+
+        if !root.compact && root.end.allies.length > 0: HorizontalLayout {
+            spacing: Space.lg;
+            alignment: stretch;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Space.sm;
+                SectionLabel { text: @tr("ALLIES"); }
+                for p in root.end.allies: PlayerRow { p: p; mine: true; }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Space.sm;
+                SectionLabel { text: @tr("ENEMIES"); }
+                for p in root.end.enemies: PlayerRow { p: p; mine: false; }
+            }
+        }
+
+        if root.compact && root.end.allies.length > 0: VerticalLayout {
+            spacing: Space.md;
+            SectionLabel { text: @tr("ALLIES"); }
+            for p in root.end.allies: PlayerRow { p: p; mine: true; }
+            SectionLabel { text: @tr("ENEMIES"); }
+            for p in root.end.enemies: PlayerRow { p: p; mine: false; }
         }
     }
 }

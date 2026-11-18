@@ -540,6 +540,40 @@ export component ReadyMedallion inherits Rectangle {
     }
 }
 
+// The result crest at the top of Results: the client's victory or defeat crest. On arrival it
+// settles from 115% with a fade; a victory adds one golden glow that fades out. Then it holds.
+export component ResultCrest inherits Rectangle {
+    in property <bool> victory;
+    in property <length> size: 150px;
+    width: root.size;
+    height: root.size;
+    accessible-role: image;
+    accessible-label: root.victory ? @tr("Victory crest") : @tr("Defeat crest");
+    property <bool> fired: false;
+    init => { self.fired = true; }
+
+    if root.victory: Rectangle {
+        x: -root.size * 0.25;
+        y: -root.size * 0.25;
+        width: root.size * 1.5;
+        height: root.size * 1.5;
+        background: @radial-gradient(circle, #f0e6d2b3 0%, #c8aa6e59 38%, #c8aa6e00 70%);
+        opacity: root.fired ? 0 : 1;
+        animate opacity { duration: Theme.dur-reveal; delay: Theme.dur-fast; easing: ease-out; }
+    }
+    Rectangle {
+        opacity: root.fired ? 1 : 0;
+        transform-scale: root.fired ? 1 : 1.15;
+        animate opacity, transform-scale { duration: Theme.dur-reveal; easing: ease-out; }
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.victory ? ClientArt.victory : ClientArt.defeat;
+            image-fit: contain;
+        }
+    }
+}
+
 // Full-bleed splash behind a screen's header (the player's own skin), shown at the strength
 // the client gives it, veiled on the left for the headline and fading into the page below.
 // The image keeps its own ratio and is shifted up so the band with the champion's face shows.

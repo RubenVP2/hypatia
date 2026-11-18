@@ -8,7 +8,7 @@ use std::time::Instant;
 use hypatia_core::art::{self, ClientArt as ArtPiece};
 use hypatia_core::AppState;
 use hypatia_shared::{
-    spell_name_from_id_localized, ChampSelectSummary, EndOfGameSummary, Lane, Lang, LiveBoard,
+    spell_name_from_id_localized, ChampSelectSummary, EndOfGamePlayer, EndOfGameSummary, Lane, Lang, LiveBoard,
     LiveGameSummary, ObjectiveKind, Position, SourceId, SourceStatus, SummarySnapshot,
     SummonerSummary,
 };
@@ -592,6 +592,26 @@ fn build_live_view(
     }
 }
 
+/// One decimal, with the language's decimal separator (`11.5` / `11,5`).
+fn format_decimal(value: f64, lang: Lang) -> String {
+    let text = format!("{value:.1}");
+    if lang.is_fr() { text.replace('.', ",") } else { text }
+}
+
+/// Thousands grouped the language's way (`14,950` / `14 950`).
+fn format_thousands(value: u32, lang: Lang) -> String {
+    let digits = value.to_string();
+    let separator = if lang.is_fr() { ' ' } else { ',' };
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(separator);
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn build_end_view(
     eog: &EndOfGameSummary,
     app_state: &AppState,
@@ -600,42 +620,78 @@ fn build_end_view(
 ) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
     let cid = eog.champion_id;
-    let stats = vec![
-        StatLine {
-            label: SharedString::from("Champion"),
-            value: SharedString::from(eog.champion_name.as_str()),
-        },
-        StatLine {
-            label: SharedString::from(lang.pick("Game Length", "Durée de la partie")),
-            value: format_mm_ss(eog.game_length_sec as f64),
-        },
-        StatLine {
-            label: SharedString::from(lang.pick("Total Gold", "Or accumulé")),
-            value: SharedString::from(format!("{}", eog.total_gold)),
-        },
-        StatLine {
-            label: SharedString::from(lang.pick("Damage to Champions", "Dégâts aux champions")),
-            value: SharedString::from(format!("{}", eog.damage_to_champions)),
-        },
-    ];
+    let tile = |label: &str, value: String| StatLine {
+        label: SharedString::from(label),
+        value: SharedString::from(value),
+    };
+    let minutes = (eog.game_length_sec as f64 / 60.0).max(1.0);
+    let kda_ratio = (eog.kills + eog.assists) as f64 / eog.deaths.max(1) as f64;
+    let mut tiles = vec![tile("KDA", format_decimal(kda_ratio, lang))];
+    if eog.creep_score > 0 {
+        tiles.push(tile("CS/MIN", format_decimal(eog.creep_score as f64 / minutes, lang)));
+    }
+    tiles.push(tile(lang.pick("GOLD", "OR"), format_thousands(eog.total_gold, lang)));
+    tiles.push(tile(lang.pick("DAMAGE", "DÉGÂTS"), format_thousands(eog.damage_to_champions, lang)));
+    if eog.vision_score > 0 {
+        tiles.push(tile("VISION", eog.vision_score.to_string()));
+    }
+
+    let mut rows = |players: &[EndOfGamePlayer]| -> Vec<PlayerLine> {
+        let mut lines: Vec<PlayerLine> = players
+            .iter()
+            .map(|p| {
+                let pcid = p.champion_id;
+                PlayerLine {
+                    lane: Position::parse(&p.position).map_or(-1, Position::desktop_index),
+                    champion: SharedString::from(p.champion_name.as_str()),
+                    initials: champ_initials(&p.champion_name),
+                    icon: loader.resolve(app_state, "champion", pcid),
+                    banner: resolve_skin_art(app_state, loader, art::BANNER_CATEGORY, p.skin_id, pcid),
+                    level: p.level as i32,
+                    kda: SharedString::from(format!("{} / {} / {}", p.kills, p.deaths, p.assists)),
+                    cs: p.creep_score as i32,
+                    is_self: p.is_self,
+                    dead: false,
+                    respawn: SharedString::default(),
+                }
+            })
+            .collect();
+        // Lane order, unknown positions last.
+        lines.sort_by_key(|l| if l.lane < 0 { i32::MAX } else { l.lane });
+        lines
+    };
+    let allies = eog
+        .teams
+        .iter()
+        .find(|t| t.is_player_team)
+        .map(|t| rows(&t.players))
+        .unwrap_or_default();
+    let enemies = eog
+        .teams
+        .iter()
+        .find(|t| !t.is_player_team)
+        .map(|t| rows(&t.players))
+        .unwrap_or_default();
+
     EndView {
         title: SharedString::from(if victory {
-            lang.pick("Victory", "Victoire")
+            lang.pick("VICTORY", "VICTOIRE")
         } else {
-            lang.pick("Defeat", "Défaite")
+            lang.pick("DEFEAT", "DÉFAITE")
         }),
         detail: SharedString::from(format!(
-            "{} · {}",
+            "{} · {} / {} / {} · {}",
             eog.champion_name,
+            eog.kills,
+            eog.deaths,
+            eog.assists,
             format_mm_ss(eog.game_length_sec as f64)
         )),
-        kda: SharedString::from(format!("{} / {} / {}", eog.kills, eog.deaths, eog.assists)),
         victory,
-        champion_name: SharedString::from(eog.champion_name.as_str()),
-        champion_initials: champ_initials(&eog.champion_name),
-        champion_icon: loader.resolve(app_state, "champion", cid),
-        splash_icon: resolve_splash(app_state, loader, cid * 1000, cid),
-        stats: ModelRc::new(VecModel::from(stats)),
+        splash_icon: resolve_splash(app_state, loader, eog.skin_id, cid),
+        tiles: ModelRc::new(VecModel::from(tiles)),
+        allies: ModelRc::new(VecModel::from(allies)),
+        enemies: ModelRc::new(VecModel::from(enemies)),
     }
 }
 /// Everything besides the Match Projection that influences how views are rendered.
@@ -1163,6 +1219,16 @@ fn apply_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn result_figures_follow_the_language() {
+        assert_eq!(format_thousands(14950, Lang::En), "14,950");
+        assert_eq!(format_thousands(14950, Lang::Fr), "14 950");
+        assert_eq!(format_thousands(950, Lang::En), "950");
+        assert_eq!(format_thousands(1234567, Lang::En), "1,234,567");
+        assert_eq!(format_decimal(11.5, Lang::En), "11.5");
+        assert_eq!(format_decimal(11.5, Lang::Fr), "11,5");
+    }
 
     #[test]
     fn phase_clock_keeps_its_anchor_until_the_client_sends_a_new_reading() {

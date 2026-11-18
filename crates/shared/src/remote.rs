@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::champions::Position;
 use crate::i18n::Lang;
 use crate::summary::{
-    format_clock_mm_ss, ChampSelectEnemy, LiveGamePlayerSummary, SummarySnapshot, SummonerSummary,
+    format_clock_mm_ss, ChampSelectEnemy, EndOfGameSummary, LiveGamePlayerSummary, SummarySnapshot, SummonerSummary,
 };
 
 /// Strict, closed allowlist of user-initiated commands accepted by the Mobile Remote.
@@ -120,6 +120,9 @@ pub struct RemoteStateSnapshot {
     pub champ_select: Option<RemoteChampSelectState>,
     #[serde(default)]
     pub live_game: Option<RemoteLiveState>,
+    /// Post-game block, only during the post-game phases. Champions only, no summoner names.
+    #[serde(default)]
+    pub end_of_game: Option<EndOfGameSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -148,6 +151,9 @@ pub struct RemoteLivePlayer {
     pub is_self: bool,
     pub dead: bool,
     pub respawn_sec: i32,
+    /// Full skin id (`championId * 1000 + skin`); 0 when unknown.
+    #[serde(default)]
+    pub skin_id: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -221,6 +227,12 @@ pub struct RemoteTeamMember {
     pub pick_swap_state: Option<String>,
     pub trade_id: Option<i64>,
     pub trade_state: Option<String>,
+    /// Skin this ally shows in the draft; 0 when none is chosen yet.
+    #[serde(default)]
+    pub selected_skin_id: i64,
+    /// True once the pick is locked in (not just hovered).
+    #[serde(default)]
+    pub pick_locked: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -466,6 +478,8 @@ pub fn project_remote_state(
                     pick_swap_state: ally.pick_swap_state.clone(),
                     trade_id: ally.trade_id,
                     trade_state: ally.trade_state.clone(),
+                    selected_skin_id: ally.selected_skin_id,
+                    pick_locked: ally.pick_locked,
                 }
             })
             .collect();
@@ -589,6 +603,7 @@ pub fn project_remote_state(
                 is_self: p.is_self,
                 dead: p.is_dead,
                 respawn_sec: p.respawn_timer_sec.ceil() as i32,
+                skin_id: if p.champion_id > 0 { p.champion_id * 1000 + p.skin_id } else { 0 },
             };
             let allies = lg
                 .players
@@ -661,6 +676,12 @@ pub fn project_remote_state(
         None
     };
 
+    let end_of_game = if matches!(phase.as_str(), "PreEndOfGame" | "WaitingForStats" | "EndOfGame") {
+        summary.end_of_game.clone()
+    } else {
+        None
+    };
+
     RemoteStateSnapshot {
         lang,
         phase,
@@ -675,6 +696,7 @@ pub fn project_remote_state(
         matchmaking,
         champ_select,
         live_game,
+        end_of_game,
     }
 }
 

@@ -339,6 +339,18 @@ fn drake_label(dragon_type: &str, lang: Lang) -> String {
     .to_string()
 }
 
+/// A killer that is not a champion, in words: `Turret_T1_C_05_A` is "A tower", a minion wave
+/// "Minions". Anything else keeps Riot's name.
+fn structure_killer(name: &str, lang: Lang) -> String {
+    if name.starts_with("Turret") {
+        lang.pick("A tower", "Une tourelle").to_string()
+    } else if name.starts_with("Minion") {
+        lang.pick("Minions", "Des sbires").to_string()
+    } else {
+        name.to_string()
+    }
+}
+
 fn objective_article(kind: ObjectiveKind) -> &'static str {
     match kind {
         ObjectiveKind::Grubs => "les",
@@ -440,20 +452,21 @@ pub fn extract_live_board_localized(
                     } else {
                         let who = match &killer_info {
                             Some((.., champ)) => champ.clone(),
-                            None => killer.to_string(),
+                            None => structure_killer(killer, lang),
                         };
                         // French puts the object pronoun before the verb.
+                        let verb = if killer.starts_with("Minion") { "ont" } else { "a" };
                         if victim_is_self {
-                            format!("{who} vous a éliminé")
+                            format!("{who} vous {verb} éliminé")
                         } else {
-                            format!("{who} a éliminé {whom}")
+                            format!("{who} {verb} éliminé {whom}")
                         }
                     }
                 } else {
                     let who = match &killer_info {
                         Some((_, _, true, _)) => "You".to_string(),
                         Some((.., champ)) => champ.clone(),
-                        None => killer.to_string(),
+                        None => structure_killer(killer, lang),
                     };
                     format!("{who} killed {whom}")
                 };
@@ -714,6 +727,24 @@ mod tests {
         let en = extract_live_board_localized(None, Some(&events), &l, Lang::En);
         assert_eq!(en.feed[0].text, "Zed killed you");
     }
+    #[test]
+    fn a_tower_or_minion_kill_reads_as_words_not_ids() {
+        let l = live(vec![
+            player("Ezo#EUW", "Ahri", "ORDER", "MIDDLE", 0, true),
+            player("Foe#EUW", "Zed", "CHAOS", "MIDDLE", 0, false),
+        ]);
+        let events = json!({"Events": [
+            {"EventName": "ChampionKill", "EventTime": 600.0, "KillerName": "Turret_T1_C_05_A", "VictimName": "Foe"},
+            {"EventName": "ChampionKill", "EventTime": 700.0, "KillerName": "Minion_T200L1S04N0007", "VictimName": "Ezo"}
+        ]});
+        let en = extract_live_board_localized(None, Some(&events), &l, Lang::En);
+        assert_eq!(en.feed[0].text, "Minions killed you");
+        assert_eq!(en.feed[1].text, "A tower killed Zed");
+        let fr = extract_live_board_localized(None, Some(&events), &l, Lang::Fr);
+        assert_eq!(fr.feed[0].text, "Des sbires vous ont éliminé");
+        assert_eq!(fr.feed[1].text, "Une tourelle a éliminé Zed");
+    }
+
     #[test]
     fn parses_inhibitor_ids() {
         assert_eq!(parse_inhibitor_id("Barracks_T1_L1"), Some((true, Lane::Top)));

@@ -107,6 +107,8 @@ export struct EndView {
     splash-icon: image,
     // The player's figures (KDA, CS per minute, gold, damage, vision).
     tiles: [StatLine],
+    // The three the mini widget shows (KDA, CS per minute, damage).
+    mini-tiles: [StatLine],
     allies: [PlayerLine],
     enemies: [PlayerLine],
 }
@@ -652,6 +654,7 @@ component ChampSelectScreen inherits Flickable {
 component HudScore inherits Rectangle {
     in property <int> value;
     in property <color> ink;
+    in property <bool> compact: false;
     property <int> seen: 0;
     property <bool> pop: false;
     init => { self.seen = self.value; }
@@ -670,8 +673,8 @@ component HudScore inherits Rectangle {
             root.pop = false;
         }
     }
-    width: 64px;
-    height: 44px;
+    width: root.compact ? 52px : 64px;
+    height: root.compact ? 36px : 44px;
     background: root.ink.with-alpha(root.pop ? 0.6 : 0.2);
     border-width: 1px;
     border-color: root.ink;
@@ -684,7 +687,7 @@ component HudScore inherits Rectangle {
             text: root.value;
             color: Theme.text;
             font-family: Type.display-family;
-            font-size: Type.title + 6px;
+            font-size: root.compact ? Type.title : Type.title + 6px;
             font-weight: 800;
             horizontal-alignment: center;
             vertical-alignment: center;
@@ -2010,8 +2013,9 @@ component TelemetryPanel inherits Rectangle {
 // One figure of the player's game on Results: the value large, its label beneath.
 component StatTile inherits Rectangle {
     in property <StatLine> stat;
-    height: 76px;
-    min-width: 92px;
+    in property <bool> compact: false;
+    height: root.compact ? 62px : 76px;
+    min-width: root.compact ? 0px : 92px;
     border-radius: Theme.radius;
     background: Theme.panel;
     border-width: 1px;
@@ -2019,14 +2023,14 @@ component StatTile inherits Rectangle {
     accessible-role: text;
     accessible-label: root.stat.label + ": " + root.stat.value;
     VerticalLayout {
-        padding: Space.md;
+        padding: root.compact ? Space.sm : Space.md;
         alignment: center;
         spacing: Space.xxs;
         Text {
             text: root.stat.value;
             color: Theme.text;
             font-family: Type.display-family;
-            font-size: Type.title + 4px;
+            font-size: root.compact ? Type.title : Type.title + 4px;
             font-weight: 800;
             horizontal-alignment: center;
         }
@@ -2939,19 +2943,46 @@ export component MainWindow inherits Window {
     }
 }
 
-// One allied draft slot in the mini widget: lane, champion, and whose turn it is.
+// One allied draft slot in the mini widget: lane, champion, the chosen skin's banner on the
+// right, and whose turn it is. A lock plays the same gold glint as the main draft rows.
 component MiniAllyRow inherits Rectangle {
     in property <AllyRow> ally;
     height: 44px;
     border-radius: Theme.radius-sm;
     background: root.ally.picking ? Theme.signal-soft : (root.ally.is-self ? Theme.panel-raised : Theme.panel);
-    border-width: 1px;
-    border-color: root.ally.picking ? Theme.signal : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
-    animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+    clip: true;
+    animate background { duration: Theme.dur-base; easing: ease-out; }
     accessible-role: text;
     accessible-label: Theme.lane-name(root.ally.lane) + ", "
         + (root.ally.champion != "" ? root.ally.champion : @tr("no pick yet"))
         + (root.ally.picking ? @tr(", acting now") : "");
+
+    if root.ally.banner.width > 0: Rectangle {
+        x: parent.width * 0.42;
+        width: parent.width * 0.58;
+        height: 100%;
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.ally.banner;
+            image-fit: cover;
+            opacity: root.ally.locked ? (Theme.dark ? 0.8 : 0.65) : 0.35;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        Rectangle {
+            background: @linear-gradient(90deg, root.background 0%, root.background.with-alpha(0.5) 45%, root.background.with-alpha(0) 100%);
+        }
+    }
+
+    if root.ally.locked: Rectangle {
+        property <bool> fired: false;
+        init => { self.fired = true; }
+        width: 90px;
+        height: 100%;
+        x: self.fired ? parent.width : -self.width;
+        background: @linear-gradient(90deg, Theme.gold-bright.with-alpha(0) 0%, Theme.gold-bright.with-alpha(0.38) 50%, Theme.gold-bright.with-alpha(0) 100%);
+        animate x { duration: Theme.dur-reveal; easing: ease-in-out; }
+    }
 
     HorizontalLayout {
         padding-left: Space.sm;
@@ -2982,16 +3013,30 @@ component MiniAllyRow inherits Rectangle {
             vertical-alignment: center;
             overflow: elide;
         }
-        if root.ally.is-self || root.ally.picking: Text {
-            text: root.ally.picking
-                ? (root.ally.is-self ? @tr("YOUR TURN") : @tr("PICKING"))
-                : @tr("YOU");
-            color: root.ally.picking ? Theme.signal-text : Theme.muted;
-            font-family: Type.mono-family;
-            font-size: Type.label;
-            font-weight: 700;
-            vertical-alignment: center;
+        if root.ally.picking: Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 20px;
+            width: turn-lbl.preferred-width + 12px;
+            border-radius: Theme.radius-sm;
+            background: Theme.signal;
+            turn-lbl := Text {
+                text: root.ally.is-self ? @tr("YOUR TURN") : @tr("PICKING");
+                color: Theme.on-signal;
+                font-family: Type.mono-family;
+                font-size: Type.label;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
+    }
+
+    // Border drawn last, over the banner.
+    Rectangle {
+        border-radius: root.border-radius;
+        border-width: 1px;
+        border-color: root.ally.picking ? Theme.signal : (root.ally.is-self ? Theme.rule-strong : Theme.rule);
+        animate border-color { duration: Theme.dur-base; easing: ease-out; }
     }
 }
 
@@ -3008,7 +3053,7 @@ component MiniPlayerCell inherits VerticalLayout {
     HorizontalLayout {
         alignment: center;
         ChampPlate {
-            size: 36px;
+            size: 40px;
             label: root.p.initials;
             icon: root.p.icon;
             mine: root.mine;
@@ -3025,51 +3070,82 @@ component MiniPlayerCell inherits VerticalLayout {
         color: root.p.dead ? Theme.danger : Theme.muted;
         font-family: Type.mono-family;
         font-size: Type.label;
-        font-weight: root.p.dead ? 700 : 400;
+        font-weight: root.p.dead ? 800 : 400;
         horizontal-alignment: center;
     }
 }
 
+// The always-on-top companion. It follows the phase with the main screens' Hextech grammar,
+// cut to what reads at a glance: the ready check medallion, the draft with skin banners, the
+// in-game score band with both teams, and the result crest.
 export component MiniWidget inherits Window {
     title: @tr("Hypatia — Live");
     icon: @image-url("../assets/hypatia.png");
     default-font-family: Type.family;
     preferred-width: 360px;
-    preferred-height: 640px;
+    preferred-height: 520px;
     min-width: 340px;
-    min-height: 540px;
+    min-height: 300px;
     always-on-top: true;
     background: Theme.ground;
 
-    // Same screen as the main window; only ready-check and champ-select change the widget.
     in property <Screen> view: Screen.offline;
     in property <bool> in-game: false;
     in property <WaitView> wait;
     in property <ChampSelectView> champ;
     in property <LiveView> live;
+    in property <EndView> end;
     in property <int> clock-seconds: -1;
     in property <int> clock-total: 0;
     in property <bool> clock-down: true;
     property <bool> drafting: !root.in-game && root.view == Screen.champ-select;
+    property <bool> ready: !root.in-game && root.view == Screen.ready-check;
+    property <bool> results: !root.in-game && root.view == Screen.results;
+    property <bool> waiting: !root.in-game && !root.drafting && !root.ready && !root.results;
+    // Separate properties: Slint 1.18's code generator mis-moves struct fields read twice.
+    property <int> mine: root.live.my-score;
+    property <int> theirs: root.live.enemy-score;
+    property <string> game-clock: root.clock-seconds >= 0 ? Theme.clock-text(root.clock-seconds) : root.live.clock;
 
-    if root.drafting || root.in-game: SplashBackdrop {
+    if root.drafting || root.in-game || root.results: HeroSplash {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: 170px;
-        splash: root.in-game ? root.live.splash-icon : root.champ.splash-icon;
-        tint: root.in-game && root.live.dead ? Theme.danger : Theme.accent;
+        height: 180px;
+        splash: root.in-game ? root.live.splash-icon : (root.results ? root.end.splash-icon : root.champ.splash-icon);
     }
 
-    // Between games: what the client is doing, with the queue or ready-check clock.
-    if !root.in-game && !root.drafting: VerticalLayout {
+    // Death: the same dark red veil as the main live screen.
+    if root.in-game: Rectangle {
+        property <color> veil: Theme.dark ? #1c0507 : Theme.danger-soft;
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 180px;
+        background: @linear-gradient(180deg, self.veil 0%, self.veil 55%, self.veil.with-alpha(0) 100%);
+        opacity: root.live.dead ? 0.8 : 0;
+        animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+    }
+
+    // Defeat: the cold veil of Results.
+    if root.results && !root.end.victory: Rectangle {
+        property <color> veil: Theme.dark ? #0b1119 : Theme.ground;
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 180px;
+        background: @linear-gradient(180deg, self.veil 0%, self.veil 60%, self.veil.with-alpha(0) 100%);
+        opacity: 0.6;
+    }
+
+    // Between games: what the client is doing, with the queue clock.
+    if root.waiting: VerticalLayout {
         padding: Space.xl;
         alignment: center;
         spacing: Space.lg;
         Plate {
             title: root.wait.title != "" ? root.wait.title : @tr("Waiting for a match");
             detail: root.wait.title != "" ? "" : @tr("Champion select and your game show up here automatically.");
-            active-turn: root.view == Screen.ready-check;
         }
         if root.clock-seconds >= 0: ClockReadout {
             seconds: root.clock-seconds;
@@ -3080,143 +3156,174 @@ export component MiniWidget inherits Window {
         }
     }
 
-    // Champion select: whose turn, the clock, and the five allied slots.
+    // Ready check: the client's medallion in its countdown ring, then the answer.
+    if root.ready: VerticalLayout {
+        padding: Space.xl;
+        alignment: center;
+        spacing: Space.md;
+        HorizontalLayout {
+            alignment: center;
+            ReadyMedallion {
+                seconds: root.clock-seconds;
+                total: root.clock-total;
+                state: root.wait.ready-state;
+                size: 168px;
+            }
+        }
+        Text {
+            text: root.wait.title;
+            color: root.wait.ready-state == 0 ? Theme.signal-text : Theme.text;
+            font-family: Type.display-family;
+            font-size: Type.title;
+            font-weight: 800;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    // Champion select: whose turn and the clock over the player's splash, the five allies with
+    // their skin banners, then bans and enemy reveals.
     if root.drafting: VerticalLayout {
         padding: Space.md;
         spacing: Space.sm;
-        Plate {
-            title: root.champ.title;
-            detail: root.champ.detail;
-            active-turn: root.champ.my-turn;
-            splash: root.champ.splash-icon;
+        HorizontalLayout {
+            spacing: Space.md;
+            alignment: stretch;
+            Plate {
+                horizontal-stretch: 1;
+                title: root.champ.title;
+                detail: root.champ.detail;
+                active-turn: root.champ.my-turn;
+                glass: true;
+                title-size: Type.name;
+            }
+            ClockReadout {
+                seconds: root.clock-seconds;
+                total: root.clock-total;
+                fallback: root.champ.timer;
+                size: Type.timer + 8px;
+            }
         }
-        ClockReadout {
-            seconds: root.clock-seconds;
-            total: root.clock-total;
-            fallback: root.champ.timer;
-            size: Type.specimen-compact;
-            align-left: true;
-        }
+        Rectangle { height: Space.xs; }
         for a in root.champ.allies: MiniAllyRow { ally: a; }
+        HorizontalLayout {
+            padding-top: Space.xs;
+            spacing: Space.xs;
+            alignment: start;
+            height: 30px;
+            for b in root.champ.my-ban-list: BanChip { y: (parent.height - self.height) / 2; ban: b; mine: true; compact: true; }
+            for b in root.champ.their-ban-list: BanChip { y: (parent.height - self.height) / 2; ban: b; mine: false; compact: true; }
+            Rectangle { horizontal-stretch: 1; }
+            for e in root.champ.enemies: EnemySlot {
+                width: 28px;
+                height: 28px;
+                pick: e;
+                size: 26px;
+            }
+        }
         Rectangle { vertical-stretch: 1; }
     }
 
+    // In game, at a glance: the score band, the player (or the respawn countdown), both teams,
+    // and the objectives each side holds.
     if root.in-game: VerticalLayout {
         padding: Space.md;
-        spacing: Space.sm;
+        spacing: Space.md;
 
-        // Score, game clock, your KDA
-        Rectangle {
-            height: 52px;
-            background: Theme.panel;
-            border-radius: Theme.radius-sm;
-            border-width: 1px;
-            border-color: Theme.rule;
-
-            HorizontalLayout {
-                padding-left: Space.md;
-                padding-right: Space.md;
-                spacing: Space.sm;
-                alignment: stretch;
-
-                HorizontalLayout {
-                    spacing: Space.xs;
-                    alignment: start;
-                    accessible-role: text;
-                    accessible-label: @tr("Score: {0} - {1}", root.live.my-score, root.live.enemy-score);
-                    Text {
-                        text: root.live.my-score;
-                        color: Theme.blue;
-                        font-family: Type.display-family;
-                        font-size: Type.timer;
-                        font-weight: 800;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: ":";
-                        color: Theme.muted;
-                        font-family: Type.display-family;
-                        font-size: Type.title;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.live.enemy-score;
-                        color: Theme.red;
-                        font-family: Type.display-family;
-                        font-size: Type.timer;
-                        font-weight: 800;
-                        vertical-alignment: center;
-                    }
-                }
-
+        HorizontalLayout {
+            alignment: center;
+            accessible-role: text;
+            accessible-label: @tr("Score: allies {0}, enemies {1}, game time {2}", root.mine, root.theirs, root.game-clock);
+            HudScore { value: root.mine; ink: Theme.blue; compact: true; }
+            Rectangle {
+                width: 80px;
+                height: 36px;
+                background: Theme.panel.with-alpha(Theme.dark ? 0.8 : 0.88);
+                border-width: 1px;
+                border-color: Theme.gold;
                 Text {
-                    horizontal-stretch: 1;
-                    text: root.clock-seconds >= 0 ? Theme.clock-text(root.clock-seconds) : root.live.clock;
+                    text: root.game-clock;
                     color: Theme.text;
-                    font-family: Type.display-family;
-                    font-size: Type.timer;
-                    font-weight: 800;
+                    font-family: Type.mono-family;
+                    font-size: Type.name;
+                    font-weight: 700;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
-
-                Text {
-                    text: root.live.self-kda;
-                    color: Theme.text;
-                    font-family: Type.mono-family;
-                    font-size: Type.small;
-                    font-weight: 700;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                }
             }
+            HudScore { value: root.theirs; ink: Theme.red; compact: true; }
         }
 
-        // Your champion, alive or respawning
-        Rectangle {
-            height: 40px;
-            background: root.live.dead ? Theme.danger-soft : Theme.panel;
-            border-radius: Theme.radius-sm;
-            border-width: 1px;
-            border-color: root.live.dead ? Theme.danger : Theme.rule;
-            animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
-            HorizontalLayout {
-                padding-left: Space.md;
-                padding-right: Space.md;
-                spacing: Space.sm;
-                if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
-                    width: 24px;
-                    ChampPlate {
-                        y: (parent.height - self.height) / 2;
-                        size: 24px;
-                        label: root.live.active-initials;
-                        icon: root.live.active-icon;
-                        mine: true;
-                        is-self: true;
-                        faded: root.live.dead;
-                    }
+        HorizontalLayout {
+            spacing: Space.md;
+            alignment: start;
+            height: 56px;
+            if root.live.active-initials != "" || root.live.active-icon.width > 0: Rectangle {
+                width: 44px;
+                ChampPlate {
+                    y: (parent.height - self.height) / 2;
+                    size: 44px;
+                    label: root.live.active-initials;
+                    icon: root.live.active-icon;
+                    mine: true;
+                    is-self: true;
+                    faded: root.live.dead;
                 }
+            }
+            if !root.live.dead: VerticalLayout {
+                alignment: center;
+                spacing: Space.xxs;
                 Text {
                     text: root.live.title;
-                    color: root.live.dead ? Theme.danger : Theme.text;
-                    font-size: Type.body;
+                    color: Theme.text;
+                    font-family: Type.display-family;
+                    font-size: Type.name;
                     font-weight: 800;
-                    vertical-alignment: center;
+                    overflow: elide;
                 }
                 Text {
-                    horizontal-stretch: 1;
                     text: root.live.detail;
                     color: Theme.muted;
-                    font-size: Type.label;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
+                    font-size: Type.small;
+                    font-weight: 600;
                     overflow: elide;
                 }
             }
+            if root.live.dead: HorizontalLayout {
+                spacing: Space.md;
+                alignment: start;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 0px;
+                    Text {
+                        text: @tr("RESPAWN");
+                        color: Theme.danger;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                        font-weight: 800;
+                        letter-spacing: 1.5px;
+                    }
+                    Text {
+                        text: Theme.clock-text(Math.max(0, root.live.respawn-seconds));
+                        color: Theme.danger;
+                        font-family: Type.display-family;
+                        font-size: Type.timer;
+                        font-weight: 800;
+                    }
+                }
+                Text {
+                    vertical-alignment: center;
+                    text: root.live.self-kda;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.small;
+                    font-weight: 700;
+                }
+            }
         }
 
-        // Who is up, who is dead and for how long
         Card {
+            vertical-stretch: 0;
             VerticalLayout {
                 padding: Space.sm;
                 spacing: Space.sm;
@@ -3234,62 +3341,64 @@ export component MiniWidget inherits Window {
             }
         }
 
-        // Towers and objectives side by side
         HorizontalLayout {
             spacing: Space.sm;
-            height: 140px;
-            Card {
-                width: 140px;
-                LineMap {
-                    width: 124px;
-                    height: 124px;
-                    x: 8px;
-                    y: 8px;
-                    towers: root.live.towers;
-                    show-jungle: true;
-                    show-pits: true;
-                    order-is-mine: root.live.order-is-mine;
-                    my-drakes: root.live.my-drakes;
-                    enemy-drakes: root.live.enemy-drakes;
-                    baron-owner: root.live.baron-owner;
-                    herald-owner: root.live.herald-owner;
-                    line-width: 5px;
-                    station: 10px;
-                    halo: Theme.panel;
-                }
-            }
-            Card {
+            alignment: stretch;
+            ObjectiveRow {
                 horizontal-stretch: 1;
-                VerticalLayout {
-                    padding: Space.sm;
-                    spacing: Space.xs;
-                    alignment: start;
-                    Text { text: @tr("BLUE"); color: Theme.blue-soft; font-size: Type.label; font-weight: 800; }
-                    ObjectiveRow { compact: true; chips: root.live.my-objectives; empty-text: @tr("None"); }
-                    Text { text: @tr("RED"); color: Theme.red-soft; font-size: Type.label; font-weight: 800; }
-                    ObjectiveRow { compact: true; chips: root.live.enemy-objectives; empty-text: @tr("None"); }
-                }
+                compact: true;
+                chips: root.live.my-objectives;
+                empty-text: @tr("Blue: none");
+            }
+            ObjectiveRow {
+                compact: true;
+                chips: root.live.enemy-objectives;
+                empty-text: @tr("Red: none");
             }
         }
+        Rectangle { vertical-stretch: 1; }
+    }
 
-        // Recent events, scrollable
-        Card {
-            vertical-stretch: 1;
-            clip: true;
-
-            VerticalLayout {
-                padding: Space.sm;
-                spacing: Space.xs;
-                SectionLabel { text: @tr("RECENT EVENTS"); }
-                Flickable {
-                    vertical-stretch: 1;
-                    content-height: mini-feed.preferred-height;
-                    mini-feed := VerticalLayout {
-                        width: parent.width;
-                        spacing: Space.xxs;
-                        for line in root.live.feed: FeedRow { line: line; }
-                    }
-                }
+    // Results: the crest settles over the splash, the outcome, the player's line and three
+    // figures.
+    if root.results: VerticalLayout {
+        padding: Space.lg;
+        spacing: Space.sm;
+        alignment: start;
+        HorizontalLayout {
+            alignment: center;
+            ResultCrest {
+                victory: root.end.victory;
+                size: 110px;
+            }
+        }
+        Text {
+            property <bool> shown: false;
+            init => { self.shown = true; }
+            text: root.end.title;
+            color: root.end.victory ? Theme.gold-bright : (Theme.dark ? #aeb6c2 : Theme.muted);
+            font-family: Type.display-family;
+            font-size: 40px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            horizontal-alignment: center;
+            opacity: self.shown ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; delay: Theme.dur-fast; easing: ease-out; }
+        }
+        Text {
+            text: root.end.detail;
+            color: Theme.muted;
+            font-size: Type.body;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+        HorizontalLayout {
+            padding-top: Space.sm;
+            spacing: Space.sm;
+            for t in root.end.mini-tiles: StatTile {
+                horizontal-stretch: 1;
+                stat: t;
+                compact: true;
             }
         }
     }

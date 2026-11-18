@@ -575,15 +575,21 @@ pub fn build_end_view(
     };
     let minutes = (eog.game_length_sec as f64 / 60.0).max(1.0);
     let kda_ratio = (eog.kills + eog.assists) as f64 / eog.deaths.max(1) as f64;
-    let mut tiles = vec![tile("KDA", format_decimal(kda_ratio, lang))];
-    if eog.creep_score > 0 {
-        tiles.push(tile("CS/MIN", format_decimal(eog.creep_score as f64 / minutes, lang)));
-    }
+    let kda = tile("KDA", format_decimal(kda_ratio, lang));
+    let cs_per_min = (eog.creep_score > 0)
+        .then(|| tile("CS/MIN", format_decimal(eog.creep_score as f64 / minutes, lang)));
+    let damage = tile(lang.pick("DAMAGE", "DÉGÂTS"), format_thousands(eog.damage_to_champions, lang));
+    let mut tiles = vec![kda.clone()];
+    tiles.extend(cs_per_min.clone());
     tiles.push(tile(lang.pick("GOLD", "OR"), format_thousands(eog.total_gold, lang)));
-    tiles.push(tile(lang.pick("DAMAGE", "DÉGÂTS"), format_thousands(eog.damage_to_champions, lang)));
+    tiles.push(damage.clone());
     if eog.vision_score > 0 {
         tiles.push(tile("VISION", eog.vision_score.to_string()));
     }
+    // The mini widget keeps three: KDA, CS per minute, damage.
+    let mut mini_tiles = vec![kda];
+    mini_tiles.extend(cs_per_min);
+    mini_tiles.push(damage);
 
     let mut rows = |players: &[EndOfGamePlayer]| -> Vec<PlayerLine> {
         let mut lines: Vec<PlayerLine> = players
@@ -639,6 +645,7 @@ pub fn build_end_view(
         victory,
         splash_icon: icons.resolve_skin_art("splash", eog.skin_id, cid),
         tiles: ModelRc::new(VecModel::from(tiles)),
+        mini_tiles: ModelRc::new(VecModel::from(mini_tiles)),
         allies: ModelRc::new(VecModel::from(allies)),
         enemies: ModelRc::new(VecModel::from(enemies)),
     }
@@ -986,6 +993,29 @@ pub struct Companion {
     art_key: Option<(bool, u64)>,
     draft: DraftModels,
     live: LiveModels,
+    /// `(screen, in game)` the mini widget's height was last fitted to.
+    mini_fit: Option<(Screen, bool)>,
+}
+
+/// Mini widget height per phase, so each phase fills its window without empty space.
+fn mini_height(view: Screen, in_game: bool) -> f32 {
+    if in_game {
+        return 370.0;
+    }
+    match view {
+        Screen::ChampSelect => 460.0,
+        Screen::ReadyCheck => 320.0,
+        Screen::Results => 340.0,
+        _ => 300.0,
+    }
+}
+
+/// Resizes the mini widget to `view`'s height, keeping the width the player chose.
+fn fit_mini(mini_win: &MiniWidget, view: Screen, in_game: bool) {
+    let window = mini_win.window();
+    let width = window.size().to_logical(window.scale_factor()).width;
+    let width = if width > 0.0 { width } else { 360.0 };
+    window.set_size(slint::LogicalSize::new(width, mini_height(view, in_game)));
 }
 
 impl Companion {
@@ -1029,6 +1059,13 @@ impl Companion {
             self.shown.as_ref(),
             mini_open,
         );
+        let fit = (view, snapshot.live_game.is_some());
+        if !mini_open {
+            self.mini_fit = None;
+        } else if self.mini_fit != Some(fit) {
+            fit_mini(mini_win, fit.0, fit.1);
+            self.mini_fit = Some(fit);
+        }
         // Re-anchor only on a fresh reading of the same view's clock.
         let same_view = self.shown.as_ref().is_some_and(|shown| shown.view == view);
         let current = if same_view { self.clock } else { None };
@@ -1182,7 +1219,12 @@ fn apply_summary(
 
     if let Some(ref eog) = snap.end_of_game {
         if prev.is_none_or(|p| p.end_of_game.as_ref() != Some(eog)) {
-            main_win.set_end(build_end_view(eog, &mut icons, lang));
+            let end = build_end_view(eog, &mut icons, lang);
+            // The mini widget only receives data while it is on screen.
+            if mini_open {
+                mini_win.set_end(end.clone());
+            }
+            main_win.set_end(end);
         }
     }
 

@@ -660,6 +660,7 @@ export component Plate inherits Rectangle {
     in property <color> splash-tint: Theme.accent;
     // Translucent over a hero splash, without a splash of its own.
     in property <bool> glass: false;
+    in property <length> title-size: Type.headline;
     background: active-turn ? Theme.signal : (glass ? Theme.panel.with-alpha(Theme.dark ? 0.58 : 0.66) : Theme.panel);
     border-radius: Theme.radius;
     border-width: 1px;
@@ -720,7 +721,7 @@ export component Plate inherits Rectangle {
             text: root.title;
             color: root.active-turn ? Theme.on-signal : Theme.text;
             font-family: Type.display-family;
-            font-size: Type.headline;
+            font-size: root.title-size;
             font-weight: 800;
             letter-spacing: 0.3px;
             wrap: word-wrap;
@@ -1614,6 +1615,8 @@ export component ObjectiveRow inherits HorizontalLayout {
 export component BanChip inherits Rectangle {
     in property <BanEntry> ban;
     in property <bool> mine: true;
+    // Portrait and strike only, for the mini widget.
+    in property <bool> compact: false;
     height: 26px;
     width: row.preferred-width;
     border-radius: Theme.radius-sm;
@@ -1630,7 +1633,7 @@ export component BanChip inherits Rectangle {
     animate opacity { duration: Theme.dur-base; easing: ease-out; }
     row := HorizontalLayout {
         padding-left: Space.xs;
-        padding-right: Space.sm;
+        padding-right: root.compact ? Space.xs : Space.sm;
         spacing: Space.sm;
         Rectangle {
             width: 18px;
@@ -1654,7 +1657,7 @@ export component BanChip inherits Rectangle {
                 animate transform-scale-x { duration: Theme.dur-reveal; delay: Theme.dur-fast; easing: ease-out; }
             }
         }
-        Text {
+        if !root.compact: Text {
             text: root.ban.name;
             color: Theme.text;
             font-size: Type.label;

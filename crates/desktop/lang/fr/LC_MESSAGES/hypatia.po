@@ -895,3 +895,58 @@ msgstr "Illustrations du client"
 msgctxt "MainWindow"
 msgid "Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map."
 msgstr "Affiche les splash arts en cache et les illustrations de la Faille du client League derrière les en-têtes et la carte."
+
+#: ui/app.slint
+msgctxt "RiftWatchList"
+msgid "ENEMIES LAST SEEN"
+msgstr "ENNEMIS VUS EN DERNIER"
+
+#: ui/app.slint
+msgctxt "RiftWatchList"
+msgid "Riot's live data has no positions: only towers, inhibitors and epic monsters place an enemy."
+msgstr "Les données en direct de Riot ne donnent aucune position : seuls les tourelles, inhibiteurs et monstres épiques situent un ennemi."
+
+#: ui/app.slint
+msgctxt "RiftWatchList"
+msgid "NEXT EPIC MONSTERS"
+msgstr "PROCHAINS MONSTRES ÉPIQUES"
+
+#: ui/parts.slint
+msgctxt "LineMap"
+msgid "{0} is up"
+msgstr "{0} est disponible"
+
+#: ui/parts.slint
+msgctxt "LineMap"
+msgid "{0} in {1}"
+msgstr "{0} dans {1}"
+
+#: ui/parts.slint
+msgctxt "LineMap"
+msgid "UP"
+msgstr "DISPO"
+
+#: ui/parts.slint
+msgctxt "LineMap"
+msgid "{0}: {1}, {2}"
+msgstr "{0} : {1}, {2}"
+
+#: ui/parts.slint
+msgctxt "SightingRow"
+msgid "{0}: {1}, {2}"
+msgstr "{0} : {1}, {2}"
+
+#: ui/parts.slint
+msgctxt "PitRow"
+msgid "{0} is up"
+msgstr "{0} est disponible"
+
+#: ui/parts.slint
+msgctxt "PitRow"
+msgid "{0} in {1}"
+msgstr "{0} dans {1}"
+
+#: ui/parts.slint
+msgctxt "PitRow"
+msgid "UP"
+msgstr "DISPO"

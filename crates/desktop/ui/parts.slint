@@ -83,6 +83,36 @@ export struct MapAlly {
     label-pos: int,
 }
 
+// An enemy champion's last known place. Live Client Data has no coordinates: a place is only
+// known when an event at a fixed spot (tower, inhibitor, epic pit) credits the champion.
+export struct EnemySighting {
+    // Plan point (400-unit rift), fanned out when several enemies share a place.
+    x: float,
+    y: float,
+    champion: string,
+    initials: string,
+    icon: image,
+    // False until an event places this enemy; the map then leaves them off.
+    seen: bool,
+    // Game clock of the sighting, e.g. "14:02".
+    time: string,
+    place: string,
+    // "2 min ago"
+    age: string,
+    // Seen more than two minutes ago: likely elsewhere by now.
+    stale: bool,
+    dead: bool,
+}
+
+// The epic monster next due in a pit, counted down against the game clock in Slint.
+export struct PitClock {
+    x: float,
+    y: float,
+    kind: int, // ObjectiveChip kinds: 0 Baron, 1 Elder, 2 Drake, 3 Herald, 4 Grubs
+    label: string,
+    spawn-at: int,
+}
+
 export struct PartyRow {
     name: string,
     first-lane: int,
@@ -1141,6 +1171,10 @@ export component LineMap inherits Rectangle {
     in property <length> line-width: 8px;
     in property <length> station: 20px;
     in property <color> halo: Theme.panel;
+    // Live game: enemies at their last known place, and the countdown to each pit's monster.
+    in property <[EnemySighting]> sightings;
+    in property <[PitClock]> pit-clocks;
+    in property <int> now: -1;
 
     // The painting puts a light beam on the player's own base.
     property <image> art: root.order-is-mine ? ClientArt.map-south : ClientArt.map-north;
@@ -1427,6 +1461,71 @@ export component LineMap inherits Rectangle {
         }
     }
 
+    // ===== Pit countdowns: above the dragon pit, below the top-side pit =====
+    for p in root.pit-clocks: Rectangle {
+        property <int> left: p.spawn-at - root.now;
+        property <bool> up: self.left <= 0;
+        x: root.width * root.fx(p.x, p.y) - self.width / 2;
+        y: p.y > 200
+            ? root.height * root.fy(p.x, p.y) - root.station * 0.72 - self.height
+            : root.height * root.fy(p.x, p.y) + root.station * 0.72;
+        visible: root.now >= 0;
+        width: pit-txt.preferred-width + 10px;
+        height: 16px;
+        border-radius: 3px;
+        background: self.up ? Theme.objective-color(p.kind) : Theme.panel;
+        border-width: 1px;
+        border-color: Theme.objective-color(p.kind);
+        accessible-role: text;
+        accessible-label: self.up
+            ? @tr("{0} is up", p.label)
+            : @tr("{0} in {1}", p.label, Theme.clock-text(self.left));
+        pit-txt := Text {
+            text: parent.up ? @tr("UP") : Theme.clock-text(parent.left);
+            color: parent.up ? Theme.on-signal : Theme.text;
+            font-family: Type.mono-family;
+            font-size: 10px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // ===== Enemies at their last known place =====
+    for e in root.sightings: Rectangle {
+        x: root.width * root.fx(e.x, e.y) - self.width / 2;
+        y: root.height * root.fy(e.x, e.y) - self.height / 2;
+        width: root.station * 1.45;
+        height: self.width;
+        visible: e.seen;
+        opacity: e.dead ? 0.35 : (e.stale ? 0.6 : 1);
+        accessible-role: image;
+        accessible-label: @tr("{0}: {1}, {2}", e.champion, e.place, e.age);
+
+        Rectangle {
+            border-radius: self.width / 2;
+            clip: true;
+            background: Theme.red;
+            border-width: 2px;
+            border-color: Theme.red;
+            if e.icon.width > 0: Image {
+                width: 100%;
+                height: 100%;
+                source: e.icon;
+                image-fit: cover;
+            }
+            if e.icon.width == 0: Text {
+                text: e.initials;
+                color: Theme.on-team;
+                font-family: Type.display-family;
+                font-size: max(8px, parent.width * 0.42);
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
     // ===== Allies (Champ Select tokens) =====
     for a in root.allies: Rectangle {
         x: root.width * root.fx(a.x, a.y) - self.width / 2;
@@ -1482,6 +1581,114 @@ export component LineMap inherits Rectangle {
             font-weight: 800;
             horizontal-alignment: a.label-pos == 1 ? right : ((a.label-pos == 2 || a.label-pos == 3) ? center : left);
         }
+    }
+}
+
+// One enemy in the "last seen" list: portrait, where they were last placed, and how long ago.
+export component SightingRow inherits HorizontalLayout {
+    in property <EnemySighting> s;
+    spacing: Space.sm;
+    height: 34px;
+    accessible-role: text;
+    accessible-label: @tr("{0}: {1}, {2}", root.s.champion, root.s.place, root.s.age);
+    Rectangle {
+        width: 28px;
+        ChampPlate {
+            y: (parent.height - self.height) / 2;
+            size: 28px;
+            label: root.s.initials;
+            icon: root.s.icon;
+            mine: false;
+            faded: !root.s.seen || root.s.dead;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        Text {
+            text: root.s.champion;
+            color: Theme.text;
+            font-size: Type.small;
+            font-weight: 800;
+            overflow: elide;
+        }
+        Text {
+            text: root.s.place;
+            color: Theme.muted;
+            font-size: Type.label;
+            font-weight: 600;
+            overflow: elide;
+        }
+    }
+    if root.s.seen: VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.s.time;
+            color: root.s.stale ? Theme.muted : Theme.text;
+            font-family: Type.mono-family;
+            font-size: Type.small;
+            font-weight: 700;
+            horizontal-alignment: right;
+        }
+        Text {
+            text: root.s.age;
+            color: Theme.muted;
+            font-size: Type.label;
+            horizontal-alignment: right;
+        }
+    }
+}
+
+// The next epic monster of a pit, counting down to its spawn against the game clock.
+export component PitRow inherits HorizontalLayout {
+    in property <PitClock> p;
+    in property <int> now: -1;
+    property <int> left: root.p.spawn-at - root.now;
+    property <bool> up: self.left <= 0;
+    spacing: Space.sm;
+    height: 28px;
+    accessible-role: text;
+    accessible-label: root.up
+        ? @tr("{0} is up", root.p.label)
+        : @tr("{0} in {1}", root.p.label, Theme.clock-text(root.left));
+    Rectangle {
+        width: 22px;
+        Rectangle {
+            y: (parent.height - self.height) / 2;
+            width: 22px;
+            height: 22px;
+            border-radius: Theme.radius-sm;
+            background: Theme.ground;
+            border-width: 1px;
+            border-color: Theme.objective-color(root.p.kind);
+            Path {
+                x: 4px;
+                y: 4px;
+                width: 14px;
+                height: 14px;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: Theme.lol-objective-path(root.p.kind);
+                fill: Theme.objective-color(root.p.kind);
+            }
+        }
+    }
+    Text {
+        horizontal-stretch: 1;
+        text: root.p.label;
+        color: Theme.text;
+        font-size: Type.small;
+        font-weight: 700;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        text: root.now < 0 ? "" : (root.up ? @tr("UP") : Theme.clock-text(root.left));
+        color: root.up ? Theme.objective-color(root.p.kind) : Theme.text;
+        font-family: Type.mono-family;
+        font-size: Type.small;
+        font-weight: 800;
+        vertical-alignment: center;
     }
 }
 

@@ -9,7 +9,7 @@ use hypatia_core::art::{self, ClientArt as ArtPiece};
 use hypatia_core::AppState;
 use hypatia_shared::{
     spell_name_from_id_localized, ChampSelectSummary, EndOfGamePlayer, EndOfGameSummary, Lane, Lang, LiveBoard,
-    LiveGameSummary, ObjectiveKind, Position, SourceId, SourceStatus, SummarySnapshot,
+    LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId, SourceStatus, SummarySnapshot,
     SummonerSummary,
 };
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
@@ -17,8 +17,9 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 use crate::icons::{AppIconLookup, DesktopAssetLoader, IconLookup};
 use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
 use crate::{
-    AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, FeedLine, LiveView, MainWindow,
-    MapAlly, MiniWidget, ObjectiveChip, PartyRow, PlayerLine, Screen, StatLine, TowerDot, WaitView,
+    AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine, LiveView,
+    MainWindow, MapAlly, MiniWidget, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
+    TowerDot, WaitView,
 };
 
 fn objective_kind_index(kind: ObjectiveKind) -> i32 {
@@ -128,6 +129,150 @@ fn tower_coordinates(order_side: bool, lane: Lane, tier: u8) -> (f32, f32) {
     }
 }
 
+/// Plan point of a fixed Rift place: towers as on the lane map, inhibitors between the
+/// inhibitor tower and the nexus, pits in their river alcoves (as drawn by `LineMap`).
+fn place_coordinates(place: MapPlace) -> (f32, f32) {
+    match place {
+        MapPlace::Turret { order_side, lane, tier } => tower_coordinates(order_side, lane, tier),
+        MapPlace::Inhibitor { order_side: true, lane: Lane::Top } => (40.0, 308.0),
+        MapPlace::Inhibitor { order_side: true, lane: Lane::Mid } => (68.0, 320.0),
+        MapPlace::Inhibitor { order_side: true, lane: _ } => (72.0, 348.0),
+        MapPlace::Inhibitor { order_side: false, lane: Lane::Top } => (326.0, 42.0),
+        MapPlace::Inhibitor { order_side: false, lane: Lane::Mid } => (330.0, 70.0),
+        MapPlace::Inhibitor { order_side: false, lane: _ } => (358.0, 76.0),
+        MapPlace::DragonPit => (266.0, 276.0),
+        MapPlace::BaronPit => (132.0, 116.0),
+    }
+}
+
+/// Where the k-th enemy sharing a place sits around it, so portraits never stack and the
+/// tower or pit under them stays visible. Sides first: a pit's countdown and drake count sit
+/// above and below it.
+const SIGHTING_FAN: [(f32, f32); 5] = [(30.0, 0.0), (-30.0, 0.0), (30.0, -30.0), (-30.0, -30.0), (0.0, -34.0)];
+
+/// "Dragon pit", "Your mid outer tower", "Their bot inhibitor", from the player's side.
+fn place_label(place: MapPlace, my_team_is_order: bool, lang: Lang) -> String {
+    let lane = |lane: Lane| match lane {
+        Lane::Top => "top",
+        Lane::Jungle => "jungle",
+        Lane::Mid => "mid",
+        Lane::Bot => "bot",
+    };
+    match place {
+        MapPlace::DragonPit => lang.pick("Dragon pit", "Antre du dragon").to_string(),
+        MapPlace::BaronPit => lang.pick("Baron pit", "Antre du Baron").to_string(),
+        MapPlace::Turret { order_side, lane: l, tier } => {
+            let ours = order_side == my_team_is_order;
+            let (tier_en, tier_fr) = match tier {
+                1 => ("outer", "extérieure"),
+                2 => ("inner", "intérieure"),
+                _ => ("inhibitor", "inhibitrice"),
+            };
+            if lang.is_fr() {
+                format!("{} tourelle {} {}", if ours { "Votre" } else { "Leur" }, tier_fr, lane(l))
+            } else {
+                format!("{} {} {} tower", if ours { "Your" } else { "Their" }, lane(l), tier_en)
+            }
+        }
+        MapPlace::Inhibitor { order_side, lane: l } => {
+            let ours = order_side == my_team_is_order;
+            if lang.is_fr() {
+                format!("{} inhibiteur {}", if ours { "Votre" } else { "Leur" }, lane(l))
+            } else {
+                format!("{} {} inhibitor", if ours { "Your" } else { "Their" }, lane(l))
+            }
+        }
+    }
+}
+
+/// "just now", "2 min ago" / "à l'instant", "il y a 2 min".
+fn age_label(age_sec: f64, lang: Lang) -> String {
+    let minutes = (age_sec.max(0.0) / 60.0).floor() as u32;
+    match (minutes, lang.is_fr()) {
+        (0, false) => "just now".to_string(),
+        (0, true) => "à l'instant".to_string(),
+        (m, false) => format!("{m} min ago"),
+        (m, true) => format!("il y a {m} min"),
+    }
+}
+
+/// A sighting older than this is drawn faded: the enemy has likely moved on.
+const SIGHTING_STALE_SEC: f64 = 120.0;
+
+/// Every enemy in roster order with their last known place, fanned around shared places.
+fn build_sightings(
+    lg: &LiveGameSummary,
+    board: &LiveBoard,
+    icons: &mut impl IconLookup,
+    lang: Lang,
+) -> Vec<EnemySighting> {
+    let mut at_place: Vec<MapPlace> = Vec::new();
+    lg.players
+        .iter()
+        .filter(|p| (p.team == "ORDER") != board.my_team_is_order)
+        .map(|p| {
+            let seen = board.sightings.iter().find(|s| s.champion == p.champion_name);
+            let (x, y) = match seen {
+                Some(s) => {
+                    let (x, y) = place_coordinates(s.place);
+                    let k = at_place.iter().filter(|&&q| q == s.place).count();
+                    at_place.push(s.place);
+                    let (dx, dy) = SIGHTING_FAN[k % SIGHTING_FAN.len()];
+                    (x + dx, y + dy)
+                }
+                None => (0.0, 0.0),
+            };
+            let age = seen.map_or(0.0, |s| lg.game_time_sec - s.time_sec);
+            EnemySighting {
+                x,
+                y,
+                champion: SharedString::from(p.champion_name.as_str()),
+                initials: champ_initials(&p.champion_name),
+                icon: icons.resolve_icon("champion", p.champion_id),
+                seen: seen.is_some(),
+                time: seen.map(|s| format_mm_ss(s.time_sec)).unwrap_or_default(),
+                place: SharedString::from(match seen {
+                    Some(s) => place_label(s.place, board.my_team_is_order, lang),
+                    None => lang.pick("Not seen yet", "Pas encore repéré").to_string(),
+                }),
+                age: SharedString::from(if seen.is_some() { age_label(age, lang) } else { String::new() }),
+                stale: age > SIGHTING_STALE_SEC,
+                dead: p.is_dead,
+            }
+        })
+        .collect()
+}
+
+fn objective_name(kind: ObjectiveKind, lang: Lang) -> &'static str {
+    match kind {
+        ObjectiveKind::Baron => "Baron Nashor",
+        ObjectiveKind::Elder => lang.pick("Elder Dragon", "Dragon ancestral"),
+        ObjectiveKind::Drake => lang.pick("Drake", "Dragon"),
+        ObjectiveKind::Herald => lang.pick("Rift Herald", "Héraut de la Faille"),
+        ObjectiveKind::Grubs => lang.pick("Void Grubs", "Larves du Néant"),
+    }
+}
+
+fn build_pit_clocks(board: &LiveBoard, lang: Lang) -> Vec<PitClock> {
+    board
+        .pits
+        .iter()
+        .map(|p| {
+            let (x, y) = place_coordinates(match p.pit {
+                Pit::Dragon => MapPlace::DragonPit,
+                Pit::Baron => MapPlace::BaronPit,
+            });
+            PitClock {
+                x,
+                y,
+                kind: objective_kind_index(p.kind),
+                label: SharedString::from(objective_name(p.kind, lang)),
+                spawn_at: p.spawn_sec.ceil() as i32,
+            }
+        })
+        .collect()
+}
+
 /// Row models of the champion select view, kept for the whole session so Slint updates rows in
 /// place. Only a row that did not exist before (a ban landing), or an element that newly
 /// appears inside a row (a lock, a reveal), is created, and the one-shot draft animations play
@@ -151,6 +296,8 @@ pub struct LiveModels {
     my_objectives: Rc<VecModel<ObjectiveChip>>,
     enemy_objectives: Rc<VecModel<ObjectiveChip>>,
     feed: Rc<VecModel<FeedLine>>,
+    sightings: Rc<VecModel<EnemySighting>>,
+    pits: Rc<VecModel<PitClock>>,
 }
 
 /// Brings `model` to `rows`, touching only the rows that differ.
@@ -515,6 +662,8 @@ pub fn build_live_view(
         0
     };
     let pits = summarize_pits(b);
+    let sightings = build_sightings(lg, b, icons, lang);
+    let pit_clocks = build_pit_clocks(b, lang);
 
     LiveView {
         title: SharedString::from(title),
@@ -539,6 +688,9 @@ pub fn build_live_view(
         my_objectives: sync_rows(&models.my_objectives, my_objectives),
         enemy_objectives: sync_rows(&models.enemy_objectives, enemy_objectives),
         feed: sync_rows(&models.feed, feed),
+        sightings: sync_rows(&models.sightings, sightings),
+        pits: sync_rows(&models.pits, pit_clocks),
+        game_seconds: lg.game_time_sec.floor() as i32,
     }
 }
 
@@ -1288,6 +1440,99 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn sighting_places_fit_within_track_canvas() {
+        let mut places = vec![MapPlace::DragonPit, MapPlace::BaronPit];
+        for order_side in [true, false] {
+            for lane in [Lane::Top, Lane::Mid, Lane::Bot] {
+                places.push(MapPlace::Inhibitor { order_side, lane });
+                for tier in 1..=3 {
+                    places.push(MapPlace::Turret { order_side, lane, tier });
+                }
+            }
+        }
+        for place in places {
+            let (x, y) = place_coordinates(place);
+            for (dx, dy) in SIGHTING_FAN {
+                assert!((0.0..=400.0).contains(&(x + dx)), "{place:?} x out of canvas");
+                assert!((0.0..=400.0).contains(&(y + dy)), "{place:?} y out of canvas");
+            }
+        }
+    }
+
+    #[test]
+    fn lists_every_enemy_and_fans_out_those_sharing_a_place() {
+        use hypatia_shared::{LiveGamePlayerSummary, Sighting};
+        let player = |champ: &str, team: &str| LiveGamePlayerSummary {
+            riot_id: format!("{champ}#EUW"),
+            champion_id: 0,
+            champion_name: champ.to_string(),
+            champion_alias: String::new(),
+            team: team.to_string(),
+            position: String::new(),
+            level: 1,
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            creep_score: 0,
+            is_self: team == "ORDER",
+            is_dead: false,
+            respawn_timer_sec: 0.0,
+            skin_id: 0,
+        };
+        let lg = LiveGameSummary {
+            game_mode: "CLASSIC".into(),
+            map_name: String::new(),
+            game_time_sec: 1000.0,
+            active_champion_id: 0,
+            active_champion: String::new(),
+            level: 1,
+            current_gold: 0,
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            creep_score: 0,
+            recent_events: vec![],
+            players: vec![
+                player("Ahri", "ORDER"),
+                player("Viego", "CHAOS"),
+                player("Zed", "CHAOS"),
+                player("Nautilus", "CHAOS"),
+            ],
+        };
+        let seen = |champion: &str, time_sec: f64| Sighting {
+            champion: champion.to_string(),
+            champion_id: 0,
+            place: MapPlace::DragonPit,
+            time_sec,
+        };
+        let board = LiveBoard {
+            my_team_is_order: true,
+            sightings: vec![seen("Viego", 950.0), seen("Nautilus", 700.0)],
+            ..LiveBoard::default()
+        };
+        let rows = build_sightings(&lg, &board, &mut crate::icons::NoopIconLookup, Lang::En);
+        let names: Vec<&str> = rows.iter().map(|r| r.champion.as_str()).collect();
+        assert_eq!(names, ["Viego", "Zed", "Nautilus"]);
+        assert!(rows[0].seen && !rows[1].seen && rows[2].seen);
+        assert_eq!(rows[0].place, "Dragon pit");
+        assert_eq!(rows[0].age, "just now");
+        assert_eq!(rows[1].place, "Not seen yet");
+        assert_eq!(rows[2].age, "5 min ago");
+        assert!(!rows[0].stale && rows[2].stale);
+        assert_ne!((rows[0].x, rows[0].y), (rows[2].x, rows[2].y), "shared place fans out");
+    }
+
+    #[test]
+    fn names_places_from_the_players_side() {
+        let tower = MapPlace::Turret { order_side: false, lane: Lane::Mid, tier: 2 };
+        assert_eq!(place_label(tower, true, Lang::En), "Their mid inner tower");
+        assert_eq!(place_label(tower, false, Lang::Fr), "Votre tourelle intérieure mid");
+        let inhib = MapPlace::Inhibitor { order_side: true, lane: Lane::Bot };
+        assert_eq!(place_label(inhib, true, Lang::En), "Your bot inhibitor");
+        assert_eq!(age_label(150.0, Lang::Fr), "il y a 2 min");
     }
 
     #[test]

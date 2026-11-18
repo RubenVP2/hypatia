@@ -22,6 +22,11 @@ Canonical Summoner's Rift role (`Top`, `Jungle`, `Mid`, `Bot`, `Support`, `Fill`
 ### Live Board
 The tactical Summoner's Rift summary derived during `LiveGame`, tracking lane-ordered champion death/respawn states, three turret tiers per lane for Order and Chaos, epic objectives (`Baron`, `Elder`, `Drake`, `Herald`, `Grubs`), and recent combat/objective events.
 
+### Sighting
+An enemy champion's last known place on the Live Board: the latest event that credits them (killer or assister) at a fixed spot (a tower, an inhibitor, the dragon or Baron pit), or a death under a tower. Shown with the game time it happened.
+- **Invariant**: Live Client Data carries no coordinates, so a place comes only from such events; a champion kill alone places no one. Hypatia never reads game memory or the screen to find positions.
+- **Invariant**: Sightings and pit timers exist only on Summoner's Rift (`CLASSIC`); the epic monster schedule lives in `rift_schedule` and follows the current patch.
+
 ### Mobile Remote
 The opt-in LAN companion serving an authenticated local web controller where a paired phone displays current match state and triggers a strictly closed allowlist of League Client actions (role preferences, queueing, ready check, champion hover/lock, spells, skins, rune pages, swaps/trades).
 - **Invariant**: Arbitrary URIs, HTTP methods, and unvalidated payloads are rejected by the command allowlist; outside explicit opt-in Mobile Remote commands, Riot inspection remains strictly read-only.

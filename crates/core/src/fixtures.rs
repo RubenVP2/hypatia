@@ -1354,7 +1354,7 @@ fn demo_eventdata(game_time_sec: u32) -> Value {
         ),
         (
             842.0,
-            json!({"EventName": "TurretKilled", "TurretKilled": "Turret_T1_R_03_A", "KillerName": "Vesper"}),
+            json!({"EventName": "TurretKilled", "TurretKilled": "Turret_T1_R_03_A", "KillerName": "Vesper", "Assisters": ["Anchor"]}),
         ),
         (
             903.0,
@@ -1375,6 +1375,10 @@ fn demo_eventdata(game_time_sec: u32) -> Value {
         (
             1135.0,
             json!({"EventName": "DragonKill", "DragonType": "Earth", "KillerName": "Sora", "Stolen": "False"}),
+        ),
+        (
+            1142.0,
+            json!({"EventName": "TurretKilled", "TurretKilled": "Turret_T1_L_03_A", "KillerName": "Blackwood", "Assisters": []}),
         ),
         (
             1150.0,
@@ -1398,7 +1402,7 @@ fn demo_eventdata(game_time_sec: u32) -> Value {
         ),
         (
             1230.0,
-            json!({"EventName": "DragonKill", "DragonType": "Air", "KillerName": "Hollow", "Stolen": "False"}),
+            json!({"EventName": "DragonKill", "DragonType": "Air", "KillerName": "Hollow", "Assisters": ["Anchor"], "Stolen": "False"}),
         ),
         (
             1245.0,

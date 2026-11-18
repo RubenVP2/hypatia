@@ -79,6 +79,58 @@ pub struct FeedItem {
     pub by_my_team: Option<bool>,
 }
 
+/// A fixed spot on Summoner's Rift where a Live Client event can only have happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MapPlace {
+    Turret { order_side: bool, lane: Lane, tier: u8 },
+    Inhibitor { order_side: bool, lane: Lane },
+    DragonPit,
+    /// The top-side pit shared by Void Grubs, Rift Herald and Baron Nashor.
+    BaronPit,
+}
+
+/// The last place an enemy champion was spotted: the latest event that names them (killer or
+/// assister) and happens at a fixed spot. Live Client Data carries no coordinates, so a
+/// champion kill alone places no one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Sighting {
+    pub champion: String,
+    pub champion_id: i64,
+    pub place: MapPlace,
+    pub time_sec: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Pit {
+    Dragon,
+    Baron,
+}
+
+/// The epic monster next due in a pit and the game time it spawns, from the fixed
+/// Summoner's Rift schedule and the kills seen so far. Smaller camps raise no event, so their
+/// timers cannot be known.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PitTimer {
+    pub pit: Pit,
+    pub kind: ObjectiveKind,
+    pub spawn_sec: f64,
+}
+
+/// Summoner's Rift epic monster schedule (patch 26.1): game seconds.
+pub mod rift_schedule {
+    pub const DRAKE_FIRST: f64 = 300.0;
+    pub const DRAKE_RESPAWN: f64 = 300.0;
+    /// Elder spawns this long after a soul is claimed, and respawns as long after a kill.
+    pub const ELDER_RESPAWN: f64 = 360.0;
+    pub const DRAKES_FOR_SOUL: usize = 4;
+    pub const GRUBS_SPAWN: f64 = 480.0;
+    pub const GRUBS_LEAVE: f64 = 885.0;
+    pub const HERALD_SPAWN: f64 = 900.0;
+    pub const HERALD_LEAVE: f64 = 1185.0;
+    pub const BARON_FIRST: f64 = 1200.0;
+    pub const BARON_RESPAWN: f64 = 360.0;
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LiveBoard {
     pub my_team_is_order: bool,
@@ -88,6 +140,10 @@ pub struct LiveBoard {
     pub objectives: Vec<ObjectiveTaken>,
     /// Newest first.
     pub feed: Vec<FeedItem>,
+    /// One per enemy champion spotted so far, in enemy roster order.
+    pub sightings: Vec<Sighting>,
+    /// The next monster of each pit; empty outside Summoner's Rift.
+    pub pits: Vec<PitTimer>,
 }
 
 impl LiveBoard {
@@ -131,11 +187,93 @@ impl Roster<'_> {
         }
     }
 
+    /// Index into the roster of a champion actor, for sightings.
+    fn index_of(&self, name: &str) -> Option<usize> {
+        self.live.players.iter().position(|p| {
+            p.riot_id == name
+                || p.riot_id.split('#').next() == Some(name)
+                || p.champion_name == name
+        })
+    }
+
     fn team_of(&self, name: &str) -> Option<bool> {
         self.lookup(name)
             .map(|(order, ..)| order)
             .or_else(|| Self::structure_team(name))
     }
+}
+
+/// Parses `Barracks_T1_L1` into (order_side, lane).
+pub fn parse_inhibitor_id(id: &str) -> Option<(bool, Lane)> {
+    let parts: Vec<&str> = id.split('_').collect();
+    if parts.len() < 3 || parts[0] != "Barracks" {
+        return None;
+    }
+    let order_side = match parts[1] {
+        "T1" => true,
+        "T2" => false,
+        _ => return None,
+    };
+    let lane = match parts[2].chars().next()? {
+        'L' => Lane::Top,
+        'C' => Lane::Mid,
+        'R' => Lane::Bot,
+        _ => return None,
+    };
+    Some((order_side, lane))
+}
+
+/// Next monster of each pit at `now`, from the epic monsters taken so far (in time order).
+pub fn pit_timers(objectives: &[ObjectiveTaken], grubs_taken: bool, now: f64) -> Vec<PitTimer> {
+    use rift_schedule::*;
+
+    let mut drakes = [0usize; 2];
+    let mut soul_at = None;
+    let mut last_drake = None;
+    let mut last_elder = None;
+    let mut last_baron = None;
+    let mut herald_taken = false;
+    for obj in objectives {
+        match obj.kind {
+            ObjectiveKind::Drake => {
+                last_drake = Some(obj.time_sec);
+                let team = &mut drakes[usize::from(!obj.by_order)];
+                *team += 1;
+                if *team == DRAKES_FOR_SOUL && soul_at.is_none() {
+                    soul_at = Some(obj.time_sec);
+                }
+            }
+            ObjectiveKind::Elder => last_elder = Some(obj.time_sec),
+            ObjectiveKind::Baron => last_baron = Some(obj.time_sec),
+            ObjectiveKind::Herald => herald_taken = true,
+            ObjectiveKind::Grubs => {}
+        }
+    }
+
+    let dragon = match soul_at {
+        Some(soul) => PitTimer {
+            pit: Pit::Dragon,
+            kind: ObjectiveKind::Elder,
+            spawn_sec: last_elder.unwrap_or(soul) + ELDER_RESPAWN,
+        },
+        None => PitTimer {
+            pit: Pit::Dragon,
+            kind: ObjectiveKind::Drake,
+            spawn_sec: last_drake.map_or(DRAKE_FIRST, |t| t + DRAKE_RESPAWN),
+        },
+    };
+    let baron = if !grubs_taken && now < GRUBS_LEAVE {
+        PitTimer { pit: Pit::Baron, kind: ObjectiveKind::Grubs, spawn_sec: GRUBS_SPAWN }
+    } else if !herald_taken && now < HERALD_LEAVE {
+        PitTimer { pit: Pit::Baron, kind: ObjectiveKind::Herald, spawn_sec: HERALD_SPAWN }
+    } else {
+        PitTimer {
+            pit: Pit::Baron,
+            kind: ObjectiveKind::Baron,
+            spawn_sec: last_baron.map_or(BARON_FIRST, |t| t + BARON_RESPAWN),
+        }
+    };
+    vec![dragon, baron]
 }
 
 /// Parses `Turret_T1_L_03_A` into (order_side, lane, tier). Nexus towers return None.
@@ -243,6 +381,11 @@ pub fn extract_live_board_localized(
     let mut feed = Vec::new();
     let (mut ev_order_kills, mut ev_chaos_kills) = (0u32, 0u32);
     let mine = |order: bool| order == my_team_is_order;
+    // Only Summoner's Rift has these places and this monster schedule.
+    let on_rift = live.game_mode == "CLASSIC";
+    // Latest sighting per roster slot.
+    let mut spotted: Vec<Option<(MapPlace, f64)>> = vec![None; live.players.len()];
+    let mut grubs_taken = false;
 
     for ev in &events {
         let name = ev.get("EventName").and_then(|v| v.as_str()).unwrap_or("");
@@ -250,11 +393,35 @@ pub fn extract_live_board_localized(
         let killer = ev.get("KillerName").and_then(|v| v.as_str()).unwrap_or("");
         let killer_info = roster.lookup(killer);
         let killer_order = roster.team_of(killer);
+        // Everyone the event credits: the killer, then the assisters.
+        let mut spot = |place: MapPlace, names: &mut dyn Iterator<Item = &str>| {
+            if !on_rift {
+                return;
+            }
+            for actor in names {
+                if let Some(i) = roster.index_of(actor) {
+                    let newer = spotted[i].is_none_or(|(_, t)| time_sec >= t);
+                    if newer {
+                        spotted[i] = Some((place, time_sec));
+                    }
+                }
+            }
+        };
+        let assisters: Vec<&str> = ev
+            .get("Assisters")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+        let mut credited = std::iter::once(killer).chain(assisters.iter().copied());
 
         match name {
             "ChampionKill" => {
                 let victim = ev.get("VictimName").and_then(|v| v.as_str()).unwrap_or("");
                 let victim_info = roster.lookup(victim);
+                // Killed by a turret: the victim stood under it.
+                if let Some((order_side, lane, tier)) = parse_turret_id(killer) {
+                    spot(MapPlace::Turret { order_side, lane, tier }, &mut std::iter::once(victim));
+                }
                 match killer_order {
                     Some(true) => ev_order_kills += 1,
                     Some(false) => ev_chaos_kills += 1,
@@ -300,6 +467,7 @@ pub fn extract_live_board_localized(
             "TurretKilled" => {
                 let turret = ev.get("TurretKilled").and_then(|v| v.as_str()).unwrap_or("");
                 if let Some((order_side, lane, tier)) = parse_turret_id(turret) {
+                    spot(MapPlace::Turret { order_side, lane, tier }, &mut credited);
                     if let Some(t) = towers
                         .iter_mut()
                         .find(|t| t.order_side == order_side && t.lane == lane && t.tier == tier)
@@ -325,7 +493,16 @@ pub fn extract_live_board_localized(
                     });
                 }
             }
+            "InhibKilled" => {
+                let inhib = ev.get("InhibKilled").and_then(|v| v.as_str()).unwrap_or("");
+                if let Some((order_side, lane)) = parse_inhibitor_id(inhib) {
+                    spot(MapPlace::Inhibitor { order_side, lane }, &mut credited);
+                }
+            }
             "DragonKill" | "HeraldKill" | "BaronKill" | "HordeKill" => {
+                let pit = if name == "DragonKill" { MapPlace::DragonPit } else { MapPlace::BaronPit };
+                spot(pit, &mut credited);
+                grubs_taken |= name == "HordeKill";
                 let (kind, label) = match name {
                     "DragonKill" => {
                         let dt = ev.get("DragonType").and_then(|v| v.as_str()).unwrap_or("");
@@ -416,7 +593,31 @@ pub fn extract_live_board_localized(
         chaos_kills = ev_chaos_kills;
     }
 
-    LiveBoard { my_team_is_order, order_kills, chaos_kills, towers, objectives, feed }
+    let sightings = live
+        .players
+        .iter()
+        .zip(spotted)
+        .filter(|(p, _)| (p.team == "ORDER") != my_team_is_order)
+        .filter_map(|(p, seen)| {
+            let (place, time_sec) = seen?;
+            Some(Sighting {
+                champion: p.champion_name.clone(),
+                champion_id: p.champion_id,
+                place,
+                time_sec,
+            })
+        })
+        .collect();
+
+    let pits = if on_rift {
+        let mut taken = objectives.clone();
+        taken.sort_by(|a, b| a.time_sec.partial_cmp(&b.time_sec).unwrap_or(std::cmp::Ordering::Equal));
+        pit_timers(&taken, grubs_taken, live.game_time_sec)
+    } else {
+        Vec::new()
+    };
+
+    LiveBoard { my_team_is_order, order_kills, chaos_kills, towers, objectives, feed, sightings, pits }
 }
 
 #[cfg(test)]
@@ -512,5 +713,92 @@ mod tests {
         assert_eq!(fr.feed[0].text, "Zed vous a éliminé");
         let en = extract_live_board_localized(None, Some(&events), &l, Lang::En);
         assert_eq!(en.feed[0].text, "Zed killed you");
+    }
+    #[test]
+    fn parses_inhibitor_ids() {
+        assert_eq!(parse_inhibitor_id("Barracks_T1_L1"), Some((true, Lane::Top)));
+        assert_eq!(parse_inhibitor_id("Barracks_T2_C1"), Some((false, Lane::Mid)));
+        assert_eq!(parse_inhibitor_id("Barracks_T2_R1"), Some((false, Lane::Bot)));
+        assert_eq!(parse_inhibitor_id("Turret_T1_L_03_A"), None);
+    }
+
+    #[test]
+    fn spots_each_enemy_at_the_latest_fixed_place_they_were_credited() {
+        let l = live(vec![
+            player("Ezo#EUW", "Ahri", "ORDER", "MIDDLE", 0, true),
+            player("Ally#EUW", "Garen", "ORDER", "TOP", 0, false),
+            player("Foe#EUW", "Zed", "CHAOS", "MIDDLE", 0, false),
+            player("Jg#EUW", "Viego", "CHAOS", "JUNGLE", 0, false),
+            player("Adc#EUW", "Jinx", "CHAOS", "BOTTOM", 0, false),
+            player("Top#EUW", "Darius", "CHAOS", "TOP", 0, false),
+        ]);
+        let events = json!({"Events": [
+            {"EventName": "DragonKill", "EventTime": 400.0, "DragonType": "Fire", "KillerName": "Jg", "Assisters": ["Foe"]},
+            {"EventName": "TurretKilled", "EventTime": 500.0, "TurretKilled": "Turret_T1_C_05_A", "KillerName": "Foe", "Assisters": []},
+            {"EventName": "ChampionKill", "EventTime": 520.0, "KillerName": "Turret_T1_R_03_A", "VictimName": "Adc"},
+            {"EventName": "ChampionKill", "EventTime": 530.0, "KillerName": "Top", "VictimName": "Ally"},
+            {"EventName": "HeraldKill", "EventTime": 540.0, "KillerName": "Ally", "Assisters": ["Ezo"]}
+        ]});
+        let board = extract_live_board_localized(None, Some(&events), &l, Lang::En);
+        let seen: Vec<(&str, MapPlace, f64)> =
+            board.sightings.iter().map(|s| (s.champion.as_str(), s.place, s.time_sec)).collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("Zed", MapPlace::Turret { order_side: true, lane: Lane::Mid, tier: 1 }, 500.0),
+                ("Viego", MapPlace::DragonPit, 400.0),
+                ("Jinx", MapPlace::Turret { order_side: true, lane: Lane::Bot, tier: 1 }, 520.0),
+            ],
+            "a kill places no one, allies are never listed, the latest place wins"
+        );
+    }
+
+    #[test]
+    fn no_sightings_or_timers_off_summoners_rift() {
+        let mut l = live(vec![
+            player("Ezo#EUW", "Ahri", "ORDER", "MIDDLE", 0, true),
+            player("Jg#EUW", "Viego", "CHAOS", "JUNGLE", 0, false),
+        ]);
+        l.game_mode = "ARAM".into();
+        let events = json!({"Events": [
+            {"EventName": "TurretKilled", "EventTime": 500.0, "TurretKilled": "Turret_T1_C_05_A", "KillerName": "Jg"}
+        ]});
+        let board = extract_live_board_localized(None, Some(&events), &l, Lang::En);
+        assert!(board.sightings.is_empty());
+        assert!(board.pits.is_empty());
+    }
+
+    fn taken(kind: ObjectiveKind, by_order: bool, time_sec: f64) -> ObjectiveTaken {
+        ObjectiveTaken { kind, label: String::new(), by_order, time_sec }
+    }
+
+    #[test]
+    fn pit_timers_follow_the_rift_schedule() {
+        use ObjectiveKind::*;
+        let at = |objs: &[ObjectiveTaken], grubs: bool, now: f64| {
+            pit_timers(objs, grubs, now).iter().map(|p| (p.kind, p.spawn_sec)).collect::<Vec<_>>()
+        };
+        assert_eq!(at(&[], false, 60.0), vec![(Drake, 300.0), (Grubs, 480.0)]);
+        // Grubs taken, or gone at 14:45: Herald is next in the top pit.
+        assert_eq!(at(&[], true, 600.0)[1], (Herald, 900.0));
+        assert_eq!(at(&[], false, 885.0)[1], (Herald, 900.0));
+        // Herald taken, or gone at 19:45: Baron at 20:00, then 6 minutes after each kill.
+        assert_eq!(at(&[taken(Herald, true, 950.0)], true, 960.0)[1], (Baron, 1200.0));
+        assert_eq!(at(&[], true, 1185.0)[1], (Baron, 1200.0));
+        assert_eq!(at(&[taken(Baron, false, 1300.0)], true, 1310.0)[1], (Baron, 1660.0));
+        // A drake respawns 5 minutes after the last one.
+        assert_eq!(at(&[taken(Drake, true, 330.0)], false, 340.0)[0], (Drake, 630.0));
+        // The fourth drake of one team claims the soul: Elder 6 minutes later, and after each kill.
+        let soul = [
+            taken(Drake, true, 300.0),
+            taken(Drake, false, 600.0),
+            taken(Drake, true, 900.0),
+            taken(Drake, true, 1200.0),
+            taken(Drake, true, 1500.0),
+        ];
+        assert_eq!(at(&soul, true, 1510.0)[0], (Elder, 1860.0));
+        let mut elder = soul.to_vec();
+        elder.push(taken(Elder, false, 1900.0));
+        assert_eq!(at(&elder, true, 1910.0)[0], (Elder, 2260.0));
     }
 }

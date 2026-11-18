@@ -1,10 +1,12 @@
 import { Theme, Type, Space } from "theme.slint";
 import {
     AllyRow, BanEntry, EnemyPick, TowerDot, ObjectiveChip, FeedLine, PlayerLine, MapAlly, PartyRow, StatLine,
+    EnemySighting, PitClock,
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
     Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, ReadyMedallion, ResultCrest, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
     PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
+    SightingRow, PitRow,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
@@ -98,6 +100,12 @@ export struct LiveView {
     my-objectives: [ObjectiveChip],
     enemy-objectives: [ObjectiveChip],
     feed: [FeedLine],
+    // Every enemy, in lane order, with their last known place.
+    sightings: [EnemySighting],
+    // Next monster of the dragon and top-side pits; empty off Summoner's Rift.
+    pits: [PitClock],
+    // Game clock at the last poll, for the pit countdowns when the ticking clock is off.
+    game-seconds: int,
 }
 
 export struct EndView {
@@ -793,10 +801,58 @@ component LiveHud inherits VerticalLayout {
     }
 }
 
+// The live Rift map: towers, pits with their countdowns, and each enemy where an event
+// last placed them.
+component RiftWatchMap inherits LineMap {
+    in property <LiveView> live;
+    towers: root.live.towers;
+    show-jungle: true;
+    show-pits: true;
+    order-is-mine: root.live.order-is-mine;
+    my-drakes: root.live.my-drakes;
+    enemy-drakes: root.live.enemy-drakes;
+    baron-owner: root.live.baron-owner;
+    herald-owner: root.live.herald-owner;
+    sightings: root.live.sightings;
+    pit-clocks: root.live.pits;
+    line-width: 7px;
+    station: 17px;
+    halo: Theme.panel;
+}
+
+// Every enemy with their last known place, then the next monster of each pit.
+component RiftWatchList inherits VerticalLayout {
+    in property <LiveView> live;
+    in property <int> now: -1;
+    in property <bool> padded: true;
+    padding: root.padded ? Space.md : 0px;
+    spacing: Space.xs;
+    alignment: start;
+
+    SectionLabel { text: @tr("ENEMIES LAST SEEN"); }
+    for s in root.live.sightings: SightingRow { s: s; }
+    Text {
+        text: @tr("Riot's live data has no positions: only towers, inhibitors and epic monsters place an enemy.");
+        color: Theme.muted;
+        font-size: Type.label;
+        wrap: word-wrap;
+    }
+
+    if root.live.pits.length > 0: VerticalLayout {
+        spacing: Space.xs;
+        padding-top: Space.sm;
+        Divider { }
+        SectionLabel { text: @tr("NEXT EPIC MONSTERS"); }
+        for p in root.live.pits: PitRow { p: p; now: root.now; }
+    }
+}
+
 component LiveScreen inherits Flickable {
     in property <LiveView> live;
     in property <int> clock-seconds: -1;
     in property <bool> compact: false;
+    // Game clock for the pit countdowns: the ticking clock, else the last poll.
+    property <int> now: root.clock-seconds >= 0 ? root.clock-seconds : root.live.game-seconds;
     content-height: live-body.preferred-height;
 
     HeroSplash {
@@ -854,68 +910,83 @@ component LiveScreen inherits Flickable {
             for p in root.live.enemy-players: PlayerRow { p: p; mine: false; }
         }
 
-        // Map, Objectives & Live Event Feed
+        // Rift watch: the map with each enemy's last known place and the pit countdowns, then
+        // the list of every enemy and the next monsters.
         if !root.compact: HorizontalLayout {
             spacing: Space.lg;
             alignment: stretch;
 
             Card {
-                width: 248px;
-                height: 248px;
-                LineMap {
+                width: 336px;
+                height: 336px;
+                RiftWatchMap {
                     x: 10px;
                     y: 10px;
-                    width: 228px;
-                    height: 228px;
-                    towers: root.live.towers;
-                    show-jungle: true;
-                    show-pits: true;
-                    order-is-mine: root.live.order-is-mine;
-                    my-drakes: root.live.my-drakes;
-                    enemy-drakes: root.live.enemy-drakes;
-                    baron-owner: root.live.baron-owner;
-                    herald-owner: root.live.herald-owner;
-                    line-width: 7px;
-                    station: 15px;
-                    halo: Theme.panel;
+                    width: 316px;
+                    height: 316px;
+                    live: root.live;
+                    now: root.now;
                 }
             }
 
             Card {
                 horizontal-stretch: 1;
-                VerticalLayout {
-                    padding: Space.md;
+                RiftWatchList { live: root.live; now: root.now; }
+            }
+        }
+
+        if root.compact: Card {
+            VerticalLayout {
+                padding: Space.md;
+                spacing: Space.md;
+                Rectangle {
+                    height: 280px;
+                    RiftWatchMap {
+                        x: (parent.width - self.width) / 2;
+                        width: 280px;
+                        height: 280px;
+                        live: root.live;
+                        now: root.now;
+                    }
+                }
+                RiftWatchList { live: root.live; now: root.now; padded: false; }
+            }
+        }
+
+        // Objectives & live event feed
+        if !root.compact: Card {
+            VerticalLayout {
+                padding: Space.md;
+                spacing: Space.md;
+                SectionLabel { text: @tr("OBJECTIVES & FEED"); }
+                HorizontalLayout {
                     spacing: Space.md;
-                    SectionLabel { text: @tr("OBJECTIVES & FEED"); }
-                    HorizontalLayout {
-                        spacing: Space.md;
-                        Text {
-                            text: @tr("Blue");
-                            width: 48px;
-                            color: Theme.blue-soft;
-                            font-size: Type.small;
-                            font-weight: 800;
-                            vertical-alignment: center;
-                        }
-                        ObjectiveRow { horizontal-stretch: 1; chips: root.live.my-objectives; }
+                    Text {
+                        text: @tr("Blue");
+                        width: 48px;
+                        color: Theme.blue-soft;
+                        font-size: Type.small;
+                        font-weight: 800;
+                        vertical-alignment: center;
                     }
-                    HorizontalLayout {
-                        spacing: Space.md;
-                        Text {
-                            text: @tr("Red");
-                            width: 48px;
-                            color: Theme.red-soft;
-                            font-size: Type.small;
-                            font-weight: 800;
-                            vertical-alignment: center;
-                        }
-                        ObjectiveRow { horizontal-stretch: 1; chips: root.live.enemy-objectives; }
+                    ObjectiveRow { horizontal-stretch: 1; chips: root.live.my-objectives; }
+                }
+                HorizontalLayout {
+                    spacing: Space.md;
+                    Text {
+                        text: @tr("Red");
+                        width: 48px;
+                        color: Theme.red-soft;
+                        font-size: Type.small;
+                        font-weight: 800;
+                        vertical-alignment: center;
                     }
-                    Divider { }
-                    VerticalLayout {
-                        spacing: Space.xxs;
-                        for line in root.live.feed: FeedRow { line: line; }
-                    }
+                    ObjectiveRow { horizontal-stretch: 1; chips: root.live.enemy-objectives; }
+                }
+                Divider { }
+                VerticalLayout {
+                    spacing: Space.xxs;
+                    for line in root.live.feed: FeedRow { line: line; }
                 }
             }
         }

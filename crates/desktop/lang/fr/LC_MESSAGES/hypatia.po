@@ -740,11 +740,6 @@ msgctxt "MiniAllyRow"
 msgid "PICKING"
 msgstr "CHOISIT"
 
-#: ui/app.slint:2705
-msgctxt "MiniAllyRow"
-msgid "YOU"
-msgstr "VOUS"
-
 #: ui/app.slint:2723
 msgctxt "MiniPlayerCell"
 msgid "{0}, dead, respawn {1}"
@@ -770,30 +765,21 @@ msgctxt "MiniWidget"
 msgid "Champion select and your game show up here automatically."
 msgstr "La sélection des champions et la partie s'afficheront ici automatiquement."
 
-#: ui/app.slint:2830
 msgctxt "MiniWidget"
-msgid "Score: {0} - {1}"
-msgstr "Score : {0} - {1}"
+msgid "Score: allies {0}, enemies {1}, game time {2}"
+msgstr "Score : alliés {0}, ennemis {1}, temps de jeu {2}"
 
-#: ui/app.slint:2964
 msgctxt "MiniWidget"
-msgid "BLUE"
-msgstr "BLEU"
+msgid "RESPAWN"
+msgstr "RÉAPPARITION"
 
-#: ui/app.slint:2965 ui/app.slint:2967
 msgctxt "MiniWidget"
-msgid "None"
-msgstr "Aucun"
+msgid "Blue: none"
+msgstr "Bleu : aucun"
 
-#: ui/app.slint:2966
 msgctxt "MiniWidget"
-msgid "RED"
-msgstr "ROUGE"
-
-#: ui/app.slint:2980
-msgctxt "MiniWidget"
-msgid "RECENT EVENTS"
-msgstr "DERNIERS ÉVÉNEMENTS"
+msgid "Red: none"
+msgstr "Rouge : aucun"
 
 #: ui/parts.slint:360
 msgctxt "ClockReadout"

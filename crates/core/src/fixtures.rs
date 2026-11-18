@@ -1256,6 +1256,9 @@ fn demo_activeplayer(game_time_sec: u32) -> Value {
     let (kills, deaths, assists) = demo_kda(game_time_sec)[2];
     json!({
         "championName": "Ahri",
+        "riotId": "HypatiaObserver#EUW",
+        "riotIdGameName": "HypatiaObserver",
+        "summonerName": "HypatiaObserver#EUW",
         "currentGold": (1500 + ((game_time_sec % 120) * 15)),
         "level": (1 + (game_time_sec / 90)).min(18),
         "scores": {
@@ -1478,5 +1481,22 @@ mod tests {
                 .unwrap()
                 .is_ranked_solo_anonymized
         );
+    }
+
+    #[tokio::test]
+    async fn demo_live_game_knows_the_player_and_their_death() {
+        let app = crate::AppState::start_with_lang(true, 0.5, Lang::En);
+        app.set_demo_phase("InProgress");
+        {
+            let mut dr = app.demo_remote.write().unwrap();
+            dr.game_time_sec = DEMO_SELF_DEATH.start;
+            dr.sync_to_store(&app);
+        }
+        let summary = app.get_summary();
+        let live = summary.live_game.as_ref().expect("live game should be projected");
+        let me = live.players.iter().find(|p| p.is_self).expect("the player's row");
+        assert_eq!(me.champion_name, "Ahri");
+        assert!(me.is_dead);
+        assert!(me.respawn_timer_sec > 0.0);
     }
 }

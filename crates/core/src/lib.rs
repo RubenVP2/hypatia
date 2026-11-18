@@ -1,3 +1,4 @@
+pub mod art;
 pub mod assets;
 pub mod catalog;
 pub mod connectors;

@@ -27,6 +27,26 @@ msgctxt "RosterRow"
 msgid ", acting now"
 msgstr ", à son tour"
 
+msgctxt "RosterRow"
+msgid ", hovering"
+msgstr ", en survol"
+
+msgctxt "EnemySlot"
+msgid "Enemy not picked yet"
+msgstr "Ennemi pas encore choisi"
+
+msgctxt "ReadyMedallion"
+msgid "Match accepted"
+msgstr "Partie acceptée"
+
+msgctxt "ReadyMedallion"
+msgid "Match declined"
+msgstr "Partie refusée"
+
+msgctxt "ReadyMedallion"
+msgid "Match found, {0} left"
+msgstr "Partie trouvée, {0} restantes"
+
 #: ui/app.slint:238
 msgctxt "RosterRow"
 msgid "Waiting for pick"
@@ -97,11 +117,6 @@ msgctxt "ChampSelectScreen"
 msgid "ENEMY PICKS & BANS"
 msgstr "CHOIX ET BANNISSEMENTS ENNEMIS"
 
-#: ui/app.slint:532
-msgctxt "ChampSelectScreen"
-msgid "+{0} pending"
-msgstr "+{0} en attente"
-
 #: ui/app.slint:542
 msgctxt "ChampSelectScreen"
 msgid "Blue:"
@@ -113,9 +128,13 @@ msgid "Red:"
 msgstr "Rouge :"
 
 #: ui/app.slint:574
-msgctxt "ScoreSpecimen"
-msgid "Score: allies {0}, enemies {1}"
-msgstr "Score : alliés {0}, ennemis {1}"
+msgctxt "LiveHud"
+msgid "Score: allies {0}, enemies {1}, game time {2}"
+msgstr "Score : alliés {0}, ennemis {1}, temps de jeu {2}"
+
+msgctxt "LiveHud"
+msgid "RESPAWN"
+msgstr "RÉAPPARITION"
 
 #: ui/app.slint:701 ui/app.slint:714
 msgctxt "LiveScreen"
@@ -374,8 +393,20 @@ msgstr "Réponse de l'appel"
 
 #: ui/app.slint:1833
 msgctxt "EndScreen"
-msgid "MATCH SUMMARY"
-msgstr "RÉSUMÉ DU MATCH"
+msgid "ALLIES"
+msgstr "ALLIÉS"
+
+msgctxt "EndScreen"
+msgid "ENEMIES"
+msgstr "ENNEMIS"
+
+msgctxt "ResultCrest"
+msgid "Victory crest"
+msgstr "Blason de victoire"
+
+msgctxt "ResultCrest"
+msgid "Defeat crest"
+msgstr "Blason de défaite"
 
 #: ui/app.slint:2007
 msgctxt "MainWindow"
@@ -868,3 +899,13 @@ msgstr "Niv. {0} · {1} CS"
 msgctxt "Theme"
 msgid "Fill"
 msgstr "Tous postes"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Client artwork"
+msgstr "Illustrations du client"
+
+#: ui/app.slint
+msgctxt "MainWindow"
+msgid "Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map."
+msgstr "Affiche les splash arts en cache et les illustrations de la Faille du client League derrière les en-têtes et la carte."

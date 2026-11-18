@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -31,6 +31,7 @@ pub struct GameAssetCache {
     in_flight: Mutex<HashSet<String>>,
     failed_until: Mutex<HashMap<String, Instant>>,
     meta_synced_port: tokio::sync::Mutex<Option<u16>>,
+    demo_warmed_port: AtomicU16,
     champ_names_by_id: RwLock<HashMap<i64, String>>,
     champ_ids_by_key: RwLock<HashMap<String, i64>>,
     champ_paths: RwLock<HashMap<i64, String>>,
@@ -39,6 +40,7 @@ pub struct GameAssetCache {
     perk_paths: RwLock<HashMap<i64, String>>,
     style_paths: RwLock<HashMap<i64, String>>,
     skin_paths: RwLock<HashMap<i64, String>>,
+    splash_paths: RwLock<HashMap<i64, String>>,
 }
 
 impl GameAssetCache {
@@ -64,6 +66,7 @@ impl GameAssetCache {
             in_flight: Mutex::new(HashSet::new()),
             failed_until: Mutex::new(HashMap::new()),
             meta_synced_port: tokio::sync::Mutex::new(None),
+            demo_warmed_port: AtomicU16::new(0),
             champ_names_by_id: RwLock::new(HashMap::new()),
             champ_ids_by_key: RwLock::new(HashMap::new()),
             champ_paths: RwLock::new(HashMap::new()),
@@ -72,6 +75,7 @@ impl GameAssetCache {
             perk_paths: RwLock::new(HashMap::new()),
             style_paths: RwLock::new(HashMap::new()),
             skin_paths: RwLock::new(HashMap::new()),
+            splash_paths: RwLock::new(HashMap::new()),
         };
         cache.load_cached_metadata_from_disk();
         cache
@@ -218,6 +222,57 @@ impl GameAssetCache {
         });
     }
 
+    /// Prefetches the showcase assets used by `--demo` (champion icons, spells, splash arts
+    /// and the Summoner's Rift client artwork) once per LCU port while the real League Client is running so offline
+    /// Demo previews immediately display authentic cached Riot artwork.
+    pub fn prefetch_demo_showcase(
+        self: &Arc<Self>,
+        discovery: &Arc<DiscoveryManager>,
+        client: &ReadOnlyRiotClient,
+    ) {
+        let Some((port, password)) = resolve_live_lcu_creds(discovery) else {
+            return;
+        };
+        if self.demo_warmed_port.load(Ordering::Relaxed) == port {
+            return;
+        }
+        let key = format!("__demo_warmup__:{port}");
+        {
+            let mut inflight = self.in_flight.lock().unwrap();
+            if !inflight.insert(key.clone()) {
+                return;
+            }
+        }
+        self.demo_warmed_port.store(port, Ordering::Relaxed);
+
+        let this = Arc::clone(self);
+        let client = client.clone();
+        tokio::spawn(async move {
+            this.ensure_metadata_synced_with_creds(port, &password, &client).await;
+            const GROUPS: &[(&str, &[i64])] = &[
+                (
+                    "champion",
+                    &[266, 64, 103, 222, 412, 122, 234, 89, 81, 99, 86, 238, 145, 111, 157, 35, 777, 875, 233],
+                ),
+                ("spell", &[4, 7, 11, 12, 14]),
+                ("splash", &[103027, 103000, 266000, 64000, 222000, 412000]),
+                (
+                    crate::art::BANNER_CATEGORY,
+                    &[266000, 64000, 103027, 222000, 412000, 86000, 122000, 234000, 238000, 145000, 111000],
+                ),
+                (crate::art::CATEGORY, &[1, 2, 3, 4, 5, 6]),
+            ];
+            for &(cat, ids) in GROUPS {
+                for &id in ids {
+                    if this.cached_image_path(cat, id).is_none() {
+                        let _ = this.fetch_from_lcu_with_creds(cat, id, port, &password, &client).await;
+                    }
+                }
+            }
+            this.in_flight.lock().unwrap().remove(&key);
+        });
+    }
+
     /// Ensures LCU metadata JSONs (`champion-summary`, `summoner-spells`, `perks`, `perkstyles`)
     /// have been fetched for the active LCU session port.
     pub async fn ensure_metadata_synced(
@@ -289,6 +344,7 @@ impl GameAssetCache {
             ("summoner-spells.json", "/lol-game-data/assets/v1/summoner-spells.json"),
             ("perks.json", "/lol-game-data/assets/v1/perks.json"),
             ("perkstyles.json", "/lol-game-data/assets/v1/perkstyles.json"),
+            ("skins.json", "/lol-game-data/assets/v1/skins.json"),
         ];
 
         let mut champ_summary_ok = false;
@@ -342,7 +398,25 @@ impl GameAssetCache {
         for lcu_path in candidates {
             match client.get_bytes(port, Some(password), &lcu_path).await {
                 Ok((status, _, bytes)) if status.is_success() => {
-                    if let Some((ext, mime)) = detect_image_format(&bytes) {
+                    // Client artwork and draft banners are decoded, cropped and scaled off the
+                    // async workers, once; everything else is cached as served.
+                    let prepared = if category == crate::art::CATEGORY {
+                        match crate::art::ClientArt::from_id(id) {
+                            Some(art) => tokio::task::spawn_blocking(move || art.prepare(&bytes))
+                                .await
+                                .ok()
+                                .flatten(),
+                            None => None,
+                        }
+                    } else if category == crate::art::BANNER_CATEGORY {
+                        tokio::task::spawn_blocking(move || crate::art::prepare_banner(&bytes))
+                            .await
+                            .ok()
+                            .flatten()
+                    } else {
+                        detect_image_format(&bytes).map(|(ext, mime)| (bytes, ext, mime))
+                    };
+                    if let Some((bytes, ext, mime)) = prepared {
                         let path = self.file_path(category, id, ext);
                         if let Some(parent) = path.parent() {
                             let _ = tokio::fs::create_dir_all(parent).await;
@@ -360,7 +434,7 @@ impl GameAssetCache {
                         self.signal.bump();
                         return Some((mime, bytes));
                     } else {
-                        debug!("Skipping non-PNG/JPEG payload from LCU {}", lcu_path);
+                        debug!("Skipping unusable image payload from LCU {}", lcu_path);
                     }
                 }
                 Ok((status, _, _)) if status.as_u16() == 404 => {
@@ -389,6 +463,9 @@ impl GameAssetCache {
     fn candidate_lcu_paths(&self, category: &str, id: i64) -> Vec<String> {
         let mut out = Vec::new();
         match category {
+            crate::art::CATEGORY => {
+                out.extend(crate::art::ClientArt::from_id(id).map(|a| a.lcu_path()));
+            }
             "champion" => {
                 if let Some(p) = self.champ_paths.read().unwrap().get(&id) {
                     out.push(p.clone());
@@ -440,6 +517,38 @@ impl GameAssetCache {
                     }
                 }
             }
+            "splash" | crate::art::BANNER_CATEGORY => {
+                let (champ_id, skin_id) =
+                    if id >= 1000 { (id / 1000, id) } else { (id, id * 1000) };
+                let base_id = champ_id * 1000;
+                {
+                    let splashes = self.splash_paths.read().unwrap();
+                    for sid in [skin_id, base_id] {
+                        if let Some(p) = splashes.get(&sid) {
+                            if !out.contains(p) {
+                                out.push(p.clone());
+                            }
+                        }
+                    }
+                }
+                for sid in [skin_id, base_id] {
+                    for path in [
+                        format!("/lol-game-data/assets/v1/champion-splashes/{champ_id}/{sid}.jpg"),
+                        format!(
+                            "/lol-game-data/assets/v1/champion-splashes/uncentered/{champ_id}/{sid}.jpg"
+                        ),
+                    ] {
+                        if !out.contains(&path) {
+                            out.push(path);
+                        }
+                    }
+                }
+                let tile =
+                    format!("/lol-game-data/assets/v1/champion-tiles/{champ_id}/{skin_id}.jpg");
+                if !out.contains(&tile) {
+                    out.push(tile);
+                }
+            }
             _ => {}
         }
         out
@@ -452,6 +561,7 @@ impl GameAssetCache {
             "summoner-spells.json",
             "perks.json",
             "perkstyles.json",
+            "skins.json",
         ] {
             let p = meta_dir.join(file_name);
             if let Ok(bytes) = std::fs::read(&p) {
@@ -481,9 +591,11 @@ impl GameAssetCache {
                         continue;
                     };
                     names.insert(id, name.to_string());
-                    keys.insert(normalize_champion_key(name), id);
+                    // Game-mode variants (e.g. `Jade_Annie`, id 60001) reuse the base champion's
+                    // display name: a name always resolves to the lowest id, the real champion.
+                    keep_lowest_id(&mut keys, normalize_champion_key(name), id);
                     if let Some(alias) = entry.get("alias").and_then(|v| v.as_str()) {
-                        keys.insert(normalize_champion_key(alias), id);
+                        keep_lowest_id(&mut keys, normalize_champion_key(alias), id);
                     }
                     if let Some(raw_path) = entry.get("squarePortraitPath").and_then(|v| v.as_str()) {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
@@ -504,7 +616,8 @@ impl GameAssetCache {
                         bannable: true,
                     });
                 }
-                catalog.sort_by(|a, b| a.name.cmp(&b.name));
+                catalog.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+                catalog.dedup_by(|later, first| later.name == first.name);
                 if !catalog.is_empty() {
                     *self.champ_catalog.write().unwrap() = catalog;
                 }
@@ -549,6 +662,40 @@ impl GameAssetCache {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
                             map.insert(id, clean);
                         }
+                    }
+                }
+            }
+            "skins.json" => {
+                let entries: Vec<&Value> = if let Some(obj) = json.as_object() {
+                    obj.values().collect()
+                } else if let Some(arr) = json.as_array() {
+                    arr.iter().collect()
+                } else {
+                    return;
+                };
+                let mut skins = self.skin_paths.write().unwrap();
+                let mut splashes = self.splash_paths.write().unwrap();
+                for entry in entries {
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else { continue; };
+                    if let Some(clean) = entry
+                        .get("tilePath")
+                        .and_then(|v| v.as_str())
+                        .and_then(sanitize_lcu_asset_path)
+                    {
+                        skins.insert(id, clean);
+                    }
+                    if let Some(clean) = entry
+                        .get("splashPath")
+                        .and_then(|v| v.as_str())
+                        .and_then(sanitize_lcu_asset_path)
+                        .or_else(|| {
+                            entry
+                                .get("uncenteredSplashPath")
+                                .and_then(|v| v.as_str())
+                                .and_then(sanitize_lcu_asset_path)
+                        })
+                    {
+                        splashes.insert(id, clean);
                     }
                 }
             }
@@ -643,10 +790,18 @@ fn asset_key(category: &str, id: i64) -> String {
     format!("{category}/{id}")
 }
 
+fn keep_lowest_id(keys: &mut HashMap<String, i64>, key: String, id: i64) {
+    keys.entry(key)
+        .and_modify(|existing| *existing = (*existing).min(id))
+        .or_insert(id);
+}
+
 fn is_valid_asset_id(category: &str, id: i64) -> bool {
     match category {
         "profile" => id >= 0,
-        "champion" | "spell" | "perk" | "style" | "skin" => id > 0,
+        "champion" | "spell" | "perk" | "style" | "skin" | "splash"
+        | crate::art::BANNER_CATEGORY => id > 0,
+        crate::art::CATEGORY => crate::art::ClientArt::from_id(id).is_some(),
         _ => false,
     }
 }
@@ -797,6 +952,29 @@ mod tests {
         assert_eq!(sanitize_lcu_asset_path("https://cdn.example.com/103.png"), None);
     }
 
+    #[test]
+    fn game_mode_variants_never_shadow_the_real_champion() {
+        let dir = temp_cache_dir("mode_variants");
+        let cache = GameAssetCache::with_dir(dir.clone());
+        cache.ingest_metadata(
+            "champion-summary.json",
+            &json!([
+                {"id": 60086, "name": "Garen", "alias": "Jade_Garen"},
+                {"id": 86, "name": "Garen", "alias": "Garen"},
+                {"id": 60103, "name": "Ahri", "alias": "Jade_Ahri"},
+                {"id": 103, "name": "Ahri", "alias": "Ahri"}
+            ]),
+        );
+        assert_eq!(cache.resolve_champion_id("Garen"), 86);
+        assert_eq!(cache.resolve_champion_id("Ahri"), 103);
+        assert_eq!(cache.resolve_champion_id("Jade_Ahri"), 60103);
+        let catalog = cache.champion_catalog();
+        let garens: Vec<i64> = catalog.iter().filter(|c| c.name == "Garen").map(|c| c.id).collect();
+        assert_eq!(garens, vec![86], "one picker entry per champion name");
+        assert!(catalog.iter().all(|c| c.id < 60000));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn reads_disk_cached_assets_and_ingests_metadata() {
         let dir = temp_cache_dir("disk_hit");
@@ -832,6 +1010,39 @@ mod tests {
         assert_eq!(
             cache.candidate_lcu_paths("perk", 8112),
             vec!["/lol-game-data/assets/v1/perk-images/Styles/Domination/Electrocute/Electrocute.png".to_string()]
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("splash", 103027),
+            vec![
+                "/lol-game-data/assets/v1/champion-splashes/103/103027.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103027.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-tiles/103/103027.jpg",
+            ]
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("splash", 103),
+            vec![
+                "/lol-game-data/assets/v1/champion-splashes/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-splashes/uncentered/103/103000.jpg",
+                "/lol-game-data/assets/v1/champion-tiles/103/103000.jpg",
+            ]
+        );
+
+        cache.ingest_metadata(
+            "skins.json",
+            &json!({
+                "103027": {
+                    "id": 103027,
+                    "splashPath": "/lol-game-data/assets/ASSETS/Characters/Ahri/Skins/Skin27/Images/ahri_splash_centered_27.jpg",
+                    "tilePath": "/lol-game-data/assets/ASSETS/Characters/Ahri/Skins/Skin27/Images/ahri_splash_tile_27.jpg"
+                }
+            }),
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("splash", 103027).first().map(String::as_str),
+            Some("/lol-game-data/assets/ASSETS/Characters/Ahri/Skins/Skin27/Images/ahri_splash_centered_27.jpg")
         );
 
         let png_bytes = b"\x89PNG\r\n\x1a\nFAKEPNGDATA".to_vec();

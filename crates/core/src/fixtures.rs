@@ -141,6 +141,10 @@ pub struct DemoRemoteState {
     pub queue_time_sec: u32,
     pub game_time_sec: u32,
     pub tick_counter: u64,
+    /// Seconds since the draft began, which drive the scripted bans, locks and reveals.
+    pub draft_sec: u32,
+    /// Ends of game so far: odd rounds are victories, even rounds defeats, so both show.
+    pub eog_round: u32,
 }
 
 impl Default for DemoRemoteState {
@@ -220,6 +224,8 @@ impl Default for DemoRemoteState {
             queue_time_sec: 19,
             game_time_sec: 1185,
             tick_counter: 0,
+            draft_sec: 0,
+            eog_round: 0,
         }
     }
 }
@@ -256,9 +262,10 @@ impl DemoRemoteState {
                 } else {
                     30_000
                 };
+                self.draft_sec = self.draft_sec.wrapping_add(1);
             }
             "InProgress" => {
-                self.game_time_sec = self.game_time_sec.saturating_add(1);
+                self.game_time_sec = next_demo_game_time(self.game_time_sec);
             }
             _ => {}
         }
@@ -285,9 +292,13 @@ impl DemoRemoteState {
                 self.my_action_completed = false;
                 self.sub_phase = "BAN_PICK".to_string();
                 self.phase_time_left_ms = 24_000;
+                self.draft_sec = 0;
             }
             "InProgress" => {
                 self.game_time_sec = 1185;
+            }
+            "EndOfGame" => {
+                self.eog_round = self.eog_round.wrapping_add(1);
             }
             _ => {}
         }
@@ -523,8 +534,8 @@ impl DemoRemoteState {
             store.insert_event(
                 SourceId::LeagueClient,
                 EventKind::Update,
-                "/lol-end-of-game/v1/eog-stats-block".to_string(),
-                Self::eog_payload(),
+                DEMO_EOG_URI.to_string(),
+                self.eog_payload(),
                 vault,
             );
         }
@@ -729,11 +740,31 @@ impl DemoRemoteState {
             self.my_champion_id
         };
 
+        // Scripted draft: six alternating bans, then ally locks and enemy reveals in draft
+        // order, a short hold, and the script starts over.
+        let step = (self.draft_sec * 2 / 5) % DEMO_DRAFT_STEPS;
+        let my_bans = [self.my_banned_id, 157, 35];
+        let their_bans = [777, 875, 233];
+        let bans = step.min(6) as usize;
+        let ally_actions: Vec<Value> = DEMO_ALLY_LOCK
+            .iter()
+            .map(|&(cell, at)| {
+                json!({
+                    "id": 100 + cell,
+                    "actorCellId": cell,
+                    "championId": self.ally_champions[cell as usize],
+                    "completed": step >= at,
+                    "isInProgress": false,
+                    "type": "pick"
+                })
+            })
+            .collect();
+
         json!({
             "localPlayerCellId": 2,
             "queueType": "RANKED_SOLO_5x5",
             "myTeam": my_team,
-            "theirTeam": demo_their_team(self.tick_counter),
+            "theirTeam": demo_their_team(step),
             "actions": [
                 [
                     {
@@ -744,19 +775,12 @@ impl DemoRemoteState {
                         "isInProgress": !self.my_action_completed,
                         "type": self.my_action_type
                     },
-                    {
-                        "id": 11,
-                        "actorCellId": 4,
-                        "championId": 0,
-                        "completed": false,
-                        "isInProgress": false,
-                        "type": "pick"
-                    }
-                ]
+                ],
+                ally_actions
             ],
             "bans": {
-                "myTeamBans": [self.my_banned_id, 157, 35],
-                "theirTeamBans": [777, 234, 233]
+                "myTeamBans": &my_bans[..bans.div_ceil(2)],
+                "theirTeamBans": &their_bans[..bans / 2]
             },
             "positionSwaps": swap_entries(&self.position_swap_state),
             "swaps": swap_entries(&self.pick_swap_state),
@@ -769,22 +793,59 @@ impl DemoRemoteState {
         })
     }
 
-    fn eog_payload() -> Value {
+    /// Post-game stats block for the demo match (Ahri), with both teams of `DEMO_PLAYERS`.
+    fn eog_payload(&self) -> Value {
+        let victory = self.eog_round % 2 == 1;
+        const IDS: [i64; 10] = [86, 64, 103, 222, 412, 122, 234, 238, 145, 111];
+        // (kills, deaths, assists, lane minions, jungle monsters, level, gold, damage, vision)
+        const LINES: [(u32, u32, u32, u32, u32, u32, u32, u32, u32); 10] = [
+            (4, 3, 6, 201, 4, 16, 11200, 18400, 14),
+            (6, 2, 11, 38, 168, 15, 11950, 15200, 31),
+            (9, 2, 14, 214, 12, 17, 14950, 34820, 28),
+            (7, 4, 8, 236, 10, 16, 13800, 27100, 17),
+            (1, 5, 17, 32, 0, 13, 8100, 6900, 64),
+            (5, 6, 2, 188, 6, 16, 10900, 21300, 12),
+            (3, 5, 6, 41, 152, 14, 9800, 12400, 26),
+            (6, 7, 3, 196, 8, 15, 10600, 22900, 15),
+            (3, 6, 5, 221, 6, 15, 11300, 19800, 13),
+            (1, 4, 9, 29, 0, 12, 7400, 7100, 52),
+        ];
+        let players: Vec<Value> = DEMO_PLAYERS
+            .iter()
+            .enumerate()
+            .map(|(i, (_, champ, _, pos))| {
+                let (k, d, a, minions, monsters, level, gold, damage, vision) = LINES[i];
+                let skin = IDS[i] * 1000 + DEMO_SKINS[i];
+                json!({
+                    "championId": IDS[i],
+                    "championName": champ,
+                    "detectedTeamPosition": pos,
+                    "isLocalPlayer": i == 2,
+                    "skinSplashPath": format!("/lol-game-data/assets/v1/champion-splashes/{}/{skin}.jpg", IDS[i]),
+                    "stats": {
+                        "CHAMPIONS_KILLED": k,
+                        "NUM_DEATHS": d,
+                        "ASSISTS": a,
+                        "MINIONS_KILLED": minions,
+                        "NEUTRAL_MINIONS_KILLED": monsters,
+                        "LEVEL": level,
+                        "GOLD_EARNED": gold,
+                        "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": damage,
+                        "VISION_SCORE": vision
+                    }
+                })
+            })
+            .collect();
         json!({
             "gameId": 894512301,
             "gameLength": 1694,
             "gameMode": "CLASSIC",
-            "gameResult": "Victory",
-            "localPlayer": {
-                "championName": "Ahri",
-                "stats": {
-                    "CHAMPIONS_KILLED": 9,
-                    "NUM_DEATHS": 2,
-                    "ASSISTS": 14,
-                    "GOLD_EARNED": 14950,
-                    "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 34820
-                }
-            }
+            "gameResult": if victory { "Victory" } else { "Defeat" },
+            "localPlayer": players[2].clone(),
+            "teams": [
+                {"teamId": 100, "isPlayerTeam": true, "isWinningTeam": victory, "players": players[..5].to_vec()},
+                {"teamId": 200, "isPlayerTeam": false, "isWinningTeam": !victory, "players": players[5..].to_vec()}
+            ]
         })
     }
 }
@@ -1055,8 +1116,8 @@ pub fn spawn_demo_generator(
                 "EndOfGame" => (
                     SourceId::LeagueClient,
                     EventKind::Update,
-                    "/lol-end-of-game/v1/eog-stats-block".to_string(),
-                    DemoRemoteState::eog_payload(),
+                    DEMO_EOG_URI.to_string(),
+                    dr.eog_payload(),
                 ),
                 _ => unreachable!(),
             };
@@ -1076,15 +1137,26 @@ pub fn spawn_demo_generator(
     })
 }
 
-/// Enemy champion select picks, revealed progressively as the demo phase advances.
-fn demo_their_team(tick: u64) -> Value {
-    let picks = [(122, "Darius"), (234, "Viego"), (0, ""), (0, ""), (0, "")];
-    let revealed = 1 + ((tick / 40) % 2) as usize;
-    let members: Vec<Value> = picks
+/// Endpoint carrying the demo post-game summary.
+const DEMO_EOG_URI: &str = "/lol-end-of-game/v1/eog-stats-block";
+
+/// Steps of the scripted demo draft, one every 2.5 s of the draft clock.
+const DEMO_DRAFT_STEPS: u32 = 18;
+/// Step at which each ally cell (0, 1, 3, 4) locks its pick; the player's cell 2 is driven
+/// by the Mobile Remote.
+const DEMO_ALLY_LOCK: [(i64, u32); 4] = [(0, 7), (1, 10), (3, 11), (4, 13)];
+
+/// Enemy champion select picks, each revealed at its step of the scripted draft.
+fn demo_their_team(step: u32) -> Value {
+    const ENEMIES: [(i64, &str); 5] =
+        [(122, "Darius"), (234, "Viego"), (89, "Leona"), (81, "Ezreal"), (99, "Lux")];
+    const REVEAL: [u32; 5] = [8, 9, 12, 14, 15];
+    let members: Vec<Value> = ENEMIES
         .iter()
+        .zip(REVEAL)
         .enumerate()
-        .map(|(i, (id, name))| {
-            if i <= revealed && *id != 0 {
+        .map(|(i, (&(id, name), at))| {
+            if step >= at {
                 json!({ "cellId": 5 + i, "championId": id, "championName": name })
             } else {
                 json!({ "cellId": 5 + i, "championId": 0 })
@@ -1092,6 +1164,50 @@ fn demo_their_team(tick: u64) -> Value {
         })
         .collect();
     json!(members)
+}
+
+/// The demo match replays this stretch of game clock, so kills, a tower, a drake and the
+/// player's own death keep coming back (the live board's one-shot moments).
+const DEMO_LIVE_LOOP: std::ops::RangeInclusive<u32> = 1122..=1260;
+
+/// The demo game clock one second later, looping over `DEMO_LIVE_LOOP`.
+fn next_demo_game_time(game_time_sec: u32) -> u32 {
+    let next = game_time_sec + 1;
+    if DEMO_LIVE_LOOP.contains(&next) {
+        next
+    } else {
+        *DEMO_LIVE_LOOP.start()
+    }
+}
+
+/// Kills inside the demo loop: (game time, killer index, victim index) into `DEMO_PLAYERS`.
+const DEMO_LATE_KILLS: [(u32, usize, usize); 3] = [(1172, 0, 5), (1205, 7, 2), (1245, 3, 8)];
+/// The player (Ahri) is dead over this stretch of the loop.
+const DEMO_SELF_DEATH: std::ops::Range<u32> = 1205..1220;
+/// Skin number per demo player (Ahri wears the skin shown in the demo draft).
+const DEMO_SKINS: [i64; 10] = [0, 0, 27, 0, 0, 0, 0, 0, 0, 0];
+
+/// Kills, deaths and assists per demo player at `game_time_sec`.
+fn demo_kda(game_time_sec: u32) -> [(u32, u32, u32); 10] {
+    let mut kda = [
+        (2, 2, 3),
+        (3, 1, 6),
+        (6, 1, 8),
+        (3, 2, 4),
+        (0, 1, 9),
+        (3, 3, 1),
+        (2, 2, 2),
+        (2, 4, 1),
+        (1, 2, 2),
+        (1, 2, 3),
+    ];
+    for &(t, killer, victim) in &DEMO_LATE_KILLS {
+        if t <= game_time_sec {
+            kda[killer].0 += 1;
+            kda[victim].1 += 1;
+        }
+    }
+    kda
 }
 
 const DEMO_PLAYERS: [(&str, &str, &str, &str); 10] = [
@@ -1137,14 +1253,15 @@ pub(crate) fn seed_demo_live_snapshot(
 }
 
 fn demo_activeplayer(game_time_sec: u32) -> Value {
+    let (kills, deaths, assists) = demo_kda(game_time_sec)[2];
     json!({
         "championName": "Ahri",
         "currentGold": (1500 + ((game_time_sec % 120) * 15)),
         "level": (1 + (game_time_sec / 90)).min(18),
         "scores": {
-            "kills": 6,
-            "deaths": 1,
-            "assists": 8,
+            "kills": kills,
+            "deaths": deaths,
+            "assists": assists,
             "creepScore": 154
         },
         "championStats": {
@@ -1158,26 +1275,21 @@ fn demo_activeplayer(game_time_sec: u32) -> Value {
 
 /// Full Live Client Data payload for the demo match, consistent with `demo_eventdata`.
 fn demo_allgamedata(game_time_sec: u32) -> Value {
-    let kda = [
-        (2, 2, 3),
-        (3, 1, 6),
-        (6, 1, 8),
-        (3, 2, 4),
-        (0, 1, 9),
-        (3, 3, 1),
-        (2, 2, 2),
-        (2, 4, 1),
-        (1, 2, 2),
-        (1, 2, 3),
-    ];
+    let kda = demo_kda(game_time_sec);
     let levels = [11, 10, 12, 10, 9, 12, 10, 11, 11, 8];
     let zed_dead = game_time_sec % 40 < 14;
+    let self_dead = DEMO_SELF_DEATH.contains(&game_time_sec);
     let players: Vec<Value> = DEMO_PLAYERS
         .iter()
         .enumerate()
         .map(|(i, (riot_id, champ, team, pos))| {
             let (k, d, a) = kda[i];
-            let dead = i == 7 && zed_dead;
+            let dead = (i == 7 && zed_dead) || (i == 2 && self_dead);
+            let respawn = match i {
+                2 if self_dead => (DEMO_SELF_DEATH.end - game_time_sec) as f64,
+                7 if zed_dead => (14 - game_time_sec % 40) as f64,
+                _ => 0.0,
+            };
             json!({
                 "riotId": riot_id,
                 "riotIdGameName": riot_id.split('#').next().unwrap_or(riot_id),
@@ -1187,7 +1299,8 @@ fn demo_allgamedata(game_time_sec: u32) -> Value {
                 "position": pos,
                 "level": levels[i],
                 "isDead": dead,
-                "respawnTimer": if dead { (14 - game_time_sec % 40) as f64 } else { 0.0 },
+                "respawnTimer": respawn,
+                "skinID": DEMO_SKINS[i],
                 "scores": { "kills": k, "deaths": d, "assists": a, "creepScore": 120 + i * 9 }
             })
         })
@@ -1200,7 +1313,7 @@ fn demo_allgamedata(game_time_sec: u32) -> Value {
             "summonerName": "HypatiaObserver#EUW",
             "currentGold": 1450 + (game_time_sec % 120) * 15,
             "level": 12,
-            "scores": { "kills": 6, "deaths": 1, "assists": 8, "creepScore": 154 }
+            "scores": { "kills": kda[2].0, "deaths": kda[2].1, "assists": kda[2].2, "creepScore": 154 }
         },
         "allPlayers": players,
         "events": demo_eventdata(game_time_sec),
@@ -1267,6 +1380,26 @@ fn demo_eventdata(game_time_sec: u32) -> Value {
         (
             1160.0,
             json!({"EventName": "BaronKill", "KillerName": "KronoTrigger", "Stolen": "True"}),
+        ),
+        (
+            1172.0,
+            json!({"EventName": "ChampionKill", "KillerName": "Nightfall", "VictimName": "Blackwood"}),
+        ),
+        (
+            1188.0,
+            json!({"EventName": "TurretKilled", "TurretKilled": "Turret_T2_C_04_A", "KillerName": "HypatiaObserver"}),
+        ),
+        (
+            1205.0,
+            json!({"EventName": "ChampionKill", "KillerName": "Kagero", "VictimName": "HypatiaObserver"}),
+        ),
+        (
+            1230.0,
+            json!({"EventName": "DragonKill", "DragonType": "Air", "KillerName": "Hollow", "Stolen": "False"}),
+        ),
+        (
+            1245.0,
+            json!({"EventName": "ChampionKill", "KillerName": "Sora", "VictimName": "Vesper"}),
         ),
     ];
     let events: Vec<Value> = log

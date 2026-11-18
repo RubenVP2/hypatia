@@ -2,22 +2,25 @@
 name: Hypatia — Observatory Chronometer
 description: A calm, read-only observation instrument for League of Legends: desktop companion, mini widget, Observatory (advanced view), and LAN mobile remote.
 colors:
-  shell: "#0b0d11"
-  ground: "#0f1116"
-  backdrop: "#090b0f"
-  panel: "#161922"
-  panel-raised: "#1f2430"
-  rule: "#262b38"
-  rule-strong: "#3c4356"
-  text: "#edeff4"
-  muted: "#9ca3b5"
+  shell: "#070b12"
+  ground: "#0b111b"
+  backdrop: "#05080d"
+  panel: "#111926"
+  panel-raised: "#182334"
+  rule: "#223047"
+  rule-strong: "#53462c"
+  text: "#eef0f5"
+  muted: "#9aa7bd"
   plate: "#edeff4"
   on-plate: "#0f1116"
   signal: "#f5b400"
   signal-text: "#ffd24d"
   live-green: "#45c47f"
-  blue: "#4c8df6"
+  blue: "#3b9eff"
   red: "#f0605a"
+  gold: "#6e5730"
+  gold-bright: "#c8aa6e"
+  accent: "#0ac8b9"
   lane-top: "#e3b341"
   lane-jungle: "#45c47f"
   lane-mid: "#b07cf0"
@@ -98,7 +101,6 @@ motion:
   fast: "110ms ease-out"
   base: "180ms ease-out"
   slow: "240ms ease-out"
-  tick: "1000ms linear"
   pulse: "650ms ease-out x2"
 components:
   button-primary:
@@ -159,23 +161,40 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 - **Amber Text** (`#ffd24d` Night / `#8a5600` Day): High-contrast amber text used on dark or soft-tinted plates where `#f5b400` alone would lose contrast at small body sizes.
 
 ### Secondary
-- **Team Blue** (`#4c8df6` Night / `#2664d4` Day): Strictly scoped to Allied scoreboard headers, objective indicators, standing blue towers, and allied draft plates/bans.
+- **Team Blue** (`#3b9eff` Night / `#1f62c9` Day): Strictly scoped to Allied scoreboard headers, objective indicators, standing blue towers, and allied draft plates/bans.
 - **Team Red** (`#f0605a` Night / `#c9342e` Day): Strictly scoped to Enemy scoreboard headers, objective indicators, standing red towers, and red team bans or respawn timers.
 - **Live Telemetry Green** (`#45c47f` Night / `#1e7f48` Day): Riot source connection status (`LCU`, `Riot Client`, `Live :2999`), paired WebSocket dots, and Ready Check `ACCEPT` CTA.
 
 ### Neutral
-- **Carbon Shell** (`#0b0d11` Night / `#e5e1d6` Day): Left `216px` workspace rail and mobile sticky topbar/bottom dock.
-- **Primary Ground** (`#0f1116` Night / `#efece3` Day): Phase canvas background and roundel core fill.
-- **Viewport Backdrop** (`#090b0f` Night / `#dfdacf` Day): Recessed code/JSON inspector well and text input wells.
-- **Instrument Panel** (`#161922` Night / `#faf8f2` Day): Default card surface, telemetry stream container, and scoreboard rows.
-- **Raised Surface** (`#1f2430` Night / `#ebe7dc` Day): Hover fills, source cards, and secondary chip backing.
-- **Hairline Rule & Strong Rule** (`#262b38` / `#3c4356` Night; `#d4cfc2` / `#a59f8f` Day): Exact `1px` boundaries replacing shadows.
-- **Primary Ink & Muted Ink** (`#edeff4` / `#9ca3b5` Night; `#14171f` / `#555a66` Day): Readable foreground ink and secondary copy.
+- **Carbon Shell** (`#070b12` Night / `#e4e1d5` Day): Left `216px` workspace rail and mobile sticky topbar/bottom dock.
+- **Primary Ground** (`#0b111b` Night / `#ede9dd` Day): Phase canvas background and roundel core fill.
+- **Viewport Backdrop** (`#05080d` Night / `#d9d5c8` Day): Recessed code/JSON inspector well and text input wells.
+- **Instrument Panel** (`#111926` Night / `#f9f7ef` Day): Default card surface, telemetry stream container, and scoreboard rows.
+- **Raised Surface** (`#182334` Night / `#e6e1d3` Day): Hover fills, source cards, and secondary chip backing.
+- **Hairline Rule & Strong Rule** (`#223047` / `#53462c` Night; `#c9c1ad` / `#99855a` Day): Exact `1px` boundaries replacing shadows.
+- **Primary Ink & Muted Ink** (`#eef0f5` / `#9aa7bd` Night; `#14171f` / `#525968` Day): Readable foreground ink and secondary copy.
+
+### Hextech Materials
+One direction, Hextech: Hypatia's instrument grammar dressed in League's own materials. There is no style switcher.
+- **Gold & Bright Gold** (`#6e5730` / `#c8aa6e` Night; `#8a6d38` / `#7a5c24` Day): metallic frames — map border, allied portrait rims, the player's own portrait and map label, card top bevel.
+- **Hextech Cyan** (`#0ac8b9` Night / `#087c73` Day): calm accent tint behind headers when no artwork is cached.
+- Gold is a material, never a signal: it does not replace amber for "act now".
+
+### Client Artwork
+Imagery comes only from the player's own League client, fetched read-only over the LCU and never bundled or redistributed (`hypatia_core::art`, asset category `art`):
+- **Painted Summoner's Rift** (`map-south` / `map-north`, beam on the player's base) behind the `LineMap` markers; the vector rift remains the fallback.
+- **Rift valley backdrop** (`gameflow-background`), pre-blurred, behind the pre-draft phase headers.
+- **Ready-check medallion**: the client's round valley disc takes the centre of the ready check (`ReadyMedallion`), clipped to its circle, inside a countdown ring that loses one notch per second. The ring is amber, then red under 5 s; Hextech cyan with a check once accepted; red with a cross if declined. The medallion stays a dark object in Day as well.
+- **Victory and defeat crests** take the centre of Results (`ResultCrest`) over the player's own skin splash, above the outcome in `58px` display type: gold for a victory; cold grey for a defeat, with a cold veil over the splash, since red stays the enemy's color. Below come the player's figures as tiles (KDA ratio, CS per minute, gold, damage, vision) and both teams' rows with their skin banners, read from the client's post-game block.
+- **Champion splash art** behind phase headers once a champion is known. In Champion Select it runs full-bleed behind the header (the player's own skin, veiled on the left, fading into the page), and the headline plate turns translucent (`glass`) instead of carrying its own copy.
+- **Draft banners** (asset category `banner`): a 480x120 strip cut from each ally's chosen-skin splash fills the right of their draft row and melts into it from the left. A hovered champion shows at 40%, a locked pick at full strength. In game the same strip, from each player's `skinID`, fills the right of all ten scoreboard rows and goes out (10%) while that player is dead.
+- **In game**, the player's own skin splash runs full-bleed behind the live HUD, as in Champion Select; a dark red veil falls over it while the player is dead.
+Each piece is cropped, downscaled to about twice its largest on-screen size, and blurred if needed **once in Rust** before it reaches the disk cache; the UI never scales a full-size texture or blurs at render time. The *Client artwork* switch (with *Game icons*) turns all of it off.
 
 ### Named Rules
 **The Signal Restraint Rule.** Amber means "act now". It never marks a selected toggle, a filter, an active nav item, the player's own row, a victory, or a demo badge. Selection is quiet: `panel-raised` fill with a 1px `text` border; a panel's single main action is an ivory `plate` fill. The phase plate is a quiet `panel` by default and turns amber only for the player's turn or a ready check.
 
-**The Urgency Ramp Rule.** A countdown is `text` above 10 s, `signal-text` from 10 s, and `danger` at 5 s or less, with a 3px bar beneath it draining linearly each second. Counting-up clocks (queue time, game time) never escalate.
+**The Urgency Ramp Rule.** A countdown is `text` above 10 s, `signal-text` from 10 s, and `danger` at 5 s or less, with a 3px bar beneath it that steps down once per second. Counting-up clocks (queue time, game time) never escalate.
 
 **The Lane-Team Separation Rule.** Lane colors (`#e3b341`, `#45c47f`, `#b07cf0`, `#ef8bb5`) draw only metro tracks and role roundels, while Team Blue and Team Red own champions, objectives, towers, and bans.
 
@@ -189,7 +208,7 @@ The Night printing pairs deep neutral carbon layers with warm pit-wall amber sig
 
 ### Hierarchy
 - **Specimen** (`800`, `88px` desktop / `64px` compact and mini widget / `56px` mobile, `-1px` tracking): The one running clock, or the final KDA, on each phase header.
-- **Display Score** (`800`, `56px` desktop / `46px` mobile / `32px` mini widget): Live team kill comparisons in `ScoreSpecimen`.
+- **Display Score** (`800`, `28px` in the desktop live HUD / `46px` mobile / `32px` mini widget): team kills. On desktop they sit in the `LiveHud` score band (blue plate, gold-ruled clock plate, red plate), like the in-game scoreboard; the respawn countdown that replaces the player's line while dead is `40px` `danger`.
 - **Timer** (`800`, `32px`): Secondary clocks such as the mini widget game time.
 - **Headline / Title** (`800`, `22px–26px`, uppercase condensed in panel headers): Attention plates, modal headers, and mobile section headings.
 - **Body** (`600`, `14px`): Primary status copy, summoner/champion rows, and descriptions.
@@ -240,9 +259,24 @@ All interactive controls, inputs, status chips, and tabs share a crisp `4px` (`r
 
 Motion marks a change of state that matters to the player; nothing loops and nothing decorates.
 
+**The Idle Budget Rule.** At rest the window draws nothing new: no animation may run while nothing changes. Transitions are triggered by an event, last under `400ms`, and only touch opacity, position, or scale (never layout). A loop is allowed only while the player must act (their turn, a ready check) and stops under reduced motion or eco mode. Every visual change is measured with `bench/measure.ps1` (idle, champ select, live game) before it ships.
+
+- **Ready check arrival:** the medallion scales in from 86% (`240ms`) and an amber halo fades out twice (`650ms` x2), then holds still; the answer swaps the ring color and fades in the check or cross (`240ms`).
 - **Turn start:** the phase plate fades to amber (`180ms`) and a 2px ring around it fades out twice (`650ms` x2), then holds still. On mobile the spotlight card's outline does the same.
-- **Countdown:** the urgency ramp colors fade over `240ms`; the drain bar moves linearly over each `1s` tick. Clocks are extrapolated locally between Riot events (desktop: a 250ms Slint timer; mobile: a 250ms interval), so they never freeze.
+- **Countdown:** the urgency ramp colors fade over `240ms`; the drain bar steps down once per second with no tween: under Slint 1.18 any `animate` on it kept the window repainting at ~36 fps for the whole draft, and a few-pixel step does not need one. Clocks are extrapolated locally between Riot events (desktop: a 250ms Slint timer; mobile: a 250ms interval), so they never freeze.
 - **Rows and plates:** the acting row's tint fades in and out (`180ms`); a player who dies fades to 45% (`240ms`).
+- **Draft moments** (`dur-reveal`, `360ms`), each played once when its element is created:
+  - **Lock-in:** a gold glint crosses the ally's row and the banner rises to full strength.
+  - **Ban:** the chip fades in and a red strike draws across the dimmed portrait.
+  - **Enemy reveal:** the portrait scales in from 80% and a red ring fades out.
+
+  The draft row models live for the whole session and are updated in place (`DraftModels` in `companion.rs`), so a new model never rebuilds the rows and replays them. Between moments the window stays at the idle frame rate.
+- **Results arrival:** the crest settles from 115% with a fade (`360ms`); a victory adds one golden glow that fades out after it (`360ms`, `110ms` delay); the outcome title fades in just after (`240ms`). Then nothing moves.
+- **Live moments**, each played once on the event, never on a drop (`LiveModels` keep the rows in place):
+  - **Kill:** the scoring team's figure swells to 130% and its plate lights in the team color (`110ms` up, `240ms` back).
+  - **Objective taken:** the chip fades in (`240ms`) and a ring flares from its pit on the map and fades (`Ping`, `360ms`).
+  - **Tower destroyed:** a ring in the tower's team color flares from it and fades (`Ping`, `360ms`).
+  - **Death:** the red veil fades over the splash (`240ms`) and the respawn countdown steps down once per second, untweened.
 - **Phase ticker:** connector and node fill over `240ms`. Whole screens never crossfade.
 - **Reduced motion:** `Theme.motion` is false when Windows "Show animations" is off, when *Reduce motion* is on in the Performance sheet, or with `--reduce-motion`; every duration then becomes 0. The mobile page honors `prefers-reduced-motion`.
 

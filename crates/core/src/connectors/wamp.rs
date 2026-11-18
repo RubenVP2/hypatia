@@ -187,6 +187,9 @@ async fn connect_and_listen(
     tracing::info!("{source}: connected to WAMP WebSocket on port {}", target.port);
     if source == SourceId::LeagueClient {
         ctx.assets.trigger_metadata_sync(&ctx.discovery, &ctx.client);
+        if ctx.flags.game_icons() {
+            ctx.assets.prefetch_demo_showcase(&ctx.discovery, &ctx.client);
+        }
     }
 
     // Subscribe before bootstrapping so no update can slip between the two.

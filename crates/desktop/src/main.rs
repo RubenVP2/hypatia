@@ -328,6 +328,7 @@ fn perf_settings(s: &Settings) -> PerfSettings {
         riot_client: s.riot_client,
         replay_api: s.replay_api,
         game_icons: s.game_icons,
+        splash_backdrops: s.splash_backdrops,
         mobile_remote: s.mobile_remote,
         system_footprint: s.system_footprint,
         endpoint_catalog: s.endpoint_catalog,

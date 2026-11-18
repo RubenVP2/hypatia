@@ -5,12 +5,17 @@ export struct AllyRow {
     champion: string,
     initials: string,
     icon: image,
+    // Splash strip of the chosen skin (prepared `banner` asset); empty until cached.
+    banner: image,
+    // Pick locked in; false while the champion is only hovered.
+    locked: bool,
     spell1-icon: image,
     spell1-name: string,
     spell2-icon: image,
     spell2-name: string,
     player: string,
     rank: string,
+    rank-tier: string,
     is-self: bool,
     is-premade: bool,
     picking: bool,
@@ -23,10 +28,12 @@ export struct BanEntry {
     icon: image,
 }
 
+// One enemy cell; `picked` is false while that enemy has not chosen yet.
 export struct EnemyPick {
     champion: string,
     initials: string,
     icon: image,
+    picked: bool,
 }
 
 export struct TowerDot {
@@ -55,6 +62,8 @@ export struct PlayerLine {
     champion: string,
     initials: string,
     icon: image,
+    // Splash strip of the player's skin (prepared `banner` asset); empty until cached.
+    banner: image,
     level: int,
     kda: string,
     cs: int,
@@ -67,6 +76,8 @@ export struct MapAlly {
     x: float,
     y: float,
     label: string,
+    initials: string,
+    icon: image,
     is-self: bool,
     // 0: right, 1: left, 2: above, 3: below
     label-pos: int,
@@ -162,6 +173,16 @@ export component Card inherits Rectangle {
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: Theme.rule;
+
+    // Subtle top metallic bevel highlight.
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: max(0px, parent.width - 2px);
+        height: 1px;
+        background: Theme.gold-bright;
+        opacity: 0.14;
+    }
 }
 
 // 1px horizontal hairline between sections.
@@ -170,32 +191,42 @@ export component Divider inherits Rectangle {
     background: Theme.rule;
 }
 
-// Lane-colored ring with geometric 2px role emblem.
+// Lane-colored ring with the LoL position crest.
 export component Roundel inherits Rectangle {
     in property <int> lane;
     in property <length> size: 40px;
     width: size;
     height: size;
     border-radius: size / 2;
-    border-width: max(2px, size * 0.14);
+    border-width: max(2px, size * 0.12);
     border-color: Theme.lane-color(lane);
-    background: Theme.ground;
+    background: Theme.panel-raised;
     accessible-role: text;
     accessible-label: Theme.lane-name(root.lane);
-    if root.size >= 16px: Path {
-        property <length> icon-sz: max(10px, root.size * 0.56);
+
+    if root.size >= 16px && Theme.lol-lane-context-path(root.lane) != "": Path {
+        property <length> icon-sz: max(10px, root.size * 0.54);
         x: (root.width - self.icon-sz) / 2;
         y: (root.height - self.icon-sz) / 2;
         width: self.icon-sz;
         height: self.icon-sz;
         viewbox-width: 24;
         viewbox-height: 24;
-        commands: Theme.lane-icon-path(root.lane);
-        stroke: root.lane >= 0 ? Theme.lane-color(root.lane) : Theme.text;
-        stroke-width: root.size <= 20px ? 2.4px : 2px;
-        stroke-line-cap: round;
-        stroke-line-join: round;
-        fill: transparent;
+        commands: Theme.lol-lane-context-path(root.lane);
+        fill: root.lane >= 0 ? Theme.lane-color(root.lane) : Theme.muted;
+        opacity: 0.28;
+    }
+
+    if root.size >= 16px: Path {
+        property <length> icon-sz: max(10px, root.size * 0.54);
+        x: (root.width - self.icon-sz) / 2;
+        y: (root.height - self.icon-sz) / 2;
+        width: self.icon-sz;
+        height: self.icon-sz;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: Theme.lol-lane-primary-path(root.lane);
+        fill: root.lane >= 0 ? Theme.lane-color(root.lane) : Theme.text;
     }
 }
 
@@ -230,21 +261,24 @@ export component GameIconBadge inherits Rectangle {
     }
 }
 
-// Team-colored champion plate: local image icon when available, otherwise initials.
+// Team-colored circular Hextech champion portrait.
 export component ChampPlate inherits Rectangle {
     in property <string> label;
     in property <image> icon;
     in property <bool> mine: true;
+    in property <bool> is-self: false;
     in property <bool> empty: false;
     in property <bool> faded: false;
     in property <length> size: 56px;
     width: size;
     height: size;
-    border-radius: Theme.radius;
+    border-radius: size / 2;
     clip: true;
     background: empty ? Theme.panel-raised : Theme.team-color(mine);
-    border-width: empty ? 1px : 0px;
-    border-color: Theme.rule-strong;
+    border-width: empty ? 1px : max(1.5px, size * 0.05);
+    border-color: empty
+        ? Theme.gold
+        : (is-self ? Theme.gold-bright : (mine ? Theme.gold : Theme.team-color(mine)));
     opacity: faded ? 0.45 : 1.0;
     animate opacity { duration: Theme.dur-slow; easing: ease-out; }
     if !root.empty && root.icon.width == 0: Text {
@@ -264,6 +298,351 @@ export component ChampPlate inherits Rectangle {
     }
 }
 
+// Compact ranked tier vector crest matching League's rank palette.
+export component RankedCrest inherits Rectangle {
+    in property <string> tier;
+    in property <length> size: 16px;
+    width: size;
+    height: size;
+    background: transparent;
+    if root.tier != "": Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M 12 2 L 20 7 L 17 16 L 12 22 L 7 16 L 4 7 Z";
+        fill: Theme.rank-tier-color(root.tier);
+        stroke: Theme.gold-bright;
+        stroke-width: 1.2px;
+    }
+    if root.tier != "": Path {
+        x: root.size * 0.28;
+        y: root.size * 0.25;
+        width: root.size * 0.44;
+        height: root.size * 0.44;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M 12 3 L 21 12 L 12 21 L 3 12 Z";
+        fill: #ffffff;
+        opacity: 0.42;
+    }
+}
+
+// Cached champion splash backdrop (or atmospheric Hextech crest when no splash is cached yet).
+export component SplashBackdrop inherits Rectangle {
+    in property <image> splash;
+    in property <color> tint: Theme.accent;
+    in property <color> surface: Theme.ground;
+    in property <bool> card-mode: false;
+    clip: true;
+    background: transparent;
+
+    if root.splash.width > 0: Image {
+        x: root.card-mode ? parent.width * 0.22 : 0px;
+        y: 0px;
+        width: root.card-mode ? parent.width * 0.78 : parent.width;
+        height: parent.height;
+        source: root.splash;
+        image-fit: cover;
+        opacity: root.card-mode
+            ? (Theme.dark ? 0.48 : 0.28)
+            : (Theme.dark ? 0.30 : 0.18);
+    }
+
+    if root.splash.width == 0: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(110deg, root.surface 0%, root.tint 100%);
+        opacity: root.card-mode
+            ? (Theme.dark ? 0.16 : 0.09)
+            : (Theme.dark ? 0.10 : 0.05);
+    }
+
+    if root.splash.width == 0: Path {
+        x: parent.width - parent.height * 1.15;
+        y: -parent.height * 0.15;
+        width: parent.height * 1.3;
+        height: parent.height * 1.3;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M 12 2 L 21 7 L 21 17 L 12 22 L 3 17 L 3 7 Z M 12 5.5 L 18 9 V 15 L 12 18.5 L 6 15 V 9 Z M 12 9 L 15 12 L 12 15 L 9 12 Z";
+        stroke: Theme.gold-bright;
+        stroke-width: 0.9px;
+        fill: transparent;
+        opacity: 0.18;
+    }
+
+    // Readability veil fading smoothly from left text area toward the right art showcase.
+    if root.card-mode: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(90deg, root.surface 0%, root.surface 28%, transparent 88%);
+    }
+    if !root.card-mode: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(180deg, transparent 0%, root.surface 96%);
+    }
+    if !root.card-mode: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(90deg, root.surface 0%, transparent 55%, root.surface 100%);
+        opacity: 0.72;
+    }
+}
+
+// The ready check, centre stage: the client's valley medallion inside a countdown ring that
+// loses one notch per second (no tween: see the drain bar). On arrival it scales in and an amber
+// halo pulses twice, then everything holds still. Accepting turns the ring Hextech cyan with a
+// check; declining turns it red with a cross. The medallion is always a dark object, in Day too.
+export component ReadyMedallion inherits Rectangle {
+    in property <int> seconds: -1;
+    in property <int> total: 10;
+    // 0 waiting for the player, 1 accepted, 2 declined.
+    in property <int> state: 0;
+    in property <length> size: 220px;
+    width: root.size;
+    height: root.size;
+    accessible-role: text;
+    accessible-label: root.state == 1
+        ? @tr("Match accepted")
+        : (root.state == 2 ? @tr("Match declined") : @tr("Match found, {0} left", Theme.clock-text(Math.max(0, root.seconds))));
+
+    property <bool> fired: false;
+    init => { self.fired = true; }
+    // Share of the ring still lit, and where its arc ends (100-unit viewbox, radius 49).
+    property <float> left: root.state != 0 ? 1 : Math.clamp(root.seconds / Math.max(1, root.total), 0, 1);
+    property <float> end-x: 50 + 49 * Math.sin(root.left * 360deg);
+    property <float> end-y: 50 - 49 * Math.cos(root.left * 360deg);
+    property <color> ink: root.state == 1
+        ? Theme.accent
+        : (root.state == 2 ? Theme.red : Theme.urgency-color(Theme.clock-urgency(root.seconds, true)));
+
+    body := Rectangle {
+        opacity: root.fired ? 1 : 0;
+        transform-scale: root.fired ? 1 : 0.86;
+        animate opacity, transform-scale { duration: Theme.dur-slow; easing: ease-out; }
+
+        // Arrival: an amber halo fades out twice, then stays invisible.
+        Rectangle {
+            x: -10px;
+            y: -10px;
+            width: parent.width + 20px;
+            height: parent.height + 20px;
+            border-radius: self.width / 2;
+            border-width: 3px;
+            border-color: Theme.signal;
+            opacity: root.fired ? 0 : 0.9;
+            animate opacity { duration: Theme.dur-pulse; iteration-count: 2; easing: ease-out; }
+        }
+
+        // Ring track.
+        Rectangle {
+            border-radius: self.width / 2;
+            border-width: 4px;
+            border-color: Theme.rule;
+        }
+
+        // The valley medallion, clipped to its circle (the client image carries two stand
+        // legs below the disc).
+        Rectangle {
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            height: self.width;
+            border-radius: self.width / 2;
+            clip: true;
+            background: #182334;
+            if ClientArt.ready-check.width > 0: Image {
+                x: -parent.width * 0.0125;
+                y: 0px;
+                width: parent.width * 1.025;
+                height: self.width;
+                source: ClientArt.ready-check;
+                image-fit: fill;
+            }
+            Rectangle {
+                background: @radial-gradient(circle, #05080dd9 0%, #05080d80 55%, #05080d00 100%);
+            }
+        }
+
+        // Countdown ring: a full circle when lit all round, an arc otherwise.
+        if root.left >= 0.999: Rectangle {
+            border-radius: self.width / 2;
+            border-width: 4px;
+            border-color: root.ink;
+            animate border-color { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        if root.left > 0.001 && root.left < 0.999: Path {
+            width: 100%;
+            height: 100%;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            fill: transparent;
+            stroke: root.ink;
+            stroke-width: 4px;
+            MoveTo {
+                x: 50;
+                y: 1;
+            }
+            ArcTo {
+                x: root.end-x;
+                y: root.end-y;
+                radius-x: 49;
+                radius-y: 49;
+                large-arc: root.left > 0.5;
+                sweep: true;
+            }
+        }
+
+        if root.state == 0: Text {
+            text: root.seconds >= 0 ? Theme.clock-text(root.seconds) : "!";
+            color: #eef0f5;
+            font-family: Type.display-family;
+            font-size: root.size * 0.26;
+            font-weight: 800;
+            letter-spacing: -1px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if root.state == 1: Path {
+            property <bool> shown: false;
+            init => { self.shown = true; }
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: root.size * 0.34;
+            height: self.width;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            fill: transparent;
+            stroke: #0ac8b9;
+            stroke-width: 5px;
+            commands: "M 4 12.5 L 9.5 18 L 20 6.5";
+            opacity: self.shown ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        if root.state == 2: Path {
+            property <bool> shown: false;
+            init => { self.shown = true; }
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: root.size * 0.3;
+            height: self.width;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            fill: transparent;
+            stroke: #f0605a;
+            stroke-width: 5px;
+            commands: "M 6 6 L 18 18 M 18 6 L 6 18";
+            opacity: self.shown ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+    }
+}
+
+// The result crest at the top of Results: the client's victory or defeat crest. On arrival it
+// settles from 115% with a fade; a victory adds one golden glow that fades out. Then it holds.
+export component ResultCrest inherits Rectangle {
+    in property <bool> victory;
+    in property <length> size: 150px;
+    width: root.size;
+    height: root.size;
+    accessible-role: image;
+    accessible-label: root.victory ? @tr("Victory crest") : @tr("Defeat crest");
+    property <bool> fired: false;
+    init => { self.fired = true; }
+
+    if root.victory: Rectangle {
+        x: -root.size * 0.25;
+        y: -root.size * 0.25;
+        width: root.size * 1.5;
+        height: root.size * 1.5;
+        background: @radial-gradient(circle, #f0e6d2b3 0%, #c8aa6e59 38%, #c8aa6e00 70%);
+        opacity: root.fired ? 0 : 1;
+        animate opacity { duration: Theme.dur-reveal; delay: Theme.dur-fast; easing: ease-out; }
+    }
+    Rectangle {
+        opacity: root.fired ? 1 : 0;
+        transform-scale: root.fired ? 1 : 1.15;
+        animate opacity, transform-scale { duration: Theme.dur-reveal; easing: ease-out; }
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.victory ? ClientArt.victory : ClientArt.defeat;
+            image-fit: contain;
+        }
+    }
+}
+
+// Full-bleed splash behind a screen's header (the player's own skin), shown at the strength
+// the client gives it, veiled on the left for the headline and fading into the page below.
+// The image keeps its own ratio and is shifted up so the band with the champion's face shows.
+export component HeroSplash inherits Rectangle {
+    in property <image> splash;
+    in property <color> surface: Theme.ground;
+    clip: true;
+
+    if root.splash.width > 0: Image {
+        width: parent.width;
+        height: parent.width * root.splash.height / root.splash.width;
+        y: -self.height * 0.16;
+        source: root.splash;
+        image-fit: cover;
+        opacity: Theme.dark ? 0.7 : 0.5;
+    }
+    Rectangle {
+        background: @linear-gradient(90deg, root.surface.with-alpha(0.82) 0%, root.surface.with-alpha(0.35) 50%, root.surface.with-alpha(0.15) 100%);
+    }
+    Rectangle {
+        background: @linear-gradient(180deg, root.surface.with-alpha(0) 0%, root.surface.with-alpha(0) 50%, root.surface 100%);
+    }
+}
+
+// One enemy cell in champion select: an empty socket until that enemy picks, then the portrait
+// arrives (scale and fade) with a red ring that fades out once.
+export component EnemySlot inherits Rectangle {
+    in property <EnemyPick> pick;
+    in property <length> size: 46px;
+    accessible-role: text;
+    accessible-label: root.pick.picked ? root.pick.champion : @tr("Enemy not picked yet");
+
+    if !root.pick.picked: ChampPlate {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: root.size;
+        empty: true;
+        mine: false;
+    }
+    if root.pick.picked: reveal := Rectangle {
+        property <bool> fired: false;
+        init => { self.fired = true; }
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.size;
+        height: root.size;
+        opacity: self.fired ? 1 : 0;
+        transform-scale: self.fired ? 1 : 0.8;
+        animate opacity, transform-scale { duration: Theme.dur-slow; easing: ease-out; }
+        ChampPlate {
+            size: root.size;
+            label: root.pick.initials;
+            icon: root.pick.icon;
+            mine: false;
+        }
+        Rectangle {
+            x: -3px;
+            y: -3px;
+            width: parent.width + 6px;
+            height: parent.height + 6px;
+            border-radius: self.width / 2;
+            border-width: 2px;
+            border-color: Theme.red;
+            opacity: reveal.fired ? 0 : 1;
+            animate opacity { duration: Theme.dur-reveal; easing: ease-out; }
+        }
+    }
+}
+
 export component SectionLabel inherits Text {
     color: Theme.muted;
     font-size: Type.label;
@@ -277,13 +656,42 @@ export component Plate inherits Rectangle {
     in property <string> title;
     in property <string> detail;
     in property <bool> active-turn: false;
-    background: active-turn ? Theme.signal : Theme.panel;
+    in property <image> splash;
+    in property <color> splash-tint: Theme.accent;
+    // Translucent over a hero splash, without a splash of its own.
+    in property <bool> glass: false;
+    background: active-turn ? Theme.signal : (glass ? Theme.panel.with-alpha(Theme.dark ? 0.58 : 0.66) : Theme.panel);
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: active-turn ? Theme.signal : Theme.rule-strong;
     accessible-role: text;
     accessible-label: root.title + ". " + root.detail;
     animate background, border-color { duration: Theme.dur-base; easing: ease-out; }
+
+    // Embedded splash art / Hextech crest inside the header banner (hidden during amber alerts).
+    if !root.active-turn && !root.glass: Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: parent.border-radius;
+        clip: true;
+        SplashBackdrop {
+            width: 100%;
+            height: 100%;
+            splash: root.splash;
+            tint: root.splash-tint;
+            surface: Theme.panel;
+            card-mode: true;
+        }
+    }
+
+    // Left metallic bar when calm (keeps amber strictly for active-turn).
+    if !root.active-turn: Rectangle {
+        x: 0px;
+        y: 6px;
+        width: 3px;
+        height: max(0px, parent.height - 12px);
+        background: Theme.gold-bright;
+    }
 
     // Created when the turn starts: its opacity runs 1 -> 0 twice, then it stays invisible.
     // An animation never plays on an element's first value, so `init` flips `fired` after
@@ -352,17 +760,23 @@ export component ClockReadout inherits Rectangle {
     property <int> urgency: Theme.clock-urgency(root.seconds, root.down);
     property <color> ink: Theme.urgency-color(root.urgency);
     property <bool> has-bar: root.down && root.total > 0 && root.seconds >= 0;
-    property <length> bar-room: root.has-bar ? 9px : 0px;
+    // Barlow Condensed's descent (200/1000 em): the empty band under the digits, which have
+    // no descenders. The drain bar sits in it, so it needs no room of its own.
+    property <length> descent: root.size * 0.2;
     min-width: figure.preferred-width + 12px;
-    min-height: figure.preferred-height + root.bar-room;
+    min-height: figure.preferred-height;
     accessible-role: text;
     accessible-label: root.seconds >= 0
         ? @tr("Time: {0}", Theme.clock-text(root.seconds))
         : root.fallback;
 
     figure := Text {
+        // Its own size, not the parent's (the default outside a layout): the bar below is
+        // placed and sized from it, and would otherwise land under the next panel.
+        width: self.preferred-width;
+        height: self.preferred-height;
         x: root.align-left ? 0px : parent.width - self.width;
-        y: (parent.height - self.height - root.bar-room) / 2;
+        y: (parent.height - self.height) / 2;
         text: root.seconds >= 0 ? Theme.clock-text(root.seconds) : root.fallback;
         font-family: Type.display-family;
         font-size: root.size;
@@ -374,18 +788,21 @@ export component ClockReadout inherits Rectangle {
 
     if root.has-bar: Rectangle {
         x: figure.x;
-        y: figure.y + figure.height + 6px;
+        y: figure.y + figure.height - root.descent + 6px;
         width: figure.width;
         height: 3px;
         border-radius: 1.5px;
         background: Theme.rule;
         clip: true;
+        // Steps once per second, unanimated on purpose. Any `animate` here (on width, or on a
+        // scale) kept the window repainting at ~36 fps for the whole draft under Slint 1.18:
+        // the animation never reported itself finished. A step of a few pixels needs no tween;
+        // the figure above already marks each second.
         Rectangle {
             x: root.align-left ? 0px : parent.width - self.width;
             height: 100%;
             width: parent.width * Math.clamp(root.seconds / Math.max(1, root.total), 0, 1);
             background: root.ink;
-            animate width { duration: Theme.dur-tick; easing: linear; }
         }
     }
 }
@@ -664,71 +1081,384 @@ export component PhaseLine inherits Rectangle {
     }
 }
 
-// Three-lane Summoner's Rift telemetry diagram on a 400 x 400 grid.
+// Client artwork prepared by `hypatia_core::art`: empty images until the League client has
+// served it once, then read from the disk cache. Set from Rust, never animated.
+export global ClientArt {
+    in property <image> map-south;
+    in property <image> map-north;
+    in property <image> ready-check;
+    in property <image> victory;
+    in property <image> defeat;
+    in property <image> backdrop;
+}
+
+// Summoner's Rift map: the client's painted rift when cached, a vector rift otherwise.
+// Markers live in a 400-unit plan (Order base bottom-left, Chaos top-right). On the painting
+// they are projected through its four lane corners, which absorbs the slight perspective.
+// A ring that flares from an element and fades once each time `count` goes up (a tower falls,
+// a pit is taken). A drop stays silent, so a reset or a new demo loop never plays it.
+export component Ping inherits Rectangle {
+    in property <int> count;
+    in property <color> ink: Theme.gold-bright;
+    property <int> seen: 0;
+    property <bool> lit: false;
+    init => { self.seen = self.count; }
+    changed count => {
+        if self.count > self.seen && Theme.motion {
+            self.lit = true;
+            hold.running = true;
+        }
+        self.seen = self.count;
+    }
+    hold := Timer {
+        interval: 60ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.lit = false;
+        }
+    }
+    border-radius: self.width / 2;
+    border-width: 2px;
+    border-color: root.ink;
+    opacity: root.lit ? 1 : 0;
+    transform-scale: root.lit ? 1 : 1.9;
+    // Lighting is instant; only the fade and the spread are animated.
+    animate opacity, transform-scale { duration: root.lit ? 0ms : Theme.dur-reveal; easing: ease-out; }
+}
+
 export component LineMap inherits Rectangle {
     in property <[TowerDot]> towers;
     in property <[MapAlly]> allies;
     in property <bool> show-jungle: true;
+    in property <bool> show-pits: false;
+    in property <bool> order-is-mine: true;
+    in property <int> my-drakes: 0;
+    in property <int> enemy-drakes: 0;
+    in property <int> baron-owner: 0; // 0 none, 1 mine, 2 enemy
+    in property <int> herald-owner: 0; // 0 none, 1 mine, 2 enemy
     in property <length> line-width: 8px;
     in property <length> station: 20px;
     in property <color> halo: Theme.panel;
-    background: transparent;
+
+    // The painting puts a light beam on the player's own base.
+    property <image> art: root.order-is-mine ? ClientArt.map-south : ClientArt.map-north;
+    property <bool> painted: root.art.width > 0;
+    // Plan lane corners on the prepared painting (fractions of `MAP_CROP` in art.rs):
+    // top-lane corner (40,42), Chaos nexus (358,42), Order nexus (40,348), bot-lane corner (358,348).
+    property <float> a-x: 0.162;
+    property <float> a-y: 0.305;
+    property <float> b-x: 0.833;
+    property <float> b-y: 0.267;
+    property <float> c-x: 0.105;
+    property <float> c-y: 0.725;
+    property <float> d-x: 0.912;
+    property <float> d-y: 0.720;
+
+    background: Theme.map-ground;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.gold;
+    clip: true;
     accessible-role: image;
     accessible-label: @tr("Three-lane map");
 
-    Path {
+    pure function mix(from: float, to: float, k: float) -> float {
+        return from + (to - from) * k;
+    }
+
+    // Plan point -> fraction of the map box (bilinear through the lane corners when painted).
+    pure function fx(x: float, y: float) -> float {
+        return root.painted
+            ? root.mix(root.mix(root.a-x, root.b-x, (x - 40) / 318), root.mix(root.c-x, root.d-x, (x - 40) / 318), (y - 42) / 306)
+            : x / 400;
+    }
+
+    pure function fy(x: float, y: float) -> float {
+        return root.painted
+            ? root.mix(root.mix(root.a-y, root.b-y, (x - 40) / 318), root.mix(root.c-y, root.d-y, (x - 40) / 318), (y - 42) / 306)
+            : y / 400;
+    }
+
+    // ===== Painted rift from the League client =====
+    if root.painted: Image {
+        width: 100%;
+        height: 100%;
+        source: root.art;
+        image-fit: fill;
+    }
+
+    // ===== Vector rift: jungle plateaus, river, bases, lanes =====
+    if !root.painted && root.show-jungle: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
-        commands: "M 40 348 L 40 42 L 358 42";
-        stroke: Theme.lane-top;
-        stroke-width: root.line-width;
+        // 4 jungle islands (top-left Order, top-right Chaos, bot-left Order, bot-right Chaos)
+        commands: "M 66 156 L 146 218 L 66 290 Z M 138 66 L 306 66 L 208 164 Z M 94 328 L 190 232 L 260 328 Z M 248 190 L 334 108 L 334 252 Z";
+        fill: Theme.map-jungle;
+    }
+
+    if !root.painted: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 54 78 L 342 316";
+        stroke: Theme.map-river;
+        stroke-width: root.line-width * 3.4;
+        stroke-line-cap: round;
         fill: transparent;
     }
-    Path {
+
+    // Order base pad (bottom-left) & Chaos base pad (top-right)
+    if !root.painted: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 18 378 L 18 292 L 106 378 Z";
+        fill: Theme.team-color(root.order-is-mine);
+        opacity: 0.22;
+    }
+    if !root.painted: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 382 18 L 382 104 L 294 18 Z";
+        fill: Theme.team-color(!root.order-is-mine);
+        opacity: 0.22;
+    }
+
+    // Curved Summoner's Rift lanes (background road), then each lane's color thread
+    if !root.painted: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 40 348 L 40 108 Q 40 42 108 42 L 358 42 M 40 348 L 358 42 M 40 348 L 292 348 Q 358 348 358 282 L 358 42";
+        stroke: Theme.map-lane;
+        stroke-width: root.line-width * 1.45;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        fill: transparent;
+    }
+    if !root.painted: Path {
+        width: 100%; height: 100%;
+        viewbox-width: 400; viewbox-height: 400;
+        commands: "M 40 348 L 40 108 Q 40 42 108 42 L 358 42";
+        stroke: Theme.lane-top;
+        stroke-width: max(2px, root.line-width * 0.45);
+        opacity: 0.55;
+        fill: transparent;
+    }
+    if !root.painted: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
         commands: "M 40 348 L 358 42";
         stroke: Theme.lane-mid;
-        stroke-width: root.line-width;
+        stroke-width: max(2px, root.line-width * 0.45);
+        opacity: 0.55;
         fill: transparent;
     }
-    Path {
+    if !root.painted: Path {
         width: 100%; height: 100%;
         viewbox-width: 400; viewbox-height: 400;
-        commands: "M 40 348 L 358 348 L 358 42";
+        commands: "M 40 348 L 292 348 Q 358 348 358 282 L 358 42";
         stroke: Theme.lane-bot;
-        stroke-width: root.line-width;
-        fill: transparent;
-    }
-    if root.show-jungle: Path {
-        width: 100%; height: 100%;
-        viewbox-width: 400; viewbox-height: 400;
-        commands: "M 95 215 L 107 226 M 120 238 L 132 249 M 145 261 L 157 272 M 210 112 L 222 123 M 235 135 L 247 146 M 260 158 L 272 169";
-        stroke: Theme.lane-jungle;
-        stroke-width: root.line-width * 0.75;
+        stroke-width: max(2px, root.line-width * 0.45);
+        opacity: 0.55;
         fill: transparent;
     }
 
+    // Order & Chaos Nexus diamonds (the painting already shows both nexuses)
+    if !root.painted: Path {
+        x: root.width * 40 / 400 - root.station * 0.65;
+        y: root.height * 348 / 400 - root.station * 0.65;
+        width: root.station * 1.3;
+        height: root.station * 1.3;
+        viewbox-width: 24; viewbox-height: 24;
+        commands: "M 12 2 L 22 12 L 12 22 L 2 12 Z";
+        fill: Theme.team-color(root.order-is-mine);
+        stroke: Theme.gold-bright;
+        stroke-width: 1.5px;
+    }
+    if !root.painted: Path {
+        x: root.width * 358 / 400 - root.station * 0.65;
+        y: root.height * 42 / 400 - root.station * 0.65;
+        width: root.station * 1.3;
+        height: root.station * 1.3;
+        viewbox-width: 24; viewbox-height: 24;
+        commands: "M 12 2 L 22 12 L 12 22 L 2 12 Z";
+        fill: Theme.team-color(!root.order-is-mine);
+        stroke: Theme.gold-bright;
+        stroke-width: 1.5px;
+    }
+
+    // Baron / Herald Pit (top-left river alcove)
+    Rectangle {
+        property <color> pit-c: root.baron-owner == 1
+            ? Theme.blue
+            : (root.baron-owner == 2
+                ? Theme.red
+                : (root.herald-owner == 1 ? Theme.blue : (root.herald-owner == 2 ? Theme.red : Theme.muted)));
+        x: root.width * root.fx(132, 116) - self.width / 2;
+        y: root.height * root.fy(132, 116) - self.height / 2;
+        width: root.show-pits ? root.station * 1.3 : root.station * 0.95;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: Theme.map-ground;
+        border-width: 1.5px;
+        border-color: (root.baron-owner > 0 || root.herald-owner > 0) ? self.pit-c : Theme.rule-strong;
+        opacity: root.show-pits ? 1.0 : 0.65;
+
+        Ping {
+            x: -4px;
+            y: -4px;
+            width: parent.width + 8px;
+            height: parent.height + 8px;
+            count: root.baron-owner * 3 + root.herald-owner;
+            ink: parent.pit-c;
+        }
+
+        Path {
+            property <length> icon-sz: max(9px, parent.width * 0.62);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: Theme.lol-objective-path(root.baron-owner > 0 || root.herald-owner == 0 ? 0 : 3);
+            fill: (root.baron-owner > 0 || root.herald-owner > 0)
+                ? parent.pit-c
+                : Theme.objective-color(0);
+        }
+    }
+
+    // Dragon Pit (bottom-right river alcove) + live drake count chip
+    Rectangle {
+        x: root.width * root.fx(266, 276) - self.width / 2;
+        y: root.height * root.fy(266, 276) - self.height / 2;
+        width: root.show-pits ? root.station * 1.3 : root.station * 0.95;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: Theme.map-ground;
+        border-width: 1.5px;
+        border-color: (root.my-drakes > 0 || root.enemy-drakes > 0) ? Theme.objective-color(2) : Theme.rule-strong;
+        opacity: root.show-pits ? 1.0 : 0.65;
+
+        Ping {
+            x: -4px;
+            y: -4px;
+            width: parent.width + 8px;
+            height: parent.height + 8px;
+            count: root.my-drakes + root.enemy-drakes;
+            ink: Theme.objective-color(2);
+        }
+
+        Path {
+            property <length> icon-sz: max(9px, parent.width * 0.62);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: Theme.lol-objective-path(2);
+            fill: Theme.objective-color(2);
+        }
+    }
+
+    if root.show-pits && (root.my-drakes > 0 || root.enemy-drakes > 0): Rectangle {
+        x: root.width * root.fx(266, 276) - self.width / 2;
+        y: root.height * root.fy(266, 276) + root.station * 0.72;
+        width: drake-txt.preferred-width + 8px;
+        height: 15px;
+        border-radius: 3px;
+        background: Theme.panel;
+        border-width: 1px;
+        border-color: Theme.rule-strong;
+        drake-txt := Text {
+            text: root.my-drakes + ":" + root.enemy-drakes;
+            color: Theme.text;
+            font-family: Type.mono-family;
+            font-size: 9px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // ===== Towers =====
     for t in root.towers: Rectangle {
-        x: root.width * t.x / 400 - self.width / 2;
-        y: root.height * t.y / 400 - self.height / 2;
-        width: t.standing ? root.station : root.station * 0.78;
+        x: root.width * root.fx(t.x, t.y) - self.width / 2;
+        y: root.height * root.fy(t.x, t.y) - self.height / 2;
+        width: t.standing ? root.station * 1.15 : root.station * 0.8;
         height: self.width;
         border-radius: self.width / 2;
-        background: t.standing ? Theme.team-color(t.mine) : root.halo;
-        border-width: t.standing ? 3px : 2.5px;
-        border-color: t.standing ? root.halo : Theme.team-color(t.mine);
+        background: t.standing ? Theme.map-ground : root.halo;
+        border-width: 1.5px;
+        border-color: Theme.team-color(t.mine);
+        opacity: !t.standing ? 0.55 : 1.0;
+
+        if t.standing: Path {
+            property <length> icon-sz: max(9px, parent.width * 0.65);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: Theme.lol-turret-path();
+            fill: Theme.team-color(t.mine);
+        }
+
+        if !t.standing: Path {
+            property <length> icon-sz: max(7px, parent.width * 0.52);
+            x: (parent.width - self.icon-sz) / 2;
+            y: (parent.height - self.icon-sz) / 2;
+            width: self.icon-sz;
+            height: self.icon-sz;
+            viewbox-width: 24; viewbox-height: 24;
+            commands: "M 6 6 L 18 18 M 18 6 L 6 18";
+            stroke: Theme.team-color(t.mine);
+            stroke-width: 2.2px;
+            stroke-line-cap: round;
+        }
+
+        // Falls: a ring flares from the tower once (rows are updated in place).
+        Ping {
+            x: -5px;
+            y: -5px;
+            width: parent.width + 10px;
+            height: parent.height + 10px;
+            count: t.standing ? 0 : 1;
+            ink: Theme.team-color(t.mine);
+        }
     }
 
+    // ===== Allies (Champ Select tokens) =====
     for a in root.allies: Rectangle {
-        x: root.width * a.x / 400 - self.width / 2;
-        y: root.height * a.y / 400 - self.height / 2;
-        width: a.is-self ? root.station * 1.5 : root.station * 1.25;
+        x: root.width * root.fx(a.x, a.y) - self.width / 2;
+        y: root.height * root.fy(a.x, a.y) - self.height / 2;
+        width: a.is-self ? root.station * 1.65 : root.station * 1.35;
         height: self.width;
-        border-radius: self.width / 2;
-        background: a.is-self ? Theme.plate : Theme.blue;
-        border-width: 3px;
-        border-color: root.halo;
+        background: transparent;
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: self.width / 2;
+            clip: true;
+            background: a.is-self ? Theme.gold : Theme.blue;
+            border-width: 2.5px;
+            border-color: a.is-self ? Theme.gold-bright : Theme.blue;
+
+            if a.icon.width > 0: Image {
+                width: 100%;
+                height: 100%;
+                source: a.icon;
+                image-fit: cover;
+            }
+            if a.icon.width == 0 && a.initials != "": Text {
+                text: a.initials;
+                color: Theme.on-team;
+                font-family: Type.display-family;
+                font-size: max(9px, parent.width * 0.42);
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
 
         Text {
             x: a.label-pos == 1
@@ -742,7 +1472,11 @@ export component LineMap inherits Rectangle {
                     ? parent.height + 5px
                     : (parent.height - self.height) / 2;
             text: a.label;
-            color: Theme.text;
+            // The painting is dark in both printings: light ink with a dark rim stays legible.
+            color: a.is-self ? Theme.gold-bright : (root.painted ? #eef0f5 : Theme.text);
+            stroke: root.painted ? #05080dd9 : transparent;
+            stroke-width: root.painted ? 3px : 0px;
+            stroke-style: outside;
             font-size: Type.small;
             font-weight: 800;
             horizontal-alignment: a.label-pos == 1 ? right : ((a.label-pos == 2 || a.label-pos == 3) ? center : left);
@@ -803,11 +1537,17 @@ export component ObjectiveRow inherits HorizontalLayout {
         accessible-label: c.label;
 
         if root.compact: Rectangle {
+            property <bool> fired: false;
+            init => { self.fired = true; }
+            opacity: self.fired ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
             width: 14px + c.weight * 3px;
             height: 14px + c.weight * 3px;
             y: (parent.height - self.height) / 2;
             border-radius: Theme.radius-sm;
-            background: Theme.team-color(c.mine);
+            background: Theme.panel-raised;
+            border-width: 1.5px;
+            border-color: Theme.team-color(c.mine);
             Path {
                 property <length> icon-sz: max(10px, parent.height - 5px);
                 x: (parent.width - self.icon-sz) / 2;
@@ -816,16 +1556,16 @@ export component ObjectiveRow inherits HorizontalLayout {
                 height: self.icon-sz;
                 viewbox-width: 24;
                 viewbox-height: 24;
-                commands: Theme.objective-icon-path(c.kind);
-                stroke: Theme.on-team;
-                stroke-width: 2px;
-                stroke-line-cap: round;
-                stroke-line-join: round;
-                fill: transparent;
+                commands: Theme.lol-objective-path(c.kind);
+                fill: Theme.objective-color(c.kind);
             }
         }
 
         if !root.compact: Rectangle {
+            property <bool> fired: false;
+            init => { self.fired = true; }
+            opacity: self.fired ? 1 : 0;
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
             height: 26px;
             width: chip-row.preferred-width;
             y: (parent.height - self.height) / 2;
@@ -845,7 +1585,7 @@ export component ObjectiveRow inherits HorizontalLayout {
                         width: 18px;
                         height: 18px;
                         border-radius: Theme.radius-sm;
-                        background: Theme.team-color(c.mine);
+                        background: Theme.ground;
                         Path {
                             x: 3px;
                             y: 3px;
@@ -853,12 +1593,8 @@ export component ObjectiveRow inherits HorizontalLayout {
                             height: 12px;
                             viewbox-width: 24;
                             viewbox-height: 24;
-                            commands: Theme.objective-icon-path(c.kind);
-                            stroke: Theme.on-team;
-                            stroke-width: 2px;
-                            stroke-line-cap: round;
-                            stroke-line-join: round;
-                            fill: transparent;
+                            commands: Theme.lol-objective-path(c.kind);
+                            fill: Theme.objective-color(c.kind);
                         }
                     }
                 }
@@ -886,16 +1622,37 @@ export component BanChip inherits Rectangle {
     border-color: mine ? Theme.blue : Theme.red;
     accessible-role: text;
     accessible-label: root.ban.name;
+    // Created when the ban lands: the chip fades in and a red strike draws across the dimmed
+    // portrait once. Rows are updated in place, so chips already shown never replay it.
+    property <bool> landed: false;
+    init => { self.landed = true; }
+    opacity: root.landed ? 1 : 0;
+    animate opacity { duration: Theme.dur-base; easing: ease-out; }
     row := HorizontalLayout {
         padding-left: Space.xs;
         padding-right: Space.sm;
         spacing: Space.sm;
-        ChampPlate {
-            y: (parent.height - self.height) / 2;
-            size: 18px;
-            label: root.ban.initials;
-            icon: root.ban.icon;
-            mine: root.mine;
+        Rectangle {
+            width: 18px;
+            ChampPlate {
+                y: (parent.height - self.height) / 2;
+                size: 18px;
+                label: root.ban.initials;
+                icon: root.ban.icon;
+                mine: root.mine;
+                faded: true;
+            }
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                x: (parent.width - self.width) / 2;
+                width: 24px;
+                height: 2px;
+                border-radius: 1px;
+                background: Theme.red;
+                transform-rotation: -45deg;
+                transform-scale-x: root.landed ? 1 : 0;
+                animate transform-scale-x { duration: Theme.dur-reveal; delay: Theme.dur-fast; easing: ease-out; }
+            }
         }
         Text {
             text: root.ban.name;
@@ -914,12 +1671,31 @@ export component PlayerRow inherits Rectangle {
     height: 50px;
     border-radius: Theme.radius;
     background: p.is-self ? Theme.panel-raised : Theme.panel;
-    border-width: 1px;
-    border-color: p.is-self ? Theme.rule-strong : Theme.rule;
+    clip: true;
     accessible-role: text;
     accessible-label: (root.p.is-self ? @tr("{0}, you", root.p.champion) : root.p.champion)
         + ", " + root.p.kda
         + (root.p.dead ? @tr(", dead, respawn in {0}", root.p.respawn) : "");
+
+    // Splash strip of the player's skin on the right, melting into the row; it goes out while
+    // the player is dead.
+    if root.p.banner.width > 0: Rectangle {
+        x: parent.width * 0.42;
+        width: parent.width * 0.58;
+        height: 100%;
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.p.banner;
+            image-fit: cover;
+            opacity: root.p.dead ? 0.1 : (Theme.dark ? 0.7 : 0.55);
+            animate opacity { duration: Theme.dur-slow; easing: ease-out; }
+        }
+        Rectangle {
+            background: @linear-gradient(90deg, root.background 0%, root.background.with-alpha(0.55) 45%, root.background.with-alpha(0.3) 100%);
+        }
+    }
+
     HorizontalLayout {
         padding-left: Space.md;
         padding-right: Space.md;
@@ -937,6 +1713,7 @@ export component PlayerRow inherits Rectangle {
                 label: root.p.initials;
                 icon: root.p.icon;
                 mine: root.mine;
+                is-self: root.p.is-self;
                 faded: root.p.dead;
             }
         }
@@ -969,6 +1746,13 @@ export component PlayerRow inherits Rectangle {
             vertical-alignment: center;
             min-width: 68px;
         }
+    }
+
+    // Border drawn over the strip.
+    Rectangle {
+        border-radius: root.border-radius;
+        border-width: 1px;
+        border-color: root.p.is-self ? Theme.rule-strong : Theme.rule;
     }
 }
 

@@ -1,26 +1,28 @@
-// Observatory instrument palette in Night (default) and Day printings.
+// Hypatia Hextech palette in Night (default) and Day printings: carbon-navy panels,
+// League gold metallics and cyan accents, amber reserved for moments the player must act.
 
 export global Theme {
     in-out property <bool> dark: true;
     // False when the OS asks for reduced motion (or `--reduce-motion`): every duration drops to 0.
     in-out property <bool> motion: true;
 
-    // Motion scale. Hover and press feedback, state changes, structural moves, the 1 s tick.
+    // Motion scale. Hover and press feedback, state changes, structural moves.
     out property <duration> dur-fast: motion ? 110ms : 0ms;
     out property <duration> dur-base: motion ? 180ms : 0ms;
     out property <duration> dur-slow: motion ? 240ms : 0ms;
-    out property <duration> dur-tick: motion ? 1000ms : 0ms;
     out property <duration> dur-pulse: motion ? 650ms : 0ms;
+    // One-shot draft moments: a lock-in glint, a ban strike, an enemy reveal.
+    out property <duration> dur-reveal: motion ? 360ms : 0ms;
 
-    out property <color> shell: dark ? #0b0d11 : #e5e1d6;
-    out property <color> ground: dark ? #0f1116 : #efece3;
-    out property <color> backdrop: dark ? #090b0f : #dfdacf;
-    out property <color> panel: dark ? #161922 : #faf8f2;
-    out property <color> panel-raised: dark ? #1f2430 : #ebe7dc;
-    out property <color> rule: dark ? #262b38 : #d4cfc2;
-    out property <color> rule-strong: dark ? #3c4356 : #a59f8f;
-    out property <color> text: dark ? #edeff4 : #14171f;
-    out property <color> muted: dark ? #9ca3b5 : #555a66;
+    out property <color> shell: dark ? #070b12 : #e4e1d5;
+    out property <color> ground: dark ? #0b111b : #ede9dd;
+    out property <color> backdrop: dark ? #05080d : #d9d5c8;
+    out property <color> panel: dark ? #111926 : #f9f7ef;
+    out property <color> panel-raised: dark ? #182334 : #e6e1d3;
+    out property <color> rule: dark ? #223047 : #c9c1ad;
+    out property <color> rule-strong: dark ? #53462c : #99855a;
+    out property <color> text: dark ? #eef0f5 : #14171f;
+    out property <color> muted: dark ? #9aa7bd : #525968;
     out property <color> plate: dark ? #edeff4 : #14171f;
     out property <color> on-plate: dark ? #0f1116 : #faf8f2;
     out property <color> on-plate-muted: dark ? #4c5364 : #9ca3b5;
@@ -28,9 +30,14 @@ export global Theme {
     // Ink on an amber fill, and the dim veil behind sheets.
     out property <color> on-signal: #0f1116;
     out property <color> on-signal-muted: dark ? #2a2d36 : #0f1116;
-    out property <color> scrim: dark ? #090b0fb3 : #14171f73;
+    out property <color> scrim: dark ? #060a10cc : #14171f78;
     // A QR code must stay dark-on-light in both printings to scan.
     out property <color> qr-ground: #efece3;
+
+    // Hextech metallics and cyan accent (distinct from the alert-only Theme.signal).
+    out property <color> gold: dark ? #6e5730 : #8a6d38;
+    out property <color> gold-bright: dark ? #c8aa6e : #7a5c24;
+    out property <color> accent: dark ? #0ac8b9 : #087c73;
 
     out property <color> signal: dark ? #f5b400 : #b87300;
     out property <color> signal-soft: dark ? #f5b40024 : #b873001c;
@@ -45,11 +52,17 @@ export global Theme {
     out property <color> lane-mid: dark ? #b07cf0 : #7842c2;
     out property <color> lane-bot: dark ? #ef8bb5 : #bf3b75;
 
-    out property <color> blue: dark ? #4c8df6 : #2664d4;
+    out property <color> blue: dark ? #3b9eff : #1f62c9;
     out property <color> red: dark ? #f0605a : #c9342e;
     out property <color> blue-soft: dark ? #9cc0fb : #2052b0;
     out property <color> red-soft: dark ? #f6a29d : #a62b26;
     out property <color> on-team: #ffffff;
+
+    // Summoner's Rift terrain palette for the vector map (fallback when no client artwork is cached).
+    out property <color> map-ground: dark ? #08121c : #d8d4c5;
+    out property <color> map-jungle: dark ? #102431 : #c4c7b4;
+    out property <color> map-river: dark ? #14364a : #a9c7d6;
+    out property <color> map-lane: dark ? #1d2c3c : #e8e4d8;
 
     out property <length> radius: 6px;
     out property <length> radius-sm: 4px;
@@ -82,32 +95,57 @@ export global Theme {
         return @tr("Fill");
     }
 
-    public pure function lane-icon-path(lane: int) -> string {
-        // 0 Top: strong upper-left angle + inner core square
-        if (lane == 0) { return "M 5 18 V 5 H 18 M 11 11 H 19 V 19 H 11 Z"; }
-        // 1 Jungle: triple grove strokes
-        if (lane == 1) { return "M 12 3 V 20 M 6 9 L 11 17 M 18 9 L 13 17 M 4 15 L 8 20 M 20 15 L 16 20"; }
-        // 2 Mid: diagonal river-to-river corridor with corner brackets
-        if (lane == 2) { return "M 5 19 L 19 5 M 5 9 V 5 H 9 M 15 19 H 19 V 15"; }
-        // 3 Bot: lower-right lane angle + upper-left turret square
-        if (lane == 3) { return "M 6 19 H 19 V 6 M 5 5 H 12 V 12 H 5 Z"; }
-        // 4 Support: chalice / ward sentinel crest
-        if (lane == 4) { return "M 4 7 H 20 L 16 14 H 8 Z M 12 14 V 20 M 8 20 H 16"; }
-        // -1 Any / Flex: compass diamond
-        return "M 12 3 L 21 12 L 12 21 L 3 12 Z M 12 9 V 15 M 9 12 H 15";
+    // Authentic League of Legends position silhouette (primary highlighted stroke/fill).
+    public pure function lol-lane-primary-path(lane: int) -> string {
+        if (lane == 0) { return "M 3 3 H 19 L 15.5 6.5 H 6.5 V 15.5 L 3 19 Z"; }
+        if (lane == 1) { return "M 12 2 L 14.6 10.5 L 12 21.5 L 9.4 10.5 Z M 4 5.5 L 9.5 12 L 8.8 19.5 L 5.2 14 Z M 20 5.5 L 18.8 14 L 15.2 19.5 L 14.5 12 Z"; }
+        if (lane == 2) { return "M 18 3 H 21 V 6 L 6 21 H 3 V 18 Z"; }
+        if (lane == 3) { return "M 21 21 H 5 L 8.5 17.5 H 17.5 V 8.5 L 21 5 Z"; }
+        if (lane == 4) { return "M 12 3.5 L 15 9.5 L 12 20.5 L 9 9.5 Z M 2 7.5 H 8 L 9.2 11.5 L 4.5 13 Z M 22 7.5 H 16 L 14.8 11.5 L 19.5 13 Z"; }
+        return "M 12 3 L 15.2 8.8 L 21 12 L 15.2 15.2 L 12 21 L 8.8 15.2 L 3 12 L 8.8 8.8 Z";
     }
 
-    public pure function objective-icon-path(kind: int) -> string {
-        // 0 Baron Nashor: three-spiked crown
-        if (kind == 0) { return "M 4 19 H 20 L 21 7 L 16 12 L 12 4 L 8 12 L 3 7 Z"; }
-        // 1 Elder Dragon: crowned wing crest + core cross
-        if (kind == 1) { return "M 12 3 L 20 9 L 16 20 H 8 L 4 9 Z M 12 8 V 16 M 9 12 H 15"; }
-        // 2 Drake: winged drake sigil
-        if (kind == 2) { return "M 4 8 L 12 4 L 20 8 L 16 14 L 12 20 L 8 14 Z M 8 10 L 12 13 L 16 10"; }
-        // 3 Rift Herald: armored shell crest + eye diamond
-        if (kind == 3) { return "M 4 16 L 8 7 H 16 L 20 16 Z M 9 16 V 19 M 15 16 V 19 M 12 10 L 14 13 L 12 15 L 10 13 Z"; }
-        // 4 Voidgrubs: trio of void clusters
-        return "M 7 6 L 10 9 L 7 12 L 4 9 Z M 17 6 L 20 9 L 17 12 L 14 9 Z M 12 13 L 15 16 L 12 19 L 9 16 Z";
+    // Secondary muted context corners of League of Legends position icons.
+    public pure function lol-lane-context-path(lane: int) -> string {
+        if (lane == 0) { return "M 21 21 H 5 L 8.5 17.5 H 17.5 V 8.5 L 21 5 Z M 10 10 H 14 V 14 H 10 Z"; }
+        if (lane == 2) { return "M 3 3 H 12 L 8.5 6.5 H 6.5 V 8.5 L 3 12 Z M 21 21 H 12 L 15.5 17.5 H 17.5 V 15.5 L 21 12 Z"; }
+        if (lane == 3) { return "M 3 3 H 19 L 15.5 6.5 H 6.5 V 15.5 L 3 19 Z M 10 10 H 14 V 14 H 10 Z"; }
+        if (lane == 4) { return "M 9.5 15.5 H 14.5 L 12 21 Z"; }
+        return "";
+    }
+
+    public pure function lol-turret-path() -> string {
+        return "M 6 4 H 9.5 V 7 H 14.5 V 4 H 18 V 9.5 L 16 11.5 V 18 L 19 21 H 5 L 8 18 V 11.5 L 6 9.5 Z";
+    }
+
+    public pure function lol-objective-path(kind: int) -> string {
+        if (kind == 0) { return "M 12 3 L 15 8 L 19.5 5.5 L 18 13 L 20.5 17.5 L 16 19.5 L 12 16 L 8 19.5 L 3.5 17.5 L 6 13 L 4.5 5.5 L 9 8 Z"; }
+        if (kind == 1) { return "M 12 2 L 15 6 L 21 5 L 17 12 L 19.5 18 L 12 22 L 4.5 18 L 7 12 L 3 5 L 9 6 Z"; }
+        if (kind == 2) { return "M 12 4 L 15 9 L 21.5 7 L 18 14 L 12 21 L 6 14 L 2.5 7 L 9 9 Z"; }
+        if (kind == 3) { return "M 12 3 L 16.5 6.5 L 19.5 13 L 16 20 H 8 L 4.5 13 L 7.5 6.5 Z"; }
+        return "M 7.5 5 L 10.5 8.5 L 7.5 12 L 4.5 8.5 Z M 16.5 5 L 19.5 8.5 L 16.5 12 L 13.5 8.5 Z M 12 13 L 15 16.5 L 12 20 L 9 16.5 Z";
+    }
+
+    public pure function objective-color(kind: int) -> color {
+        if (kind == 0) { return dark ? #c078ff : #7833bd; }
+        if (kind == 1) { return dark ? #ffd24d : #9e6b06; }
+        if (kind == 2) { return dark ? #f08843 : #bd520e; }
+        if (kind == 3) { return dark ? #b486ff : #6f3ec2; }
+        return dark ? #9c79e6 : #6845ab;
+    }
+
+    public pure function rank-tier-color(tier: string) -> color {
+        if (tier == "IRON") { return dark ? #7c7472 : #595250; }
+        if (tier == "BRONZE") { return dark ? #a66c49 : #824d2c; }
+        if (tier == "SILVER") { return dark ? #9bb0be : #5f7585; }
+        if (tier == "GOLD") { return dark ? #deb04b : #9c7114; }
+        if (tier == "PLATINUM") { return dark ? #4bc4ad : #18826e; }
+        if (tier == "EMERALD") { return dark ? #2ecc71 : #158746; }
+        if (tier == "DIAMOND") { return dark ? #68a3ff : #2b64c7; }
+        if (tier == "MASTER") { return dark ? #c76cf5 : #8a32b8; }
+        if (tier == "GRANDMASTER") { return dark ? #f05a5a : #b82525; }
+        if (tier == "CHALLENGER") { return dark ? #4be8e8 : #0d8282; }
+        return self.muted;
     }
 
     public pure function team-color(mine: bool) -> color {

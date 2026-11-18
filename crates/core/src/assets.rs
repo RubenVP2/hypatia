@@ -105,6 +105,23 @@ impl GameAssetCache {
         }
     }
 
+    /// Registers all `tilePath` entries from a `/lol-champ-select/v1/skin-carousel-skins` payload.
+    pub fn register_skin_paths_from_json(&self, payload: &Value) {
+        let Some(arr) = payload.as_array() else {
+            return;
+        };
+        for s in arr {
+            if let (Some(id), Some(tile_path)) = (
+                s.get("id").and_then(|v| v.as_i64()),
+                s.get("tilePath").and_then(|v| v.as_str()),
+            ) {
+                if !tile_path.is_empty() {
+                    self.register_skin_path(id, tile_path);
+                }
+            }
+        }
+    }
+
     /// Synchronous check for a cached image file path on disk (safe inside tight UI render timers).
     pub fn cached_image_path(&self, category: &str, id: i64) -> Option<PathBuf> {
         if !is_valid_asset_id(category, id) {
@@ -736,85 +753,6 @@ pub fn default_cache_dir() -> PathBuf {
     std::env::temp_dir().join("hypatia-assets-cache")
 }
 
-/// Returns the per-user Hypatia config directory (`%LOCALAPPDATA%\hypatia` on Windows).
-pub fn default_config_dir() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-        return PathBuf::from(local).join("hypatia");
-    }
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
-        return PathBuf::from(xdg).join("hypatia");
-    }
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        return PathBuf::from(home).join(".config").join("hypatia");
-    }
-    std::env::temp_dir().join("hypatia")
-}
-
-pub fn default_lang_file_path() -> PathBuf {
-    default_config_dir().join("lang")
-}
-
-/// Reads a persisted language preference from `path`, falling back to OS locale detection.
-pub fn load_lang_from_path(path: &Path) -> Lang {
-    if let Ok(raw) = std::fs::read_to_string(path) {
-        if let Some(lang) = Lang::from_code(&raw) {
-            return lang;
-        }
-    }
-    detect_os_lang()
-}
-
-/// Persists the active language code (`"en"` or `"fr"`) to `path`.
-pub fn save_lang_to_path(path: &Path, lang: Lang) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, lang.as_code())
-}
-
-pub fn load_persisted_or_detect_lang() -> Lang {
-    load_lang_from_path(&default_lang_file_path())
-}
-
-pub fn save_persisted_lang(lang: Lang) {
-    let _ = save_lang_to_path(&default_lang_file_path(), lang);
-}
-
-fn detect_env_lang() -> Option<Lang> {
-    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(val) = std::env::var(key) {
-            if let Some(lang) = Lang::from_code(&val) {
-                return Some(lang);
-            }
-        }
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_os_lang() -> Lang {
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetUserDefaultLocaleName(lp_locale_name: *mut u16, cch_locale_name: i32) -> i32;
-    }
-    let mut buf = [0u16; 85];
-    // SAFETY: `buf` is a stack buffer matching Windows LOCALE_NAME_MAX_LENGTH (85 UTF-16 code units).
-    let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
-    if len > 1 {
-        let raw = String::from_utf16_lossy(&buf[..(len as usize - 1)]);
-        if let Some(lang) = Lang::from_code(raw.trim_end_matches('\0')) {
-            return lang;
-        }
-    }
-    detect_env_lang().unwrap_or_default()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn detect_os_lang() -> Lang {
-    detect_env_lang().unwrap_or_default()
-}
-
 /// Validates and detects PNG or JPEG image magic headers.
 pub fn detect_image_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     const PNG_MAGIC: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
@@ -1064,12 +1002,6 @@ mod tests {
         let catalog = cache.champion_catalog();
         assert!(catalog.iter().any(|c| c.id == 999 && c.roles == vec!["MIDDLE".to_string()]));
         assert!(catalog.iter().any(|c| c.id == 64 && c.roles == vec!["JUNGLE".to_string()]));
-
-        let lang_file = dir.join("nested").join("lang");
-        save_lang_to_path(&lang_file, Lang::Fr).unwrap();
-        assert_eq!(load_lang_from_path(&lang_file), Lang::Fr);
-        save_lang_to_path(&lang_file, Lang::En).unwrap();
-        assert_eq!(load_lang_from_path(&lang_file), Lang::En);
 
         cache.ingest_metadata(
             "perks.json",

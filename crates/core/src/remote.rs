@@ -12,7 +12,7 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use hypatia_shared::{EventKind, RemoteCommand, SourceId};
+use hypatia_shared::{RemoteCommand, SourceId};
 use qrcode::QrCode;
 use rand::Rng;
 use serde::Deserialize;
@@ -20,7 +20,9 @@ use serde_json::json;
 use tokio::sync::{broadcast, watch};
 use tracing::{info, warn};
 
-use crate::lcu_actions::{extract_remote_state, AlertTracker, LcuActionClient};
+use crate::lcu_actions::{
+    extract_remote_state, AlertTracker, LcuActionClient, RemoteActionError,
+};
 use crate::AppState;
 
 const REMOTE_UI_HTML: &str = include_str!("remote_ui.html");
@@ -434,23 +436,15 @@ async fn sync_live_lcu_aux(st: &RemoteRouterState) {
     for uri in uris {
         if let Ok((status, _, body)) = st.app.riot_client.get(port, token_ref, uri).await {
             if status.is_success() {
-                let mut store = st.app.store.write().unwrap();
-                store.insert_event(
-                    SourceId::LeagueClient,
-                    EventKind::Update,
-                    uri.to_string(),
-                    body,
-                    &st.app.vault,
-                );
+                st.app.insert_lcu_update(uri, body);
             }
         }
     }
 }
 
 fn current_snapshot_json(st: &RemoteRouterState) -> String {
-    let demo_guard = st.app.demo_remote.read().unwrap().clone();
     let mut alert_guard = st.alerts.write().unwrap();
-    let snap = extract_remote_state(&st.app, &demo_guard, &mut alert_guard);
+    let snap = extract_remote_state(&st.app, &mut alert_guard);
     serde_json::to_string(&snap).unwrap_or_else(|_| "{}".to_string())
 }
 
@@ -578,12 +572,7 @@ async fn handle_asset(
         return (StatusCode::BAD_REQUEST, "Invalid asset id").into_response();
     };
 
-    let Some((mime, bytes)) = st
-        .app
-        .assets
-        .get_or_fetch_bytes(&category, id, &st.app.discovery, &st.app.riot_client)
-        .await
-    else {
+    let Some((mime, bytes)) = st.app.fetch_asset_bytes(&category, id).await else {
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
     };
 
@@ -618,9 +607,8 @@ async fn handle_get_state(
             .into_response();
     }
 
-    let demo_guard = st.app.demo_remote.read().unwrap().clone();
     let mut alert_guard = st.alerts.write().unwrap();
-    let snap = extract_remote_state(&st.app, &demo_guard, &mut alert_guard);
+    let snap = extract_remote_state(&st.app, &mut alert_guard);
     (StatusCode::OK, Json(snap)).into_response()
 }
 
@@ -646,98 +634,17 @@ async fn handle_post_action(
             .into_response();
     }
 
-    if st.app.is_demo_active() {
-        let res = {
-            let mut demo = st.app.demo_remote.write().unwrap();
-            demo.apply_command(&st.app, &cmd)
+    if let Err(err) = st.app.execute_remote_command(&st.action_client, &cmd).await {
+        let status = match err {
+            RemoteActionError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            RemoteActionError::ClientUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            RemoteActionError::GatewayError(_) => StatusCode::BAD_GATEWAY,
         };
-        if let Err(e) = res {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": e.to_string() })),
-            )
-                .into_response();
-        }
-    } else {
-        let Some(lcu) = st.app.discovery.lcu_args() else {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": lang.pick(
-                    "League of Legends client is not running",
-                    "Le client League of Legends n'est pas lancé",
-                )})),
-            )
-                .into_response();
-        };
-        let Some(port) = lcu.app_port else {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": lang.pick(
-                    "League client port not detected yet",
-                    "Port du client League pas encore détecté",
-                )})),
-            )
-                .into_response();
-        };
-        let token_ref = lcu.remoting_auth_token.as_deref();
-
-        // Find an editable rune page ID if saving custom/preset runes
-        let editable_page_id = {
-            let guard = st.app.store.read().unwrap();
-            guard
-                .get_state(SourceId::LeagueClient, "/lol-perks/v1/pages")
-                .and_then(|u| {
-                    u.current.as_array().and_then(|arr| {
-                        arr.iter()
-                            .find(|p| {
-                                p.get("isEditable")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false)
-                            })
-                            .and_then(|p| p.get("id").and_then(|v| v.as_i64()))
-                    })
-                })
-        };
-
-        if let Err(e) = st
-            .action_client
-            .execute_localized(port, token_ref, &cmd, editable_page_id, lang)
-            .await
-        {
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": e.to_string() })),
-            )
-                .into_response();
-        }
-
-        // Refresh relevant LCU GET states so both phone and PC update immediately
-        for uri in [
-            "/lol-lobby/v2/lobby",
-            "/lol-matchmaking/v1/search",
-            "/lol-matchmaking/v1/ready-check",
-            "/lol-champ-select/v1/session",
-            "/lol-champ-select/v1/skin-carousel-skins",
-            "/lol-perks/v1/pages",
-        ] {
-            if let Ok((status, _, body)) = st.app.riot_client.get(port, token_ref, uri).await {
-                if status.is_success() {
-                    let mut store = st.app.store.write().unwrap();
-                    store.insert_event(
-                        SourceId::LeagueClient,
-                        EventKind::Update,
-                        uri.to_string(),
-                        body,
-                        &st.app.vault,
-                    );
-                }
-            }
-        }
+        return (status, Json(json!({ "error": err.to_string() }))).into_response();
     }
 
-    let demo_guard = st.app.demo_remote.read().unwrap().clone();
     let mut alert_guard = st.alerts.write().unwrap();
-    let snap = extract_remote_state(&st.app, &demo_guard, &mut alert_guard);
+    let snap = extract_remote_state(&st.app, &mut alert_guard);
     drop(alert_guard);
 
     if let Ok(serialized) = serde_json::to_string(&snap) {

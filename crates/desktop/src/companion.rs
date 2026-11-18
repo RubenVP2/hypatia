@@ -14,7 +14,7 @@ use hypatia_shared::{
 };
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
-use crate::icons::DesktopAssetLoader;
+use crate::icons::{AppIconLookup, DesktopAssetLoader, IconLookup};
 use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
 use crate::{
     AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, FeedLine, LiveView, MainWindow,
@@ -41,47 +41,6 @@ fn canonical_rank_tier(raw: Option<&str>) -> SharedString {
         | "GRANDMASTER" | "CHALLENGER" => SharedString::from(upper),
         _ => SharedString::default(),
     }
-}
-
-fn resolve_splash(
-    app_state: &AppState,
-    loader: &mut DesktopAssetLoader,
-    preferred_id: i64,
-    champ_id: i64,
-) -> Image {
-    resolve_skin_art(app_state, loader, "splash", preferred_id, champ_id)
-}
-
-/// A skin's splash-derived art (`splash`, or the prepared draft `banner`), falling back to the
-/// champion's base skin while the chosen skin is not cached.
-fn resolve_skin_art(
-    app_state: &AppState,
-    loader: &mut DesktopAssetLoader,
-    category: &'static str,
-    preferred_id: i64,
-    champ_id: i64,
-) -> Image {
-    if !app_state.flags.splash_backdrops() {
-        return Image::default();
-    }
-    let target_id = if preferred_id > 0 {
-        preferred_id
-    } else if champ_id > 0 {
-        champ_id * 1000
-    } else {
-        return Image::default();
-    };
-    let img = loader.resolve(app_state, category, target_id);
-    if img.size().width > 0 {
-        return img;
-    }
-    if champ_id > 0 {
-        let base_id = champ_id * 1000;
-        if base_id != target_id && app_state.assets.cached_image_path(category, base_id).is_some() {
-            return loader.resolve(app_state, category, base_id);
-        }
-    }
-    Image::default()
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,8 +74,7 @@ fn summarize_pits(board: &LiveBoard) -> PitSummary {
 fn build_ban_entries(
     names: &[String],
     ids: &[i64],
-    app_state: &AppState,
-    loader: &mut DesktopAssetLoader,
+    icons: &mut impl IconLookup,
 ) -> Vec<BanEntry> {
     names
         .iter()
@@ -127,7 +85,7 @@ fn build_ban_entries(
             BanEntry {
                 name: SharedString::from(b.as_str()),
                 initials: champ_initials(b),
-                icon: loader.resolve(app_state, "champion", id),
+                icon: icons.resolve_icon("champion", id),
             }
         })
         .collect()
@@ -175,7 +133,7 @@ fn tower_coordinates(order_side: bool, lane: Lane, tier: u8) -> (f32, f32) {
 /// appears inside a row (a lock, a reveal), is created, and the one-shot draft animations play
 /// on creation. A fresh model per update would rebuild every row and replay them all.
 #[derive(Default)]
-struct DraftModels {
+pub struct DraftModels {
     allies: Rc<VecModel<AllyRow>>,
     map_allies: Rc<VecModel<MapAlly>>,
     enemies: Rc<VecModel<EnemyPick>>,
@@ -186,7 +144,7 @@ struct DraftModels {
 /// Row models of the live game view, kept like `DraftModels` so a tower that falls or an
 /// objective that is taken updates its own row and plays its moment once.
 #[derive(Default)]
-struct LiveModels {
+pub struct LiveModels {
     my_players: Rc<VecModel<PlayerLine>>,
     enemy_players: Rc<VecModel<PlayerLine>>,
     towers: Rc<VecModel<TowerDot>>,
@@ -211,10 +169,9 @@ fn sync_rows<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: Vec<
     ModelRc::from(model.clone())
 }
 
-fn build_champ_select_view(
+pub fn build_champ_select_view(
     cs: &ChampSelectSummary,
-    app_state: &AppState,
-    loader: &mut DesktopAssetLoader,
+    icons: &mut impl IconLookup,
     models: &DraftModels,
     lang: Lang,
 ) -> ChampSelectView {
@@ -276,7 +233,7 @@ fn build_champ_select_view(
         }
 
         let champ_icon = if has_champ {
-            loader.resolve(app_state, "champion", ally.champion_id)
+            icons.resolve_icon("champion", ally.champion_id)
         } else {
             Image::default()
         };
@@ -292,13 +249,7 @@ fn build_champ_select_view(
         };
 
         let banner = if has_champ {
-            resolve_skin_art(
-                app_state,
-                loader,
-                art::BANNER_CATEGORY,
-                ally.selected_skin_id,
-                ally.champion_id,
-            )
+            icons.resolve_skin_art(art::BANNER_CATEGORY, ally.selected_skin_id, ally.champion_id)
         } else {
             Image::default()
         };
@@ -309,9 +260,9 @@ fn build_champ_select_view(
             icon: champ_icon.clone(),
             banner,
             locked: has_champ && ally.pick_locked,
-            spell1_icon: loader.resolve(app_state, "spell", ally.spell1_id),
+            spell1_icon: icons.resolve_icon("spell", ally.spell1_id),
             spell1_name: SharedString::from(spell1_name),
-            spell2_icon: loader.resolve(app_state, "spell", ally.spell2_id),
+            spell2_icon: icons.resolve_icon("spell", ally.spell2_id),
             spell2_name: SharedString::from(spell2_name),
             player: SharedString::from(ally.summoner_name.as_str()),
             rank: SharedString::from(
@@ -362,7 +313,7 @@ fn build_champ_select_view(
         enemies.push(EnemyPick {
             champion: SharedString::from(e.champion_name.as_str()),
             initials: champ_initials(&e.champion_name),
-            icon: loader.resolve(app_state, "champion", e.champion_id),
+            icon: icons.resolve_icon("champion", e.champion_id),
             picked,
         });
     }
@@ -392,9 +343,9 @@ fn build_champ_select_view(
         (false, false) => format!("{q_label} · {s_label}"),
     };
 
-    let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, app_state, loader);
+    let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, icons);
     let their_ban_list =
-        build_ban_entries(&cs.their_team_bans, &cs.their_team_ban_ids, app_state, loader);
+        build_ban_entries(&cs.their_team_bans, &cs.their_team_ban_ids, icons);
     let (splash_skin, splash_champ) = self_splash.or(fallback_splash).unwrap_or((0, 0));
 
     ChampSelectView {
@@ -411,15 +362,14 @@ fn build_champ_select_view(
         my_ban_list: sync_rows(&models.my_bans, my_ban_list),
         their_ban_list: sync_rows(&models.their_bans, their_ban_list),
         anonymized: cs.is_ranked_solo_anonymized,
-        splash_icon: resolve_splash(app_state, loader, splash_skin, splash_champ),
+        splash_icon: icons.resolve_skin_art("splash", splash_skin, splash_champ),
     }
 }
 
-fn build_live_view(
+pub fn build_live_view(
     lg: &LiveGameSummary,
     board: Option<&LiveBoard>,
-    app_state: &AppState,
-    loader: &mut DesktopAssetLoader,
+    icons: &mut impl IconLookup,
     models: &LiveModels,
     lang: Lang,
 ) -> LiveView {
@@ -453,8 +403,8 @@ fn build_live_view(
             lane,
             champion: SharedString::from(p.champion_name.as_str()),
             initials: champ_initials(&p.champion_name),
-            icon: loader.resolve(app_state, "champion", cid),
-            banner: resolve_skin_art(app_state, loader, art::BANNER_CATEGORY, skin, cid),
+            icon: icons.resolve_icon("champion", cid),
+            banner: icons.resolve_skin_art(art::BANNER_CATEGORY, skin, cid),
             level: p.level as i32,
             kda: SharedString::from(kda_str),
             cs: p.creep_score as i32,
@@ -571,8 +521,8 @@ fn build_live_view(
         detail: SharedString::from(detail),
         dead: self_dead,
         active_initials: champ_initials(&lg.active_champion),
-        active_icon: loader.resolve(app_state, "champion", active_cid),
-        splash_icon: resolve_splash(app_state, loader, self_skin, active_cid),
+        active_icon: icons.resolve_icon("champion", active_cid),
+        splash_icon: icons.resolve_skin_art("splash", self_skin, active_cid),
         respawn_seconds: if self_dead { respawn_secs.max(0) } else { -1 },
         my_score: b.my_kills() as i32,
         enemy_score: b.enemy_kills() as i32,
@@ -612,10 +562,9 @@ fn format_thousands(value: u32, lang: Lang) -> String {
     out
 }
 
-fn build_end_view(
+pub fn build_end_view(
     eog: &EndOfGameSummary,
-    app_state: &AppState,
-    loader: &mut DesktopAssetLoader,
+    icons: &mut impl IconLookup,
     lang: Lang,
 ) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
@@ -645,8 +594,8 @@ fn build_end_view(
                     lane: Position::parse(&p.position).map_or(-1, Position::desktop_index),
                     champion: SharedString::from(p.champion_name.as_str()),
                     initials: champ_initials(&p.champion_name),
-                    icon: loader.resolve(app_state, "champion", pcid),
-                    banner: resolve_skin_art(app_state, loader, art::BANNER_CATEGORY, p.skin_id, pcid),
+                    icon: icons.resolve_icon("champion", pcid),
+                    banner: icons.resolve_skin_art(art::BANNER_CATEGORY, p.skin_id, pcid),
                     level: p.level as i32,
                     kda: SharedString::from(format!("{} / {} / {}", p.kills, p.deaths, p.assists)),
                     cs: p.creep_score as i32,
@@ -688,7 +637,7 @@ fn build_end_view(
             format_mm_ss(eog.game_length_sec as f64)
         )),
         victory,
-        splash_icon: resolve_splash(app_state, loader, eog.skin_id, cid),
+        splash_icon: icons.resolve_skin_art("splash", eog.skin_id, cid),
         tiles: ModelRc::new(VecModel::from(tiles)),
         allies: ModelRc::new(VecModel::from(allies)),
         enemies: ModelRc::new(VecModel::from(enemies)),
@@ -724,12 +673,12 @@ pub struct PhaseClock {
 }
 
 impl PhaseClock {
-    fn down(base_sec: f64, total_sec: i32) -> Self {
-        Self { anchor: Instant::now(), base_sec, counts_down: true, total_sec }
+    pub fn down_at(anchor: Instant, base_sec: f64, total_sec: i32) -> Self {
+        Self { anchor, base_sec, counts_down: true, total_sec }
     }
 
-    fn up(base_sec: f64) -> Self {
-        Self { anchor: Instant::now(), base_sec, counts_down: false, total_sec: 0 }
+    pub fn up_at(anchor: Instant, base_sec: f64) -> Self {
+        Self { anchor, base_sec, counts_down: false, total_sec: 0 }
     }
 
     /// Whole seconds to display right now: rounded up while counting down (a countdown shows
@@ -765,22 +714,265 @@ impl PhaseClock {
     }
 }
 
-/// Which clock, if any, the active view shows.
-fn phase_clock(snap: &SummarySnapshot, view: Screen) -> Option<PhaseClock> {
+/// Pure screen selection from [`SummarySnapshot`].
+pub fn select_screen(snap: &SummarySnapshot) -> Screen {
+    let lcu_live = snap
+        .sources
+        .iter()
+        .find(|s| s.id == SourceId::LeagueClient)
+        .is_some_and(|s| matches!(s.status, SourceStatus::Live | SourceStatus::Discovered));
+    let phase_str = snap
+        .phase
+        .as_ref()
+        .map(|p| p.phase.as_str())
+        .unwrap_or("None");
+    match phase_str {
+        "Lobby" => Screen::Lobby,
+        "Matchmaking" => Screen::Queue,
+        "ReadyCheck" => Screen::ReadyCheck,
+        "ChampSelect" => Screen::ChampSelect,
+        "InProgress" => Screen::InGame,
+        "EndOfGame" | "PreEndOfGame" => Screen::Results,
+        _ if lcu_live || snap.summoner.is_some() => Screen::Idle,
+        _ => Screen::Offline,
+    }
+}
+
+/// Which clock, if any, the active view shows, anchored at `now`.
+pub fn phase_clock_at(snap: &SummarySnapshot, view: Screen, now: Instant) -> Option<PhaseClock> {
     match view {
-        Screen::Queue => snap.matchmaking.as_ref().map(|m| PhaseClock::up(m.time_in_queue_sec)),
+        Screen::Queue => snap
+            .matchmaking
+            .as_ref()
+            .map(|m| PhaseClock::up_at(now, m.time_in_queue_sec)),
         Screen::ReadyCheck => snap
             .matchmaking
             .as_ref()
             .and_then(|m| m.ready_check_timer_sec)
-            .map(|left| PhaseClock::down(f64::from(left), 10.max(left))),
+            .map(|left| PhaseClock::down_at(now, f64::from(left), 10.max(left))),
         Screen::ChampSelect => snap.champ_select.as_ref().map(|cs| {
             let total = if cs.total_time_sec > 0 { cs.total_time_sec } else { cs.time_left_sec };
-            PhaseClock::down(cs.time_left_sec as f64, total as i32)
+            PhaseClock::down_at(now, cs.time_left_sec as f64, total as i32)
         }),
-        Screen::InGame => snap.live_game.as_ref().map(|lg| PhaseClock::up(lg.game_time_sec)),
+        Screen::InGame => snap
+            .live_game
+            .as_ref()
+            .map(|lg| PhaseClock::up_at(now, lg.game_time_sec)),
         _ => None,
     }
+}
+
+/// Which clock, if any, the active view shows.
+fn phase_clock(snap: &SummarySnapshot, view: Screen) -> Option<PhaseClock> {
+    phase_clock_at(snap, view, Instant::now())
+}
+
+/// Projects the wait-screen view (`Offline`, `Idle`, `Lobby`, `Queue`, `ReadyCheck`) and party rows.
+pub fn build_wait_view(
+    snap: &SummarySnapshot,
+    view: Screen,
+    icons: &mut impl IconLookup,
+    lang: Lang,
+) -> (WaitView, Vec<PartyRow>) {
+    let summoner_label = snap
+        .summoner
+        .as_ref()
+        .map(SummonerSummary::riot_id)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| lang.pick("Not signed in", "Non connecté").to_string());
+    let rank_label = snap
+        .summoner
+        .as_ref()
+        .and_then(|s| {
+            s.rank_tier.as_ref().map(|t| {
+                format!(
+                    "{} {} · {} LP",
+                    rank_tier_label(t, lang),
+                    s.rank_division.as_deref().unwrap_or(""),
+                    s.rank_lp.unwrap_or(0)
+                )
+            })
+        })
+        .unwrap_or_else(|| lang.pick("Unranked", "Non classé").to_string());
+
+    // The player's answer to the ready check: 0 pending, 1 accepted, 2 declined.
+    let ready_state = match snap.matchmaking.as_ref().and_then(|m| m.player_response.as_deref()) {
+        _ if view != Screen::ReadyCheck => 0,
+        Some("Accepted") => 1,
+        Some("Declined") => 2,
+        _ => 0,
+    };
+    let (title, detail, specimen) = match view {
+        Screen::Offline => (
+            lang.pick(
+                "Waiting for League of Legends",
+                "En attente de League of Legends",
+            )
+            .to_string(),
+            lang.pick(
+                "Open the Riot Client or League of Legends — Hypatia connects automatically.",
+                "Lancez le Client Riot ou League of Legends — Hypatia se connecte automatiquement.",
+            )
+            .to_string(),
+            SharedString::default(),
+        ),
+        Screen::Idle => (
+            if lang.is_fr() {
+                format!("Connecté en tant que {summoner_label}")
+            } else {
+                format!("Signed in as {summoner_label}")
+            },
+            lang.pick(
+                "Open a lobby or queue up to see your party and lane map.",
+                "Ouvrez un salon ou lancez une file pour voir votre équipe et la carte des postes.",
+            )
+            .to_string(),
+            SharedString::default(),
+        ),
+        Screen::Lobby => {
+            let qn = snap
+                .lobby
+                .as_ref()
+                .map(|l| l.queue_name.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(lang.pick("Lobby", "Salon"));
+            (
+                if lang.is_fr() {
+                    format!("Dans le salon · {qn}")
+                } else {
+                    format!("In Lobby · {qn}")
+                },
+                lang.pick(
+                    "Your party and lanes appear here. Pick lanes and queue in League, or from your phone with Mobile Remote.",
+                    "Votre groupe et vos postes s'affichent ici. Choisissez vos postes et lancez la file dans League, ou depuis votre téléphone avec l'App Mobile.",
+                )
+                .to_string(),
+                SharedString::default(),
+            )
+        }
+        Screen::Queue => {
+            let (elapsed, est) = snap
+                .matchmaking
+                .as_ref()
+                .map(|m| (m.time_in_queue_sec, m.estimated_queue_time_sec))
+                .unwrap_or((0.0, 60.0));
+            (
+                lang.pick("In Queue", "Recherche d'une partie").to_string(),
+                if lang.is_fr() {
+                    format!("Temps estimé {}", format_mm_ss(est))
+                } else {
+                    format!("Est. queue time {}", format_mm_ss(est))
+                },
+                format_mm_ss(elapsed),
+            )
+        }
+        _ => {
+            let (title, detail) = match ready_state {
+                1 => (
+                    lang.pick(
+                        "Match Accepted — waiting on other players",
+                        "Partie acceptée — en attente des autres joueurs",
+                    ),
+                    lang.pick(
+                        "Champion select starts once all ten players accept.",
+                        "La sélection des champions démarre quand les dix joueurs ont accepté.",
+                    ),
+                ),
+                2 => (
+                    lang.pick("Match Declined", "Partie refusée"),
+                    lang.pick(
+                        "You declined this match; the queue stops here.",
+                        "Vous avez refusé cette partie ; la file s'arrête ici.",
+                    ),
+                ),
+                _ => (
+                    lang.pick("Match Found — accept now!", "Partie trouvée — acceptez maintenant !"),
+                    lang.pick(
+                        "Accept in the League client, or straight from your phone via Mobile Remote.",
+                        "Acceptez dans le client League, ou directement depuis votre téléphone avec l'App Mobile.",
+                    ),
+                ),
+            };
+            (
+                title.to_string(),
+                detail.to_string(),
+                SharedString::from(lang.pick("READY", "PRÊT")),
+            )
+        }
+    };
+
+    let mut notes = vec![
+        StatLine {
+            label: SharedString::from(lang.pick("Summoner", "Invocateur")),
+            value: SharedString::from(summoner_label),
+        },
+        StatLine {
+            label: SharedString::from(lang.pick("Rank", "Classement")),
+            value: SharedString::from(rank_label),
+        },
+    ];
+    if let Some(ref s) = snap.summoner {
+        if s.summoner_level > 0 {
+            notes.push(StatLine {
+                label: SharedString::from(lang.pick("Summoner Level", "Niveau d'invocateur")),
+                value: SharedString::from(if lang.is_fr() {
+                    format!("Niveau {}", s.summoner_level)
+                } else {
+                    format!("Level {}", s.summoner_level)
+                }),
+            });
+        }
+    }
+
+    let summoner_icon = snap
+        .summoner
+        .as_ref()
+        .map(|s| icons.resolve_icon("profile", s.profile_icon_id))
+        .unwrap_or_default();
+    let summoner_initials = snap
+        .summoner
+        .as_ref()
+        .map(|s| champ_initials(&s.display_name))
+        .unwrap_or_default();
+    let summoner_header_name = snap
+        .summoner
+        .as_ref()
+        .map(SummonerSummary::riot_id)
+        .map(SharedString::from)
+        .unwrap_or_default();
+
+    let wait = WaitView {
+        title: SharedString::from(title),
+        detail: SharedString::from(detail),
+        specimen,
+        ready_state,
+        summoner_name: summoner_header_name,
+        summoner_initials,
+        summoner_icon,
+        rank_tier: canonical_rank_tier(snap.summoner.as_ref().and_then(|s| s.rank_tier.as_deref())),
+        notes: ModelRc::new(VecModel::from(notes)),
+    };
+
+    let party: Vec<PartyRow> = snap
+        .lobby
+        .as_ref()
+        .map(|l| {
+            l.members
+                .iter()
+                .map(|m| PartyRow {
+                    name: SharedString::from(m.summoner_name.as_str()),
+                    first_lane: Position::parse(m.first_position.as_deref().unwrap_or(""))
+                        .map_or(-1, Position::desktop_index),
+                    second_lane: Position::parse(m.second_position.as_deref().unwrap_or(""))
+                        .map_or(-1, Position::desktop_index),
+                    is_leader: m.is_leader,
+                    is_self: m.is_self,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    (wait, party)
 }
 
 /// Keeps the companion windows in sync with the Match Projection, touching Slint only for the
@@ -901,11 +1093,10 @@ fn apply_summary(
 ) -> Screen {
     let lang = app_state.lang();
     let prev = previous.map(|shown| &*shown.snapshot);
-    let phase_str = snap
-        .phase
-        .as_ref()
-        .map(|p| p.phase.as_str())
-        .unwrap_or("None");
+    let mut icons = AppIconLookup {
+        app: app_state,
+        loader,
+    };
 
     let source_info = |id: SourceId| -> (bool, SharedString) {
         snap.sources
@@ -932,27 +1123,7 @@ fn apply_summary(
     main_win.set_game_live(game_live);
     main_win.set_game_port(game_port);
 
-    if (lcu_live || game_live) && !app_state.is_demo_active() {
-        app_state
-            .assets
-            .trigger_metadata_sync(&app_state.discovery, &app_state.riot_client);
-        if app_state.flags.game_icons() {
-            app_state
-                .assets
-                .prefetch_demo_showcase(&app_state.discovery, &app_state.riot_client);
-        }
-    }
-
-    let view = match phase_str {
-        "Lobby" => Screen::Lobby,
-        "Matchmaking" => Screen::Queue,
-        "ReadyCheck" => Screen::ReadyCheck,
-        "ChampSelect" => Screen::ChampSelect,
-        "InProgress" => Screen::InGame,
-        "EndOfGame" | "PreEndOfGame" => Screen::Results,
-        _ if lcu_live || snap.summoner.is_some() => Screen::Idle,
-        _ => Screen::Offline,
-    };
+    let view = select_screen(snap);
     main_win.set_view(view);
     mini_win.set_view(view);
 
@@ -978,215 +1149,17 @@ fn apply_summary(
         });
     let waiting = !matches!(view, Screen::ChampSelect | Screen::InGame | Screen::Results);
     if waiting && wait_changed {
-        let summoner_label = snap
-            .summoner
-            .as_ref()
-            .map(SummonerSummary::riot_id)
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| lang.pick("Not signed in", "Non connecté").to_string());
-        let rank_label = snap
-            .summoner
-            .as_ref()
-            .and_then(|s| {
-                s.rank_tier.as_ref().map(|t| {
-                    format!(
-                        "{} {} · {} LP",
-                        rank_tier_label(t, lang),
-                        s.rank_division.as_deref().unwrap_or(""),
-                        s.rank_lp.unwrap_or(0)
-                    )
-                })
-            })
-            .unwrap_or_else(|| lang.pick("Unranked", "Non classé").to_string());
-
-        // The player's answer to the ready check: 0 pending, 1 accepted, 2 declined.
-        let ready_state = match snap.matchmaking.as_ref().and_then(|m| m.player_response.as_deref()) {
-            _ if view != Screen::ReadyCheck => 0,
-            Some("Accepted") => 1,
-            Some("Declined") => 2,
-            _ => 0,
-        };
-        let (title, detail, specimen) = match view {
-            Screen::Offline => (
-                lang.pick(
-                    "Waiting for League of Legends",
-                    "En attente de League of Legends",
-                )
-                .to_string(),
-                lang.pick(
-                    "Open the Riot Client or League of Legends — Hypatia connects automatically.",
-                    "Lancez le Client Riot ou League of Legends — Hypatia se connecte automatiquement.",
-                )
-                .to_string(),
-                SharedString::default(),
-            ),
-            Screen::Idle => (
-                if lang.is_fr() {
-                    format!("Connecté en tant que {summoner_label}")
-                } else {
-                    format!("Signed in as {summoner_label}")
-                },
-                lang.pick(
-                    "Open a lobby or queue up to see your party and lane map.",
-                    "Ouvrez un salon ou lancez une file pour voir votre équipe et la carte des postes.",
-                )
-                .to_string(),
-                SharedString::default(),
-            ),
-            Screen::Lobby => {
-                let qn = snap
-                    .lobby
-                    .as_ref()
-                    .map(|l| l.queue_name.as_str())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(lang.pick("Lobby", "Salon"));
-                (
-                    if lang.is_fr() {
-                        format!("Dans le salon · {qn}")
-                    } else {
-                        format!("In Lobby · {qn}")
-                    },
-                    lang.pick(
-                        "Your party and lanes appear here. Pick lanes and queue in League, or from your phone with Mobile Remote.",
-                        "Votre groupe et vos postes s'affichent ici. Choisissez vos postes et lancez la file dans League, ou depuis votre téléphone avec l'App Mobile.",
-                    )
-                    .to_string(),
-                    SharedString::default(),
-                )
-            }
-            Screen::Queue => {
-                let (elapsed, est) = snap
-                    .matchmaking
-                    .as_ref()
-                    .map(|m| (m.time_in_queue_sec, m.estimated_queue_time_sec))
-                    .unwrap_or((0.0, 60.0));
-                (
-                    lang.pick("In Queue", "Recherche d'une partie").to_string(),
-                    if lang.is_fr() {
-                        format!("Temps estimé {}", format_mm_ss(est))
-                    } else {
-                        format!("Est. queue time {}", format_mm_ss(est))
-                    },
-                    format_mm_ss(elapsed),
-                )
-            }
-            _ => {
-                let (title, detail) = match ready_state {
-                    1 => (
-                        lang.pick(
-                            "Match Accepted — waiting on other players",
-                            "Partie acceptée — en attente des autres joueurs",
-                        ),
-                        lang.pick(
-                            "Champion select starts once all ten players accept.",
-                            "La sélection des champions démarre quand les dix joueurs ont accepté.",
-                        ),
-                    ),
-                    2 => (
-                        lang.pick("Match Declined", "Partie refusée"),
-                        lang.pick(
-                            "You declined this match; the queue stops here.",
-                            "Vous avez refusé cette partie ; la file s'arrête ici.",
-                        ),
-                    ),
-                    _ => (
-                        lang.pick("Match Found — accept now!", "Partie trouvée — acceptez maintenant !"),
-                        lang.pick(
-                            "Accept in the League client, or straight from your phone via Mobile Remote.",
-                            "Acceptez dans le client League, ou directement depuis votre téléphone avec l'App Mobile.",
-                        ),
-                    ),
-                };
-                (
-                    title.to_string(),
-                    detail.to_string(),
-                    SharedString::from(lang.pick("READY", "PRÊT")),
-                )
-            }
-        };
-
-        let mut notes = vec![
-            StatLine {
-                label: SharedString::from(lang.pick("Summoner", "Invocateur")),
-                value: SharedString::from(summoner_label),
-            },
-            StatLine {
-                label: SharedString::from(lang.pick("Rank", "Classement")),
-                value: SharedString::from(rank_label),
-            },
-        ];
-        if let Some(ref s) = snap.summoner {
-            if s.summoner_level > 0 {
-                notes.push(StatLine {
-                    label: SharedString::from(lang.pick("Summoner Level", "Niveau d'invocateur")),
-                    value: SharedString::from(if lang.is_fr() {
-                        format!("Niveau {}", s.summoner_level)
-                    } else {
-                        format!("Level {}", s.summoner_level)
-                    }),
-                });
-            }
-        }
-
-        let summoner_icon = snap
-            .summoner
-            .as_ref()
-            .map(|s| loader.resolve(app_state, "profile", s.profile_icon_id))
-            .unwrap_or_default();
-        let summoner_initials = snap
-            .summoner
-            .as_ref()
-            .map(|s| champ_initials(&s.display_name))
-            .unwrap_or_default();
-        let summoner_header_name = snap
-            .summoner
-            .as_ref()
-            .map(SummonerSummary::riot_id)
-            .map(SharedString::from)
-            .unwrap_or_default();
-
-        let wait = WaitView {
-            title: SharedString::from(title),
-            detail: SharedString::from(detail),
-            specimen,
-            ready_state,
-            summoner_name: summoner_header_name,
-            summoner_initials,
-            summoner_icon,
-            rank_tier: canonical_rank_tier(
-                snap.summoner.as_ref().and_then(|s| s.rank_tier.as_deref()),
-            ),
-            notes: ModelRc::new(VecModel::from(notes)),
-        };
+        let (wait, party) = build_wait_view(snap, view, &mut icons, lang);
         if mini_open {
             mini_win.set_wait(wait.clone());
         }
         main_win.set_wait(wait);
-
-        let party: Vec<PartyRow> = snap
-            .lobby
-            .as_ref()
-            .map(|l| {
-                l.members
-                    .iter()
-                    .map(|m| PartyRow {
-                        name: SharedString::from(m.summoner_name.as_str()),
-                        first_lane: Position::parse(m.first_position.as_deref().unwrap_or(""))
-                            .map_or(-1, Position::desktop_index),
-                        second_lane: Position::parse(m.second_position.as_deref().unwrap_or(""))
-                            .map_or(-1, Position::desktop_index),
-                        is_leader: m.is_leader,
-                        is_self: m.is_self,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
         main_win.set_party(ModelRc::new(VecModel::from(party)));
     }
 
     if let Some(ref cs) = snap.champ_select {
         if prev.is_none_or(|p| p.champ_select.as_ref() != Some(cs)) {
-            let champ = build_champ_select_view(cs, app_state, loader, draft, lang);
+            let champ = build_champ_select_view(cs, &mut icons, draft, lang);
             // The mini widget only receives data while it is on screen.
             if mini_open {
                 mini_win.set_champ(champ.clone());
@@ -1197,7 +1170,7 @@ fn apply_summary(
 
     if let Some(ref lg) = snap.live_game {
         if prev.is_none_or(|p| p.live_game.as_ref() != Some(lg) || p.board != snap.board) {
-            let lv = build_live_view(lg, snap.board.as_ref(), app_state, loader, live, lang);
+            let lv = build_live_view(lg, snap.board.as_ref(), &mut icons, live, lang);
             // The mini widget only receives data while it is on screen.
             if mini_open {
                 mini_win.set_live(lv.clone());
@@ -1209,7 +1182,7 @@ fn apply_summary(
 
     if let Some(ref eog) = snap.end_of_game {
         if prev.is_none_or(|p| p.end_of_game.as_ref() != Some(eog)) {
-            main_win.set_end(build_end_view(eog, app_state, loader, lang));
+            main_win.set_end(build_end_view(eog, &mut icons, lang));
         }
     }
 
@@ -1232,13 +1205,13 @@ mod tests {
 
     #[test]
     fn phase_clock_keeps_its_anchor_until_the_client_sends_a_new_reading() {
-        let first = PhaseClock::down(30.0, 30);
+        let first = PhaseClock::down_at(Instant::now(), 30.0, 30);
         let later = Instant::now() + std::time::Duration::from_secs(5);
         // An unrelated event rebuilds the snapshot with the same 30 s reading: keep counting.
-        let kept = PhaseClock::follow(Some(first), Some(PhaseClock::down(30.0, 30))).unwrap();
+        let kept = PhaseClock::follow(Some(first), Some(PhaseClock::down_at(Instant::now(), 30.0, 30))).unwrap();
         assert_eq!(kept.seconds_now(later), first.seconds_now(later));
         // A new reading from the client re-anchors.
-        let fresh = PhaseClock::follow(Some(first), Some(PhaseClock::down(29.0, 30))).unwrap();
+        let fresh = PhaseClock::follow(Some(first), Some(PhaseClock::down_at(Instant::now(), 29.0, 30))).unwrap();
         assert_eq!(fresh.base_sec, 29.0);
         assert!(PhaseClock::follow(Some(first), None).is_none());
         assert!(PhaseClock::follow(None, Some(first)).is_some());
@@ -1314,5 +1287,119 @@ mod tests {
         assert_eq!(pits.enemy_drakes, 1);
         assert_eq!(pits.baron_owner, 1);
         assert_eq!(pits.herald_owner, 2);
+    }
+
+    #[test]
+    fn projects_screens_clocks_and_companion_views_in_process() {
+        use crate::icons::NoopIconLookup;
+        use hypatia_shared::{
+            project_match, BuiltinChampionCatalog, GamePhase, MatchInputs, SourceState,
+        };
+        use serde_json::json;
+        use std::time::Duration;
+
+        let mut icons = NoopIconLookup;
+
+        let offline = SummarySnapshot::default();
+        assert_eq!(select_screen(&offline), Screen::Offline);
+
+        let idle = SummarySnapshot {
+            sources: vec![SourceState {
+                id: SourceId::LeagueClient,
+                status: SourceStatus::Live,
+                port: Some(12345),
+                pid: Some(1),
+                protocol: None,
+                since: 0,
+                events_total: 0,
+                bytes_total: 0,
+                credential: None,
+            }],
+            ..Default::default()
+        };
+        assert_eq!(select_screen(&idle), Screen::Idle);
+
+        let cs = json!({
+            "localPlayerCellId": 1,
+            "queueType": "RANKED_SOLO_5x5",
+            "timer": {"phase": "BAN_PICK", "adjustedTimeLeftInPhase": 28_500, "totalTimeInPhase": 30_000},
+            "actions": [[{"id": 10, "actorCellId": 1, "type": "pick", "championId": 103, "completed": false, "isInProgress": true}]],
+            "myTeam": [
+                {"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 0, "puuid": ""},
+                {"cellId": 1, "assignedPosition": "MIDDLE", "championId": 103, "spell1Id": 4, "spell2Id": 14, "summonerId": 1, "puuid": "p-self"}
+            ],
+            "bans": {"myTeamBans": [238], "theirTeamBans": [157]}
+        });
+        let lobby = json!({
+            "queueId": 420,
+            "members": [{"summonerName": "Self#EUW", "puuid": "p-self", "isLeader": true, "firstPositionPreference": "MIDDLE", "secondPositionPreference": "TOP"}]
+        });
+        let allgame = json!({
+            "gameData": {"gameMode": "CLASSIC", "gameTime": 612.4},
+            "activePlayer": {"riotId": "Self#EUW", "level": 11, "currentGold": 1450},
+            "allPlayers": [
+                {"riotId": "Self#EUW", "championName": "Ahri", "team": "ORDER", "position": "MIDDLE", "level": 11, "isDead": true, "respawnTimer": 8.2, "scores": {"kills": 5, "deaths": 2, "assists": 7, "creepScore": 140}}
+            ]
+        });
+        let eog = json!({
+            "gameResult": "Victory",
+            "gameLength": 1805,
+            "localPlayer": {"championId": 103, "stats": {"CHAMPIONS_KILLED": 8, "NUM_DEATHS": 2, "ASSISTS": 12, "GOLD_EARNED": 14000, "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 28000}}
+        });
+
+        let snap = project_match(
+            &MatchInputs {
+                phase: Some(GamePhase {
+                    phase: "ChampSelect".to_string(),
+                    since: 0,
+                }),
+                lobby: Some(&lobby),
+                champ_select: Some(&cs),
+                live_allgame: Some(&allgame),
+                end_of_game: Some(&eog),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        assert_eq!(select_screen(&snap), Screen::ChampSelect);
+
+        let anchor = Instant::now();
+        let down_clock = phase_clock_at(&snap, Screen::ChampSelect, anchor).unwrap();
+        assert!(down_clock.counts_down());
+        assert_eq!(down_clock.total_sec, 30);
+        assert_eq!(down_clock.seconds_now(anchor + Duration::from_millis(500)), 29);
+
+        let up_clock = phase_clock_at(&snap, Screen::InGame, anchor).unwrap();
+        assert!(!up_clock.counts_down());
+        assert_eq!(up_clock.seconds_now(anchor + Duration::from_millis(900)), 613);
+
+        let (wait, party) = build_wait_view(&snap, Screen::Lobby, &mut icons, Lang::Fr);
+        assert!(wait.title.contains("Classée Solo/Duo"));
+        assert_eq!(party.len(), 1);
+
+        let cs_view = build_champ_select_view(
+            snap.champ_select.as_ref().unwrap(),
+            &mut icons,
+            &DraftModels::default(),
+            Lang::Fr,
+        );
+        assert!(cs_view.my_turn);
+        assert!(cs_view.anonymized);
+        assert!(cs_view.detail.contains("Classée Solo/Duo"));
+
+        let live_view = build_live_view(
+            snap.live_game.as_ref().unwrap(),
+            snap.board.as_ref(),
+            &mut icons,
+            &LiveModels::default(),
+            Lang::Fr,
+        );
+        assert!(live_view.dead);
+        assert!(live_view.title.contains("9s"));
+
+        let end_view = build_end_view(snap.end_of_game.as_ref().unwrap(), &mut icons, Lang::Fr);
+        assert!(end_view.victory);
+        assert_eq!(end_view.title.as_str(), "VICTOIRE");
     }
 }

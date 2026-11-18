@@ -13,16 +13,18 @@ pub mod settings;
 pub mod signal;
 pub mod store;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use hypatia_shared::{
-    project_match, EventKind, Lang, MatchInputs, Snapshot, SourceId, SummarySnapshot,
+    project_match, EventKind, Lang, MatchInputs, RemoteCommand, Snapshot, SourceId,
+    SummarySnapshot,
 };
 use serde_json::Value;
 use tracing::info;
 
-use crate::assets::{load_persisted_or_detect_lang, GameAssetCache};
+use crate::assets::GameAssetCache;
 use crate::catalog::CatalogStore;
 use crate::connectors::{
     spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector, ConnectorContext,
@@ -30,7 +32,10 @@ use crate::connectors::{
 pub use crate::diff::compute_json_diff_localized;
 use crate::discovery::DiscoveryManager;
 use crate::fixtures::spawn_demo_generator;
-use crate::lcu_actions::DemoRemoteState;
+pub use crate::fixtures::DemoRemoteState;
+use crate::lcu_actions::{
+    affected_lcu_uris, resolve_lcu_command_localized, LcuActionClient, RemoteActionError,
+};
 use crate::redaction::SecretVault;
 use crate::riot_http::ReadOnlyRiotClient;
 use crate::settings::{Flags, Settings};
@@ -64,6 +69,7 @@ pub struct AppState {
     pub signal: ChangeSignal,
     demo_spawned: Arc<AtomicBool>,
     lang: Arc<AtomicU8>,
+    lang_path: Option<PathBuf>,
     projection: Arc<ProjectionCache>,
 }
 
@@ -71,18 +77,46 @@ impl AppState {
     /// Starts Hypatia core with default settings and the persisted or OS-detected language.
     /// Must be called from a Tokio runtime.
     pub fn start(demo: bool, demo_rate: f32) -> Self {
-        Self::start_with_lang(demo, demo_rate, load_persisted_or_detect_lang())
+        Self::start_inner(
+            demo,
+            demo_rate,
+            Settings::load_lang(),
+            &Settings::default(),
+            Some(Settings::default_lang_path()),
+        )
     }
 
-    /// Starts Hypatia core with default settings and an explicit language.
+    /// Starts Hypatia core with default settings and an explicit in-memory language (no disk lang persistence).
     pub fn start_with_lang(demo: bool, demo_rate: f32, lang: Lang) -> Self {
-        Self::start_with(demo, demo_rate, lang, &Settings::default())
+        Self::start_inner(demo, demo_rate, lang, &Settings::default(), None)
     }
 
     /// Starts discovery, the event store and every connector (plus the synthetic generator in
     /// demo mode). Nothing is recorded beyond the Match Projection until
     /// [`Self::set_telemetry`] opens the Telemetry Lab.
     pub fn start_with(demo: bool, demo_rate: f32, lang: Lang, settings: &Settings) -> Self {
+        Self::start_inner(
+            demo,
+            demo_rate,
+            lang,
+            settings,
+            Some(Settings::default_lang_path()),
+        )
+    }
+
+    /// Overrides the file path used to persist language changes (`None` disables persistence).
+    pub fn with_lang_path(mut self, path: Option<PathBuf>) -> Self {
+        self.lang_path = path;
+        self
+    }
+
+    fn start_inner(
+        demo: bool,
+        demo_rate: f32,
+        lang: Lang,
+        settings: &Settings,
+        lang_path: Option<PathBuf>,
+    ) -> Self {
         let signal = ChangeSignal::new();
         let vault = SecretVault::new();
         let flags = Arc::new(Flags::new(settings));
@@ -110,6 +144,7 @@ impl AppState {
             signal,
             demo_spawned: Arc::new(AtomicBool::new(false)),
             lang: Arc::new(AtomicU8::new(lang as u8)),
+            lang_path,
             projection: Arc::new(Mutex::new(None)),
         };
 
@@ -130,6 +165,7 @@ impl AppState {
             discovery: self.discovery.clone(),
             store: self.store.clone(),
             catalog: self.catalog.clone(),
+            assets: self.assets.clone(),
             vault: self.vault.clone(),
             client: self.riot_client.clone(),
             flags: self.flags.clone(),
@@ -146,7 +182,16 @@ impl AppState {
                 demo_rate,
                 self.demo_remote.clone(),
                 self.discovery.demo_flag(),
+                self.lang.clone(),
+                self.assets.clone(),
             );
+        }
+    }
+
+    /// Pins the synthetic Demo simulator directly to `phase`.
+    pub fn set_demo_phase(&self, phase: &str) {
+        if self.is_demo_active() {
+            let _ = self.demo_remote.write().unwrap().set_phase(self, phase);
         }
     }
 
@@ -159,11 +204,114 @@ impl AppState {
         }
     }
 
-    /// Updates the active language and notifies every view.
+    /// Updates the active language, persists it if configured, and notifies every view.
     pub fn set_lang(&self, lang: Lang) {
         if self.lang.swap(lang as u8, Ordering::Relaxed) != lang as u8 {
+            if let Some(ref path) = self.lang_path {
+                if let Err(e) = Settings::save_lang_to(path, lang) {
+                    tracing::warn!("Failed to persist language: {e}");
+                }
+            }
+            if self.is_demo_active() {
+                self.demo_remote.read().unwrap().sync_to_store(self);
+            }
             self.signal.bump();
         }
+    }
+
+    /// Returns the local cached image path for `(category, id)` if game icons are enabled,
+    /// scheduling a non-blocking LCU prefetch when missing.
+    pub fn resolve_cached_asset(&self, category: &'static str, id: i64) -> Option<PathBuf> {
+        if !self.flags.game_icons() {
+            return None;
+        }
+        if let Some(path) = self.assets.cached_image_path(category, id) {
+            return Some(path);
+        }
+        self.assets
+            .prefetch_if_missing(category, id, &self.discovery, &self.riot_client);
+        None
+    }
+
+    /// Returns `(mime_type, bytes)` for an asset from memory cache, disk cache, or live LCU.
+    pub async fn fetch_asset_bytes(&self, category: &str, id: i64) -> Option<(&'static str, Vec<u8>)> {
+        self.assets
+            .get_or_fetch_bytes(category, id, &self.discovery, &self.riot_client)
+            .await
+    }
+
+    /// Inserts an observed LCU `Update` payload into `EventStore` and updates asset indexes
+    /// at ingest time (e.g. skin tile paths).
+    pub(crate) fn insert_lcu_update(&self, uri: &str, body: Value) {
+        if uri == "/lol-champ-select/v1/skin-carousel-skins" {
+            self.assets.register_skin_paths_from_json(&body);
+        }
+        let mut store = self.store.write().unwrap();
+        store.insert_event(
+            SourceId::LeagueClient,
+            EventKind::Update,
+            uri.to_string(),
+            body,
+            &self.vault,
+        );
+    }
+
+    /// Executes an allowlisted [`RemoteCommand`] against either the unified Demo simulator or
+    /// the live LCU client, then refreshes only the affected resources in `EventStore`.
+    pub async fn execute_remote_command(
+        &self,
+        action_client: &LcuActionClient,
+        cmd: &RemoteCommand,
+    ) -> Result<(), RemoteActionError> {
+        if self.is_demo_active() {
+            return self
+                .demo_remote
+                .write()
+                .unwrap()
+                .apply_command(self, cmd)
+                .map_err(|e| RemoteActionError::BadRequest(e.to_string()));
+        }
+
+        let lang = self.lang();
+        let editable_page_id = matches!(cmd, RemoteCommand::SaveRunePage { .. })
+            .then(|| self.get_summary().editable_rune_page_id)
+            .flatten();
+        let calls = resolve_lcu_command_localized(cmd, editable_page_id, lang)
+            .map_err(|e| RemoteActionError::BadRequest(e.to_string()))?;
+
+        let lcu = self.discovery.lcu_args().ok_or_else(|| {
+            RemoteActionError::ClientUnavailable(
+                lang.pick(
+                    "League of Legends client is not running",
+                    "Le client League of Legends n'est pas lancé",
+                )
+                .to_string(),
+            )
+        })?;
+        let port = lcu.app_port.ok_or_else(|| {
+            RemoteActionError::ClientUnavailable(
+                lang.pick(
+                    "League client port not detected yet",
+                    "Port du client League pas encore détecté",
+                )
+                .to_string(),
+            )
+        })?;
+        let token_ref = lcu.remoting_auth_token.as_deref();
+
+        action_client
+            .execute_calls_localized(port, token_ref, &calls, lang)
+            .await
+            .map_err(|e| RemoteActionError::GatewayError(e.to_string()))?;
+
+        for uri in affected_lcu_uris(cmd) {
+            if let Ok((status, _, body)) = self.riot_client.get(port, token_ref, uri).await {
+                if status.is_success() {
+                    self.insert_lcu_update(uri, body);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Applies user settings to every running background task.
@@ -249,6 +397,10 @@ impl AppState {
         let search = lcu("/lol-matchmaking/v1/search");
         let ready_check = lcu("/lol-matchmaking/v1/ready-check");
         let champ_select = lcu("/lol-champ-select/v1/session");
+        let pickable_champion_ids = lcu("/lol-champ-select/v1/pickable-champion-ids");
+        let bannable_champion_ids = lcu("/lol-champ-select/v1/bannable-champion-ids");
+        let skin_carousel = lcu("/lol-champ-select/v1/skin-carousel-skins");
+        let rune_pages = lcu("/lol-perks/v1/pages");
         let end_of_game = lcu("/lol-end-of-game/v1/eog-stats-block");
         let presences = store.current(SourceId::RiotClient, "/chat/v4/presences");
         let allgame = live("/liveclientdata/allgamedata");
@@ -267,6 +419,10 @@ impl AppState {
             matchmaking_search: search.as_deref(),
             ready_check: ready_check.as_deref(),
             champ_select: champ_select.as_deref(),
+            pickable_champion_ids: pickable_champion_ids.as_deref(),
+            bannable_champion_ids: bannable_champion_ids.as_deref(),
+            skin_carousel: skin_carousel.as_deref(),
+            rune_pages: rune_pages.as_deref(),
             live_allgame: allgame.as_deref(),
             live_active: active.as_deref(),
             live_events: events.as_deref(),
@@ -377,5 +533,36 @@ impl AppState {
 
         let (redacted, id) = self.record_call(source, path, body);
         Ok((status.as_u16(), redacted, id))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+
+    #[tokio::test]
+    async fn set_lang_persists_when_configured_and_resolve_cached_asset_respects_flag() {
+        let dir = tempfile::tempdir().unwrap();
+        let lang_path = dir.path().join("lang");
+        let app = AppState::start_with_lang(true, 1.0, Lang::En)
+            .with_lang_path(Some(lang_path.clone()));
+        app.set_lang(Lang::Fr);
+        assert_eq!(Settings::load_lang_from(&lang_path), Lang::Fr);
+
+        let cache_dir = dir.path().join("cache");
+        std::fs::create_dir_all(cache_dir.join("champion")).unwrap();
+        let icon_file = cache_dir.join("champion").join("103.png");
+        std::fs::write(&icon_file, b"\x89PNG\r\n\x1a\nTEST").unwrap();
+
+        let mut app_with_cache = app;
+        app_with_cache.assets = Arc::new(GameAssetCache::with_dir(cache_dir));
+        assert!(app_with_cache.resolve_cached_asset("champion", 103).is_some());
+
+        app_with_cache.apply_settings(&Settings {
+            game_icons: false,
+            ..Settings::default()
+        });
+        assert!(app_with_cache.resolve_cached_asset("champion", 103).is_none());
     }
 }

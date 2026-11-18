@@ -90,3 +90,29 @@ pub fn compute_json_diff_localized(
 
     out.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn computes_localized_json_diffs_for_initial_unchanged_and_changed_payloads() {
+        let curr = json!({"phase": "ChampSelect", "timeLeft": 20});
+
+        let initial_en = compute_json_diff_localized(None, &curr, Lang::En);
+        assert!(initial_en.contains("initial snapshot"));
+        assert!(initial_en.contains("+   \"phase\": \"ChampSelect\""));
+
+        let initial_fr = compute_json_diff_localized(None, &curr, Lang::Fr);
+        assert!(initial_fr.contains("instantané initial"));
+
+        let same = compute_json_diff_localized(Some(&curr), &curr, Lang::Fr);
+        assert!(same.contains("Aucune modification"));
+
+        let prev = json!({"phase": "Lobby", "timeLeft": 20});
+        let changed = compute_json_diff_localized(Some(&prev), &curr, Lang::En);
+        assert!(changed.contains("-   \"phase\": \"Lobby\""));
+        assert!(changed.contains("+   \"phase\": \"ChampSelect\""));
+    }
+}

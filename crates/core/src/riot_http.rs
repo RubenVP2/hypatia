@@ -1,9 +1,27 @@
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use base64::prelude::*;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
-use base64::prelude::*;
+
+/// Builds a loopback HTTPS client accepting local self-signed Riot certificates.
+pub(crate) fn build_loopback_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(5))
+        .build()
+        .expect("Failed to initialize loopback reqwest client")
+}
+
+/// Formats a Riot LCU/RC remoting auth token as an `Authorization` header value.
+pub(crate) fn format_riot_auth_header(token: &str) -> String {
+    if token.starts_with("Basic ") || token.starts_with("Bearer ") {
+        token.to_string()
+    } else {
+        format!("Basic {}", BASE64_STANDARD.encode(format!("riot:{token}")))
+    }
+}
 
 /// Strict read-only HTTP client dedicated to communicating with local Riot APIs (127.0.0.1).
 ///
@@ -24,13 +42,9 @@ impl ReadOnlyRiotClient {
     /// Creates a new `ReadOnlyRiotClient` configured with a 5-second timeout
     /// and accepting self-signed certificates strictly for local 127.0.0.1 connections.
     pub fn new() -> Self {
-        let inner = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .timeout(Duration::from_secs(5))
-            .build()
-            .expect("Failed to initialize reqwest client for ReadOnlyRiotClient");
-
-        Self { inner }
+        Self {
+            inner: build_loopback_client(),
+        }
     }
 
     /// Performs a strict binary GET request to https://127.0.0.1:{port}{path_and_query}.
@@ -61,12 +75,7 @@ impl ReadOnlyRiotClient {
         let mut req = self.inner.get(&url);
 
         if let Some(token) = auth_token {
-            let auth_header = if token.starts_with("Basic ") || token.starts_with("Bearer ") {
-                token.to_string()
-            } else {
-                format!("Basic {}", BASE64_STANDARD.encode(format!("riot:{}", token)))
-            };
-            req = req.header("Authorization", auth_header);
+            req = req.header("Authorization", format_riot_auth_header(token));
         }
 
         let resp = req

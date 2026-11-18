@@ -89,6 +89,9 @@ pub fn handle_wamp_message(source: SourceId, text: &str, ctx: &ConnectorContext)
     };
     let data: Value = serde_json::from_str(raw).unwrap_or(Value::Null);
     let uri = event.uri.into_owned();
+    if source == SourceId::LeagueClient && uri == "/lol-champ-select/v1/skin-carousel-skins" {
+        ctx.assets.register_skin_paths_from_json(&data);
+    }
     let meta = ctx
         .store
         .write()
@@ -103,6 +106,11 @@ async fn bootstrap_source_state(source: SourceId, target: &WampTarget, ctx: &Con
         match ctx.client.get(target.port, Some(&target.password), path).await {
             Ok((status, _, body)) if status.is_success() => {
                 tracing::debug!("{source}: bootstrapped {path}");
+                if source == SourceId::LeagueClient
+                    && *path == "/lol-champ-select/v1/skin-carousel-skins"
+                {
+                    ctx.assets.register_skin_paths_from_json(&body);
+                }
                 ctx.store.write().unwrap().insert_event(
                     source,
                     EventKind::Update,
@@ -177,6 +185,12 @@ async fn connect_and_listen(
     let (mut ws, _) =
         tokio_tungstenite::connect_async_tls_with_config(req, None, false, Some(connector)).await?;
     tracing::info!("{source}: connected to WAMP WebSocket on port {}", target.port);
+    if source == SourceId::LeagueClient {
+        ctx.assets.trigger_metadata_sync(&ctx.discovery, &ctx.client);
+        if ctx.flags.game_icons() {
+            ctx.assets.prefetch_demo_showcase(&ctx.discovery, &ctx.client);
+        }
+    }
 
     // Subscribe before bootstrapping so no update can slip between the two.
     let mut full_stream: Option<bool> = None;
@@ -265,6 +279,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::assets::GameAssetCache;
     use crate::catalog::CatalogStore;
     use crate::discovery::DiscoveryManager;
     use crate::redaction::SecretVault;
@@ -284,6 +299,7 @@ mod tests {
             discovery: DiscoveryManager::new_demo(vault.clone(), signal.clone()),
             store: Arc::new(RwLock::new(store)),
             catalog: Arc::new(RwLock::new(CatalogStore::new())),
+            assets: Arc::new(GameAssetCache::new(signal.clone())),
             vault,
             client: ReadOnlyRiotClient::new(),
             flags,

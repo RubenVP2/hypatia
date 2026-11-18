@@ -12,11 +12,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use hypatia_core::assets::{load_persisted_or_detect_lang, save_persisted_lang};
 use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
 use hypatia_core::settings::Settings;
 use hypatia_core::AppState;
-use hypatia_shared::{Lang, RemoteCommand, SourceId};
+use hypatia_shared::{Lang, SourceId};
 use serde_json::Value;
 use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode};
 use tracing::info;
@@ -143,7 +142,6 @@ impl Ui {
     }
 
     fn set_lang(&self, lang: Lang) {
-        save_persisted_lang(lang);
         self.app.set_lang(lang);
         apply_ui_language(&self.main, lang);
         self.telemetry.borrow_mut().invalidate_telemetry_cache();
@@ -170,15 +168,7 @@ impl Ui {
     }
 
     fn set_demo_phase(&self, phase: &str) {
-        let command = RemoteCommand::DemoSetPhase {
-            phase: phase.to_string(),
-        };
-        let _ = self
-            .app
-            .demo_remote
-            .write()
-            .unwrap()
-            .apply_command(&self.app, &command);
+        self.app.set_demo_phase(phase);
     }
 
     fn toggle_demo(&self) {
@@ -384,9 +374,9 @@ fn initial_lang(cli: &Cli) -> Lang {
     match cli.lang.as_deref() {
         Some(raw) => Lang::from_code(raw).unwrap_or_else(|| {
             tracing::warn!("Unknown --lang value '{raw}', falling back to saved/OS locale");
-            load_persisted_or_detect_lang()
+            Settings::load_lang()
         }),
-        None => load_persisted_or_detect_lang(),
+        None => Settings::load_lang(),
     }
 }
 

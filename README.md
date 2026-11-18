@@ -70,7 +70,7 @@ Hypatia is event-driven end to end: when nothing changes on the Riot side it doe
 - **Idle**: one lightweight process-table scan every 2.5 s (1 s while a Riot process runs); no timers in the UI.
 - **Lobby / champion select**: only the dozen LCU resources the companion displays are subscribed to over WAMP; the rest of the client's event firehose is never sent to Hypatia.
 - **In game**: a single `GET /liveclientdata/allgamedata` per second, projected once and pushed to the views only where something changed.
-- **Memory**: flat over a session. Only the latest payload of each displayed resource is kept; the full event history exists solely while the Telemetry Lab is open, bounded by count and by bytes.
+- **Memory**: flat over a session. Only the latest payload of each displayed resource is kept; the full event history exists solely while the Observatory is open, bounded by count and by bytes.
 
 Every background activity has its own switch under **Performance** in the left rail (persisted in `settings.json` next to the language preference):
 
@@ -81,11 +81,11 @@ Every background activity has its own switch under **Performance** in the left r
 | Riot Client connection | on | Only the League Client WebSocket is kept open. |
 | Mobile Remote at launch | on | No LAN port is opened until you start it from the rail. |
 | Eco mode | off | When **on**: UI, discovery and live-game refresh rates are halved. |
-| System footprint *(Telemetry Lab)* | on | No per-process CPU/RAM sampling or socket enumeration. |
-| Endpoint catalog *(Telemetry Lab)* | on | No Swagger / `/help` import. |
-| Replay API probe *(Telemetry Lab)* | off | No `/replay/game` polling. |
+| System footprint *(Observatory)* | on | No per-process CPU/RAM sampling or socket enumeration. |
+| Endpoint catalog *(Observatory)* | on | No Swagger / `/help` import. |
+| Replay API probe *(Observatory)* | off | No `/replay/game` polling. |
 
-The Telemetry Lab, Mini Widget and Demo mode are toggled from the rail as before; closing the Lab frees its event history.
+The Observatory, Mini Widget and Demo mode are toggled from the rail; closing the Observatory frees its event history.
 
 ### Benchmarks
 

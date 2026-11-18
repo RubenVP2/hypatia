@@ -8,6 +8,7 @@ pub use live_client::*;
 pub use replay::*;
 pub use wamp::*;
 
+use crate::assets::GameAssetCache;
 use crate::catalog::CatalogStore;
 use crate::discovery::DiscoveryManager;
 use crate::redaction::SecretVault;
@@ -22,6 +23,7 @@ pub struct ConnectorContext {
     pub discovery: Arc<DiscoveryManager>,
     pub store: Arc<RwLock<EventStore>>,
     pub catalog: Arc<RwLock<CatalogStore>>,
+    pub assets: Arc<GameAssetCache>,
     pub vault: SecretVault,
     pub client: ReadOnlyRiotClient,
     pub flags: Arc<Flags>,

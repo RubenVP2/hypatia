@@ -225,7 +225,7 @@ Desktop uses a split horizontal shell: a fixed `216px` left workspace rail (scro
 
 The **mini widget** (360px, always on top) follows the phase: a quiet plate with the queue or ready-check clock between games; in Champion Select the turn plate, a 64px countdown and the five allied slots; in game the score with a running clock, the player's status, a ten-portrait strip with dead players faded and their respawn seconds, a 140px tower map beside the objectives, and recent events.
 
-When Telemetry Lab opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with a sticky topbar and a fixed thumb-zone bottom dock. The dock carries the phase's tabs and its one main action (Accept with a separate Decline below, Lock/Ban during your turn). Every tap target is at least `44px` (demo chips excepted); re-rendering on a state push keeps the scroll position.
+When the Observatory opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with a sticky topbar and a fixed thumb-zone bottom dock. The dock carries the phase's tabs and its one main action (Accept with a separate Decline below, Lock/Ban during your turn). Every tap target is at least `44px` (demo chips excepted); re-rendering on a state push keeps the scroll position.
 
 ## Elevation & Depth
 
@@ -285,11 +285,8 @@ Motion marks a change of state that matters to the player; nothing loops and not
 ### Do:
 - **Do** highlight the acting pick and incoming ready checks with `signal-soft` fills plus `1px` full-perimeter borders; highlight selected tabs and toggles quietly.
 - **Do** use `Overpass Mono` with tabular numerals for every countdown, HTTP path, byte size, port, and KDA readout.
-- **Do** keep all functional labels, port indicators, and chip texts at `>= 11px` across both desktop and mobile targets.
 - **Do** bundle and serve font files offline inside desktop assets and local Axum `/fonts/*` routes.
 
 ### Don't:
-- **Don't** place small uppercase eyebrows above section headings or card titles.
-- **Don't** use thick `> 1px` colored `border-left` / `border-right` stripes on alerts, cards, or list rows.
 - **Don't** prefix navigation tabs or section headings with ordinal numbers (`1 ·`, `2 ·`, `01`) or use Unicode symbols (`↔`, `🔔`, `✓`) in place of `2px` vector icons.
 - **Don't** introduce drop shadows, glow gradients, external CDNs, or third-party telemetry calls.

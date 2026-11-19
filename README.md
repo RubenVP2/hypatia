@@ -6,6 +6,10 @@
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
+<p align="center">
+  <img src="docs/screenshots/desktop-live.png" alt="Hypatia Desktop — Live Game view with score, teams, Summoner's Rift map, and epic monster timers" width="100%" />
+</p>
+
 ---
 
 ## Download & Run
@@ -31,6 +35,10 @@ Want to try the interface without opening League? Turn on **Demo mode** from the
 - **Observatory *(optional)***: open it from the left rail whenever you want to inspect the live data your local Riot & League clients expose, browse available local endpoints, or check active Riot processes.
 - **Comfortable by default**: **Dark** and **Light** themes, instant **EN | FR** language switcher (auto-detected on first launch and synced with your phone), and reduced-motion support.
 
+<p align="center">
+  <img src="docs/screenshots/desktop-champ-select.png" alt="Hypatia Desktop — Champion Select view with roles, picks, bans, and lane map" width="100%" />
+</p>
+
 ---
 
 ## Safe & Private by Design
@@ -49,6 +57,12 @@ Want to try the interface without opening League? Turn on **Demo mode** from the
 4. Use the one-handed bottom dock to queue, accept Ready Checks, ban/pick champions, swap spells (`D ↔ F`), skins, or rune pages, and handle role/pick/champion swaps.
 
 You can revoke or regenerate the pairing QR code at any time in one click.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-champ-select.png" alt="Hypatia Mobile Remote — Champion Select one-handed draft view" width="280" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-live.png" alt="Hypatia Mobile Remote — Live Game scoreboard and objectives view" width="280" />
+</p>
 
 ---
 
@@ -76,6 +90,10 @@ Closing the Observatory immediately frees its event history from memory.
 ## For Developers
 
 Hypatia is a native **Rust 1.85+** & **Slint 1.18** workspace targeting Windows (`x86_64-pc-windows-msvc`), portable enough to build and run in `--demo` mode on Linux and macOS.
+
+<p align="center">
+  <img src="docs/screenshots/desktop-observatory.png" alt="Hypatia Observatory — Side-by-side live event stream and JSON payload inspector" width="100%" />
+</p>
 
 ### Architecture
 

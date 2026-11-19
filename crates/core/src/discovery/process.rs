@@ -1,6 +1,6 @@
+use hypatia_shared::{ProcessInfo, SourceId};
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use hypatia_shared::{ProcessInfo, SourceId};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 const RIOT_KEYWORDS: &[&str] = &["riot", "league", "valorant", "vgc", "vgtray"];
@@ -31,20 +31,21 @@ where
     while i < string_args.len() {
         let arg = &string_args[i];
 
-        let extract_val = |key: &str, current_arg: &str, next_arg: Option<&String>| -> Option<(String, usize)> {
-            let key_eq = format!("{}=", key);
-            if let Some(val) = current_arg.strip_prefix(&key_eq) {
-                let clean = val.trim_matches('"').trim_matches('\'').to_string();
-                return Some((clean, 1));
-            }
-            if current_arg == key {
-                if let Some(next) = next_arg {
-                    let clean = next.trim_matches('"').trim_matches('\'').to_string();
-                    return Some((clean, 2));
+        let extract_val =
+            |key: &str, current_arg: &str, next_arg: Option<&String>| -> Option<(String, usize)> {
+                let key_eq = format!("{}=", key);
+                if let Some(val) = current_arg.strip_prefix(&key_eq) {
+                    let clean = val.trim_matches('"').trim_matches('\'').to_string();
+                    return Some((clean, 1));
                 }
-            }
-            None
-        };
+                if current_arg == key {
+                    if let Some(next) = next_arg {
+                        let clean = next.trim_matches('"').trim_matches('\'').to_string();
+                        return Some((clean, 2));
+                    }
+                }
+                None
+            };
 
         let next = string_args.get(i + 1);
 

@@ -18,8 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use hypatia_shared::{
-    project_match, EventKind, Lang, MatchInputs, RemoteCommand, Snapshot, SourceId,
-    SummarySnapshot,
+    project_match, EventKind, Lang, MatchInputs, RemoteCommand, Snapshot, SourceId, SummarySnapshot,
 };
 use serde_json::Value;
 use tracing::info;
@@ -241,7 +240,11 @@ impl AppState {
     }
 
     /// Returns `(mime_type, bytes)` for an asset from memory cache, disk cache, or live LCU.
-    pub async fn fetch_asset_bytes(&self, category: &str, id: i64) -> Option<(&'static str, Vec<u8>)> {
+    pub async fn fetch_asset_bytes(
+        &self,
+        category: &str,
+        id: i64,
+    ) -> Option<(&'static str, Vec<u8>)> {
         self.assets
             .get_or_fetch_bytes(category, id, &self.discovery, &self.riot_client)
             .await
@@ -576,8 +579,8 @@ mod tests {
     async fn set_lang_persists_when_configured_and_resolve_cached_asset_respects_flag() {
         let dir = tempfile::tempdir().unwrap();
         let lang_path = dir.path().join("lang");
-        let app = AppState::start_with_lang(true, 1.0, Lang::En)
-            .with_lang_path(Some(lang_path.clone()));
+        let app =
+            AppState::start_with_lang(true, 1.0, Lang::En).with_lang_path(Some(lang_path.clone()));
         app.set_lang(Lang::Fr);
         assert_eq!(Settings::load_lang_from(&lang_path), Lang::Fr);
 
@@ -588,12 +591,16 @@ mod tests {
 
         let mut app_with_cache = app;
         app_with_cache.assets = Arc::new(GameAssetCache::with_dir(cache_dir));
-        assert!(app_with_cache.resolve_cached_asset("champion", 103).is_some());
+        assert!(app_with_cache
+            .resolve_cached_asset("champion", 103)
+            .is_some());
 
         app_with_cache.apply_settings(&Settings {
             game_icons: false,
             ..Settings::default()
         });
-        assert!(app_with_cache.resolve_cached_asset("champion", 103).is_none());
+        assert!(app_with_cache
+            .resolve_cached_asset("champion", 103)
+            .is_none());
     }
 }

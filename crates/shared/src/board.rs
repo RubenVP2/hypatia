@@ -82,8 +82,15 @@ pub struct FeedItem {
 /// A fixed spot on Summoner's Rift where a Live Client event can only have happened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MapPlace {
-    Turret { order_side: bool, lane: Lane, tier: u8 },
-    Inhibitor { order_side: bool, lane: Lane },
+    Turret {
+        order_side: bool,
+        lane: Lane,
+        tier: u8,
+    },
+    Inhibitor {
+        order_side: bool,
+        lane: Lane,
+    },
     DragonPit,
     /// The top-side pit shared by Void Grubs, Rift Herald and Baron Nashor.
     BaronPit,
@@ -148,11 +155,19 @@ pub struct LiveBoard {
 
 impl LiveBoard {
     pub fn my_kills(&self) -> u32 {
-        if self.my_team_is_order { self.order_kills } else { self.chaos_kills }
+        if self.my_team_is_order {
+            self.order_kills
+        } else {
+            self.chaos_kills
+        }
     }
 
     pub fn enemy_kills(&self) -> u32 {
-        if self.my_team_is_order { self.chaos_kills } else { self.order_kills }
+        if self.my_team_is_order {
+            self.chaos_kills
+        } else {
+            self.order_kills
+        }
     }
 }
 
@@ -263,9 +278,17 @@ pub fn pit_timers(objectives: &[ObjectiveTaken], grubs_taken: bool, now: f64) ->
         },
     };
     let baron = if !grubs_taken && now < GRUBS_LEAVE {
-        PitTimer { pit: Pit::Baron, kind: ObjectiveKind::Grubs, spawn_sec: GRUBS_SPAWN }
+        PitTimer {
+            pit: Pit::Baron,
+            kind: ObjectiveKind::Grubs,
+            spawn_sec: GRUBS_SPAWN,
+        }
     } else if !herald_taken && now < HERALD_LEAVE {
-        PitTimer { pit: Pit::Baron, kind: ObjectiveKind::Herald, spawn_sec: HERALD_SPAWN }
+        PitTimer {
+            pit: Pit::Baron,
+            kind: ObjectiveKind::Herald,
+            spawn_sec: HERALD_SPAWN,
+        }
     } else {
         PitTimer {
             pit: Pit::Baron,
@@ -377,14 +400,23 @@ pub fn extract_live_board_localized(
     for order_side in [true, false] {
         for lane in [Lane::Top, Lane::Mid, Lane::Bot] {
             for tier in 1..=3 {
-                towers.push(TowerState { order_side, lane, tier, standing: true });
+                towers.push(TowerState {
+                    order_side,
+                    lane,
+                    tier,
+                    standing: true,
+                });
             }
         }
     }
 
     let events = events_val
         .and_then(|ev| ev.get("Events"))
-        .or_else(|| allgame_val.and_then(|ag| ag.get("events")).and_then(|e| e.get("Events")))
+        .or_else(|| {
+            allgame_val
+                .and_then(|ag| ag.get("events"))
+                .and_then(|e| e.get("Events"))
+        })
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -432,7 +464,14 @@ pub fn extract_live_board_localized(
                 let victim_info = roster.lookup(victim);
                 // Killed by a turret: the victim stood under it.
                 if let Some((order_side, lane, tier)) = parse_turret_id(killer) {
-                    spot(MapPlace::Turret { order_side, lane, tier }, &mut std::iter::once(victim));
+                    spot(
+                        MapPlace::Turret {
+                            order_side,
+                            lane,
+                            tier,
+                        },
+                        &mut std::iter::once(victim),
+                    );
                 }
                 match killer_order {
                     Some(true) => ev_order_kills += 1,
@@ -455,7 +494,11 @@ pub fn extract_live_board_localized(
                             None => structure_killer(killer, lang),
                         };
                         // French puts the object pronoun before the verb.
-                        let verb = if killer.starts_with("Minion") { "ont" } else { "a" };
+                        let verb = if killer.starts_with("Minion") {
+                            "ont"
+                        } else {
+                            "a"
+                        };
                         if victim_is_self {
                             format!("{who} vous {verb} éliminé")
                         } else {
@@ -478,9 +521,19 @@ pub fn extract_live_board_localized(
                 });
             }
             "TurretKilled" => {
-                let turret = ev.get("TurretKilled").and_then(|v| v.as_str()).unwrap_or("");
+                let turret = ev
+                    .get("TurretKilled")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if let Some((order_side, lane, tier)) = parse_turret_id(turret) {
-                    spot(MapPlace::Turret { order_side, lane, tier }, &mut credited);
+                    spot(
+                        MapPlace::Turret {
+                            order_side,
+                            lane,
+                            tier,
+                        },
+                        &mut credited,
+                    );
                     if let Some(t) = towers
                         .iter_mut()
                         .find(|t| t.order_side == order_side && t.lane == lane && t.tier == tier)
@@ -489,14 +542,30 @@ pub fn extract_live_board_localized(
                     }
                     let text = if lang.is_fr() {
                         if mine(order_side) {
-                            format!("Votre tourelle {} {} est tombée", tier_name(tier, lang), lane_name(lane))
+                            format!(
+                                "Votre tourelle {} {} est tombée",
+                                tier_name(tier, lang),
+                                lane_name(lane)
+                            )
                         } else {
-                            format!("Votre équipe a détruit la tourelle {} {}", tier_name(tier, lang), lane_name(lane))
+                            format!(
+                                "Votre équipe a détruit la tourelle {} {}",
+                                tier_name(tier, lang),
+                                lane_name(lane)
+                            )
                         }
                     } else if mine(order_side) {
-                        format!("Your {} {} tower fell", lane_name(lane), tier_name(tier, lang))
+                        format!(
+                            "Your {} {} tower fell",
+                            lane_name(lane),
+                            tier_name(tier, lang)
+                        )
                     } else {
-                        format!("Your team destroyed their {} {} tower", lane_name(lane), tier_name(tier, lang))
+                        format!(
+                            "Your team destroyed their {} {} tower",
+                            lane_name(lane),
+                            tier_name(tier, lang)
+                        )
                     };
                     feed.push(FeedItem {
                         time_sec,
@@ -513,13 +582,21 @@ pub fn extract_live_board_localized(
                 }
             }
             "DragonKill" | "HeraldKill" | "BaronKill" | "HordeKill" => {
-                let pit = if name == "DragonKill" { MapPlace::DragonPit } else { MapPlace::BaronPit };
+                let pit = if name == "DragonKill" {
+                    MapPlace::DragonPit
+                } else {
+                    MapPlace::BaronPit
+                };
                 spot(pit, &mut credited);
                 grubs_taken |= name == "HordeKill";
                 let (kind, label) = match name {
                     "DragonKill" => {
                         let dt = ev.get("DragonType").and_then(|v| v.as_str()).unwrap_or("");
-                        let kind = if dt == "Elder" { ObjectiveKind::Elder } else { ObjectiveKind::Drake };
+                        let kind = if dt == "Elder" {
+                            ObjectiveKind::Elder
+                        } else {
+                            ObjectiveKind::Drake
+                        };
                         (kind, drake_label(dt, lang))
                     }
                     "HeraldKill" => (
@@ -535,7 +612,11 @@ pub fn extract_live_board_localized(
                 if let Some(by_order) = killer_order {
                     let stolen = ev.get("Stolen").and_then(|v| v.as_str()) == Some("True");
                     let text = if lang.is_fr() {
-                        let who = if mine(by_order) { "Votre équipe" } else { "L'ennemi" };
+                        let who = if mine(by_order) {
+                            "Votre équipe"
+                        } else {
+                            "L'ennemi"
+                        };
                         let verb = if stolen { "a volé" } else { "a pris" };
                         let article = objective_article(kind);
                         format!("{who} {verb} {article} {label}")
@@ -550,7 +631,12 @@ pub fn extract_live_board_localized(
                         lane: Some(Lane::Jungle),
                         by_my_team: Some(mine(by_order)),
                     });
-                    objectives.push(ObjectiveTaken { kind, label, by_order, time_sec });
+                    objectives.push(ObjectiveTaken {
+                        kind,
+                        label,
+                        by_order,
+                        time_sec,
+                    });
                 }
             }
             "FirstBlood" => {
@@ -578,19 +664,32 @@ pub fn extract_live_board_localized(
                 let acing = ev.get("AcingTeam").and_then(|v| v.as_str()).unwrap_or("");
                 let order = acing == "ORDER";
                 let text = if lang.is_fr() {
-                    if mine(order) { "Ace ! Votre équipe a éliminé l'ennemi" } else { "Ace : votre équipe a été éliminée" }
+                    if mine(order) {
+                        "Ace ! Votre équipe a éliminé l'ennemi"
+                    } else {
+                        "Ace : votre équipe a été éliminée"
+                    }
                 } else if mine(order) {
                     "Ace! Your team wiped the enemy"
                 } else {
                     "Ace: your team was wiped"
                 };
-                feed.push(FeedItem { time_sec, text: text.to_string(), lane: None, by_my_team: Some(mine(order)) });
+                feed.push(FeedItem {
+                    time_sec,
+                    text: text.to_string(),
+                    lane: None,
+                    by_my_team: Some(mine(order)),
+                });
             }
             _ => {}
         }
     }
 
-    feed.sort_by(|a, b| b.time_sec.partial_cmp(&a.time_sec).unwrap_or(std::cmp::Ordering::Equal));
+    feed.sort_by(|a, b| {
+        b.time_sec
+            .partial_cmp(&a.time_sec)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     feed.truncate(12);
 
     let (mut order_kills, mut chaos_kills) = (0u32, 0u32);
@@ -624,13 +723,26 @@ pub fn extract_live_board_localized(
 
     let pits = if on_rift {
         let mut taken = objectives.clone();
-        taken.sort_by(|a, b| a.time_sec.partial_cmp(&b.time_sec).unwrap_or(std::cmp::Ordering::Equal));
+        taken.sort_by(|a, b| {
+            a.time_sec
+                .partial_cmp(&b.time_sec)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         pit_timers(&taken, grubs_taken, live.game_time_sec)
     } else {
         Vec::new()
     };
 
-    LiveBoard { my_team_is_order, order_kills, chaos_kills, towers, objectives, feed, sightings, pits }
+    LiveBoard {
+        my_team_is_order,
+        order_kills,
+        chaos_kills,
+        towers,
+        objectives,
+        feed,
+        sightings,
+        pits,
+    }
 }
 
 #[cfg(test)]
@@ -640,7 +752,14 @@ mod tests {
     use crate::summary::LiveGamePlayerSummary;
     use serde_json::json;
 
-    fn player(id: &str, champ: &str, team: &str, pos: &str, kills: u32, is_self: bool) -> LiveGamePlayerSummary {
+    fn player(
+        id: &str,
+        champ: &str,
+        team: &str,
+        pos: &str,
+        kills: u32,
+        is_self: bool,
+    ) -> LiveGamePlayerSummary {
         LiveGamePlayerSummary {
             riot_id: id.to_string(),
             champion_id: BuiltinChampionCatalog.resolve_champion_id(champ),
@@ -680,9 +799,18 @@ mod tests {
 
     #[test]
     fn parses_turret_ids() {
-        assert_eq!(parse_turret_id("Turret_T1_L_03_A"), Some((true, Lane::Top, 1)));
-        assert_eq!(parse_turret_id("Turret_T2_C_04_A"), Some((false, Lane::Mid, 2)));
-        assert_eq!(parse_turret_id("Turret_T1_R_01_A"), Some((true, Lane::Bot, 3)));
+        assert_eq!(
+            parse_turret_id("Turret_T1_L_03_A"),
+            Some((true, Lane::Top, 1))
+        );
+        assert_eq!(
+            parse_turret_id("Turret_T2_C_04_A"),
+            Some((false, Lane::Mid, 2))
+        );
+        assert_eq!(
+            parse_turret_id("Turret_T1_R_01_A"),
+            Some((true, Lane::Bot, 3))
+        );
         assert_eq!(parse_turret_id("Turret_T2_C_01_A"), None);
     }
 
@@ -701,15 +829,28 @@ mod tests {
         assert!(!board.my_team_is_order);
         assert_eq!(board.my_kills(), 4);
         assert_eq!(board.enemy_kills(), 2);
-        assert!(!board.towers.iter().find(|t| !t.order_side && t.lane == Lane::Bot && t.tier == 1).unwrap().standing);
+        assert!(
+            !board
+                .towers
+                .iter()
+                .find(|t| !t.order_side && t.lane == Lane::Bot && t.tier == 1)
+                .unwrap()
+                .standing
+        );
         assert_eq!(board.objectives.len(), 1);
         assert_eq!(board.feed[0].text, "Your team took Infernal Drake");
         assert_eq!(board.feed[1].text, "Your bot outer tower fell");
         assert_eq!(board.feed[2].text, "You killed Zed");
 
         let board_fr = extract_live_board_localized(None, Some(&events), &l, Lang::Fr);
-        assert_eq!(board_fr.feed[0].text, "Votre équipe a pris le Dragon infernal");
-        assert_eq!(board_fr.feed[1].text, "Votre tourelle extérieure bot est tombée");
+        assert_eq!(
+            board_fr.feed[0].text,
+            "Votre équipe a pris le Dragon infernal"
+        );
+        assert_eq!(
+            board_fr.feed[1].text,
+            "Votre tourelle extérieure bot est tombée"
+        );
         assert_eq!(board_fr.feed[2].text, "Vous avez éliminé Zed");
     }
 
@@ -747,9 +888,18 @@ mod tests {
 
     #[test]
     fn parses_inhibitor_ids() {
-        assert_eq!(parse_inhibitor_id("Barracks_T1_L1"), Some((true, Lane::Top)));
-        assert_eq!(parse_inhibitor_id("Barracks_T2_C1"), Some((false, Lane::Mid)));
-        assert_eq!(parse_inhibitor_id("Barracks_T2_R1"), Some((false, Lane::Bot)));
+        assert_eq!(
+            parse_inhibitor_id("Barracks_T1_L1"),
+            Some((true, Lane::Top))
+        );
+        assert_eq!(
+            parse_inhibitor_id("Barracks_T2_C1"),
+            Some((false, Lane::Mid))
+        );
+        assert_eq!(
+            parse_inhibitor_id("Barracks_T2_R1"),
+            Some((false, Lane::Bot))
+        );
         assert_eq!(parse_inhibitor_id("Turret_T1_L_03_A"), None);
     }
 
@@ -771,14 +921,33 @@ mod tests {
             {"EventName": "HeraldKill", "EventTime": 540.0, "KillerName": "Ally", "Assisters": ["Ezo"]}
         ]});
         let board = extract_live_board_localized(None, Some(&events), &l, Lang::En);
-        let seen: Vec<(&str, MapPlace, f64)> =
-            board.sightings.iter().map(|s| (s.champion.as_str(), s.place, s.time_sec)).collect();
+        let seen: Vec<(&str, MapPlace, f64)> = board
+            .sightings
+            .iter()
+            .map(|s| (s.champion.as_str(), s.place, s.time_sec))
+            .collect();
         assert_eq!(
             seen,
             vec![
-                ("Zed", MapPlace::Turret { order_side: true, lane: Lane::Mid, tier: 1 }, 500.0),
+                (
+                    "Zed",
+                    MapPlace::Turret {
+                        order_side: true,
+                        lane: Lane::Mid,
+                        tier: 1
+                    },
+                    500.0
+                ),
                 ("Viego", MapPlace::DragonPit, 400.0),
-                ("Jinx", MapPlace::Turret { order_side: true, lane: Lane::Bot, tier: 1 }, 520.0),
+                (
+                    "Jinx",
+                    MapPlace::Turret {
+                        order_side: true,
+                        lane: Lane::Bot,
+                        tier: 1
+                    },
+                    520.0
+                ),
             ],
             "a kill places no one, allies are never listed, the latest place wins"
         );
@@ -800,25 +969,42 @@ mod tests {
     }
 
     fn taken(kind: ObjectiveKind, by_order: bool, time_sec: f64) -> ObjectiveTaken {
-        ObjectiveTaken { kind, label: String::new(), by_order, time_sec }
+        ObjectiveTaken {
+            kind,
+            label: String::new(),
+            by_order,
+            time_sec,
+        }
     }
 
     #[test]
     fn pit_timers_follow_the_rift_schedule() {
         use ObjectiveKind::*;
         let at = |objs: &[ObjectiveTaken], grubs: bool, now: f64| {
-            pit_timers(objs, grubs, now).iter().map(|p| (p.kind, p.spawn_sec)).collect::<Vec<_>>()
+            pit_timers(objs, grubs, now)
+                .iter()
+                .map(|p| (p.kind, p.spawn_sec))
+                .collect::<Vec<_>>()
         };
         assert_eq!(at(&[], false, 60.0), vec![(Drake, 300.0), (Grubs, 480.0)]);
         // Grubs taken, or gone at 14:45: Herald is next in the top pit.
         assert_eq!(at(&[], true, 600.0)[1], (Herald, 900.0));
         assert_eq!(at(&[], false, 885.0)[1], (Herald, 900.0));
         // Herald taken, or gone at 19:45: Baron at 20:00, then 6 minutes after each kill.
-        assert_eq!(at(&[taken(Herald, true, 950.0)], true, 960.0)[1], (Baron, 1200.0));
+        assert_eq!(
+            at(&[taken(Herald, true, 950.0)], true, 960.0)[1],
+            (Baron, 1200.0)
+        );
         assert_eq!(at(&[], true, 1185.0)[1], (Baron, 1200.0));
-        assert_eq!(at(&[taken(Baron, false, 1300.0)], true, 1310.0)[1], (Baron, 1660.0));
+        assert_eq!(
+            at(&[taken(Baron, false, 1300.0)], true, 1310.0)[1],
+            (Baron, 1660.0)
+        );
         // A drake respawns 5 minutes after the last one.
-        assert_eq!(at(&[taken(Drake, true, 330.0)], false, 340.0)[0], (Drake, 630.0));
+        assert_eq!(
+            at(&[taken(Drake, true, 330.0)], false, 340.0)[0],
+            (Drake, 630.0)
+        );
         // The fourth drake of one team claims the soul: Elder 6 minutes later, and after each kill.
         let soul = [
             taken(Drake, true, 300.0),

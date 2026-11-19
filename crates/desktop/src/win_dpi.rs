@@ -100,12 +100,10 @@ mod imp {
                 }
                 result
             }
-            WM_NCDESTROY => {
-                unsafe {
-                    RemoveWindowSubclass(hwnd, Some(dpi_subclass_proc), uid_subclass);
-                    DefSubclassProc(hwnd, msg, wparam, lparam)
-                }
-            }
+            WM_NCDESTROY => unsafe {
+                RemoveWindowSubclass(hwnd, Some(dpi_subclass_proc), uid_subclass);
+                DefSubclassProc(hwnd, msg, wparam, lparam)
+            },
             _ => unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) },
         }
     }

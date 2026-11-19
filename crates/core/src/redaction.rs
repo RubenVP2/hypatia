@@ -127,7 +127,12 @@ impl SecretVault {
 
     /// Returns the original secret for `id` if it is still in the vault.
     pub fn reveal(&self, id: u64) -> Option<String> {
-        self.inner.read().unwrap().entries.get(&id).map(|s| s.to_string())
+        self.inner
+            .read()
+            .unwrap()
+            .entries
+            .get(&id)
+            .map(|s| s.to_string())
     }
 
     pub fn len(&self) -> usize {

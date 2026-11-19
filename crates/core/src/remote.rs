@@ -20,15 +20,12 @@ use serde_json::json;
 use tokio::sync::{broadcast, watch};
 use tracing::{info, warn};
 
-use crate::lcu_actions::{
-    extract_remote_state, AlertTracker, LcuActionClient, RemoteActionError,
-};
+use crate::lcu_actions::{extract_remote_state, AlertTracker, LcuActionClient, RemoteActionError};
 use crate::AppState;
 
 const REMOTE_UI_HTML: &str = include_str!("remote_ui.html");
 
-const FONT_OVERPASS_REGULAR: &[u8] =
-    include_bytes!("../../desktop/ui/fonts/Overpass-Regular.ttf");
+const FONT_OVERPASS_REGULAR: &[u8] = include_bytes!("../../desktop/ui/fonts/Overpass-Regular.ttf");
 const FONT_OVERPASS_SEMIBOLD: &[u8] =
     include_bytes!("../../desktop/ui/fonts/Overpass-SemiBold.ttf");
 const FONT_OVERPASS_EXTRABOLD: &[u8] =
@@ -109,7 +106,11 @@ pub fn render_qr_code(url: &str, token: &str) -> Result<QrCodeVisual> {
             } else {
                 false
             };
-            let (r, g, b) = if is_dark { (20, 22, 27) } else { (243, 241, 234) };
+            let (r, g, b) = if is_dark {
+                (20, 22, 27)
+            } else {
+                (243, 241, 234)
+            };
             for dy in 0..scale {
                 for dx in 0..scale {
                     let px = mx * scale + dx;
@@ -134,7 +135,12 @@ pub fn render_qr_code(url: &str, token: &str) -> Result<QrCodeVisual> {
             } else {
                 false
             };
-            let bot = if y + 1 < total && x >= quiet && x < quiet + n && (y + 1) >= quiet && (y + 1) < quiet + n {
+            let bot = if y + 1 < total
+                && x >= quiet
+                && x < quiet + n
+                && (y + 1) >= quiet
+                && (y + 1) < quiet + n
+            {
                 modules[(y + 1 - quiet) * n + (x - quiet)] == qrcode::Color::Dark
             } else {
                 false
@@ -263,10 +269,7 @@ fn check_token(headers: &HeaderMap, query_token: Option<&str>, expected: &str) -
             return true;
         }
     }
-    if let Some(ht) = headers
-        .get("x-hypatia-token")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(ht) = headers.get("x-hypatia-token").and_then(|v| v.to_str().ok()) {
         if ht.trim() == expected {
             return true;
         }
@@ -289,11 +292,9 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], preferred_port));
     let listener = match tokio::net::TcpListener::bind(bind_addr).await {
         Ok(l) => l,
-        Err(_) => {
-            tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
-                .await
-                .context("Failed to bind Mobile Remote listener")?
-        }
+        Err(_) => tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
+            .await
+            .context("Failed to bind Mobile Remote listener")?,
     };
     let actual_port = listener.local_addr()?.port();
     let token = Arc::new(RwLock::new(generate_pairing_token()));
@@ -366,7 +367,10 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         .with_state(router_state);
 
     tokio::spawn(async move {
-        info!("Mobile Remote listening on http://{}:{}", lan_ip, actual_port);
+        info!(
+            "Mobile Remote listening on http://{}:{}",
+            lan_ip, actual_port
+        );
         let _ = axum::serve(listener, router)
             .with_graceful_shutdown(async move {
                 let _ = shutdown_rx.changed().await;
@@ -868,7 +872,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_remote_assets_require_auth_and_serve_cached_bitmaps() {
-        let dir = std::env::temp_dir().join(format!("hypatia_remote_assets_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("hypatia_remote_assets_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("champion")).unwrap();
         let fake_png = b"\x89PNG\r\n\x1a\nTESTCHAMP".to_vec();
@@ -883,7 +888,10 @@ mod tests {
 
         // Missing auth -> 401
         let no_auth = client
-            .get(format!("http://127.0.0.1:{}/assets/champion/103.png", handle.port))
+            .get(format!(
+                "http://127.0.0.1:{}/assets/champion/103.png",
+                handle.port
+            ))
             .send()
             .await
             .unwrap();
@@ -899,7 +907,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(hit.status(), StatusCode::OK);
-        assert_eq!(hit.headers().get(reqwest::header::CONTENT_TYPE).unwrap(), "image/png");
+        assert_eq!(
+            hit.headers().get(reqwest::header::CONTENT_TYPE).unwrap(),
+            "image/png"
+        );
         assert_eq!(hit.bytes().await.unwrap().as_ref(), fake_png.as_slice());
 
         // Authorized request for unknown/uncached champion -> 404

@@ -41,8 +41,14 @@ pub fn compute_json_diff_localized(
     let curr_lines: Vec<&str> = curr_pretty.lines().collect();
 
     let mut out = Vec::new();
-    out.push(lang.pick("--- previous payload", "--- payload précédent").to_string());
-    out.push(lang.pick("+++ current payload", "+++ payload actuel").to_string());
+    out.push(
+        lang.pick("--- previous payload", "--- payload précédent")
+            .to_string(),
+    );
+    out.push(
+        lang.pick("+++ current payload", "+++ payload actuel")
+            .to_string(),
+    );
 
     let max_len = prev_lines.len().max(curr_lines.len());
     let mut i = 0;
@@ -61,7 +67,9 @@ pub fn compute_json_diff_localized(
                         out.push(format!("+ {}", curr_lines[j + k]));
                     }
                     j += offset;
-                } else if let Some(offset) = (1..=4).find(|&off| prev_lines.get(i + off) == Some(&c)) {
+                } else if let Some(offset) =
+                    (1..=4).find(|&off| prev_lines.get(i + off) == Some(&c))
+                {
                     for k in 0..offset {
                         out.push(format!("- {}", prev_lines[i + k]));
                     }

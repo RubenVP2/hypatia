@@ -123,8 +123,8 @@ impl LivePollRate {
 pub enum DiscoveryRate {
     #[default]
     Normal = 0, // 1000 ms active / 2500 ms idle
-    Eco = 1,    // 2000 ms active / 5000 ms idle
-    Slow = 2,   // 5000 ms active / 10000 ms idle
+    Eco = 1,  // 2000 ms active / 5000 ms idle
+    Slow = 2, // 5000 ms active / 10000 ms idle
 }
 
 impl DiscoveryRate {
@@ -213,7 +213,7 @@ pub enum AssetCacheBudget {
     Minimal = 0, // 16 entries
     Compact = 1, // 64 entries
     #[default]
-    Full = 2,    // 256 entries
+    Full = 2, // 256 entries
 }
 
 impl AssetCacheBudget {
@@ -779,18 +779,23 @@ impl Flags {
         } else {
             s.clock_rate
         };
-        self.live_poll_rate.store(live_poll as u8, Ordering::Relaxed);
-        self.discovery_rate.store(disc_rate as u8, Ordering::Relaxed);
+        self.live_poll_rate
+            .store(live_poll as u8, Ordering::Relaxed);
+        self.discovery_rate
+            .store(disc_rate as u8, Ordering::Relaxed);
         self.clock_rate.store(clock_rate as u8, Ordering::Relaxed);
         self.riot_client.store(s.riot_client, Ordering::Relaxed);
         self.replay_api.store(s.replay_api, Ordering::Relaxed);
         self.game_icons.store(s.game_icons, Ordering::Relaxed);
-        self.splash_backdrops.store(s.splash_backdrops, Ordering::Relaxed);
+        self.splash_backdrops
+            .store(s.splash_backdrops, Ordering::Relaxed);
         self.asset_cache_budget
             .store(s.asset_cache_budget as u8, Ordering::Relaxed);
         self.demo_prefetch.store(s.demo_prefetch, Ordering::Relaxed);
-        self.system_footprint.store(s.system_footprint, Ordering::Relaxed);
-        self.endpoint_catalog.store(s.endpoint_catalog, Ordering::Relaxed);
+        self.system_footprint
+            .store(s.system_footprint, Ordering::Relaxed);
+        self.endpoint_catalog
+            .store(s.endpoint_catalog, Ordering::Relaxed);
         self.eco_mode.store(s.eco_mode, Ordering::Relaxed);
         self.pause_when_minimized
             .store(s.pause_when_minimized, Ordering::Relaxed);
@@ -1012,13 +1017,19 @@ mod tests {
         assert_eq!(s.live_poll_rate, LivePollRate::Eco);
         let flags = Flags::new(&s);
         assert_eq!(flags.live_poll_interval(), Duration::from_millis(2000));
-        assert_eq!(flags.discovery_rate().active_interval(), Duration::from_millis(5000));
+        assert_eq!(
+            flags.discovery_rate().active_interval(),
+            Duration::from_millis(5000)
+        );
         assert_eq!(flags.asset_cache_budget().max_entries(), 16);
 
         assert!(s.set_choice("live_poll_rate", 0));
         flags.apply(&s);
         assert_eq!(flags.live_poll_interval(), Duration::from_millis(1000));
-        assert_eq!(flags.discovery_rate().active_interval(), Duration::from_millis(5000));
+        assert_eq!(
+            flags.discovery_rate().active_interval(),
+            Duration::from_millis(5000)
+        );
     }
 
     #[test]

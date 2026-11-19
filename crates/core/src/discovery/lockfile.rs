@@ -230,6 +230,9 @@ mod tests {
         let parsed = read_lockfile_tolerant(temp.path()).unwrap();
         let secret_ref = vault.store(parsed.password.clone(), "test".to_string());
 
-        assert_eq!(vault.reveal(secret_ref.id), Some("test_password_123".to_string()));
+        assert_eq!(
+            vault.reveal(secret_ref.id),
+            Some("test_password_123".to_string())
+        );
     }
 }

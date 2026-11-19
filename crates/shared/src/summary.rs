@@ -12,8 +12,7 @@ use crate::champions::{
 use crate::event::GamePhase;
 use crate::i18n::Lang;
 use crate::remote::{
-    RemoteActiveAction, RemoteChampionOption, RemoteIncomingSwap, RemoteRunePage,
-    RemoteSkinOption,
+    RemoteActiveAction, RemoteChampionOption, RemoteIncomingSwap, RemoteRunePage, RemoteSkinOption,
 };
 use crate::source::{SourceId, SourceState};
 
@@ -354,9 +353,9 @@ pub fn queue_type_label(queue_type: &str, lang: Lang) -> String {
         "ARAM" => "ARAM".to_string(),
         "URF" | "ARURF" => "URF".to_string(),
         "ARENA" | "CHERRY" => "Arena".to_string(),
-        "PRACTICETOOL" | "PRACTICE_TOOL" => {
-            lang.pick("Practice Tool", "Outil d'entraînement").to_string()
-        }
+        "PRACTICETOOL" | "PRACTICE_TOOL" => lang
+            .pick("Practice Tool", "Outil d'entraînement")
+            .to_string(),
         "CUSTOM" => lang.pick("Custom", "Partie personnalisée").to_string(),
         _ => trimmed.replace('_', " "),
     }
@@ -372,7 +371,9 @@ pub fn sub_phase_label(sub_phase: &str, lang: Lang) -> String {
         "PLANNING" => lang.pick("Planning", "Planification").to_string(),
         "BAN_PICK" => lang.pick("Ban / Pick", "Bannissements & Choix").to_string(),
         "FINALIZATION" => lang.pick("Finalization", "Finalisation").to_string(),
-        "GAME_STARTING" => lang.pick("Game Starting", "Lancement de la partie").to_string(),
+        "GAME_STARTING" => lang
+            .pick("Game Starting", "Lancement de la partie")
+            .to_string(),
         _ => trimmed.replace('_', " "),
     }
 }
@@ -431,7 +432,11 @@ pub fn format_clock_mm_ss(seconds: f64) -> String {
 /// Formats a byte count with localized SI units (`B`/`o`, `KB`/`Ko`, `MB`/`Mo`).
 pub fn format_bytes(bytes: u64, lang: Lang) -> String {
     if bytes >= 1_048_576 {
-        format!("{:.1} {}", bytes as f64 / 1_048_576.0, lang.pick("MB", "Mo"))
+        format!(
+            "{:.1} {}",
+            bytes as f64 / 1_048_576.0,
+            lang.pick("MB", "Mo")
+        )
     } else if bytes >= 1024 {
         format!("{:.1} {}", bytes as f64 / 1024.0, lang.pick("KB", "Ko"))
     } else {
@@ -497,13 +502,8 @@ pub fn project_match(
         lobby.as_ref(),
         lang,
     );
-    let champ_select = extract_champ_select_summary(
-        inputs,
-        summoner.as_ref(),
-        lobby.as_ref(),
-        champions,
-        lang,
-    );
+    let champ_select =
+        extract_champ_select_summary(inputs, summoner.as_ref(), lobby.as_ref(), champions, lang);
     let editable_rune_page_id = champ_select
         .as_ref()
         .and_then(|cs| cs.editable_rune_page_id)
@@ -631,7 +631,10 @@ fn extract_summoner_summary(
             .and_then(|qm| qm.get("RANKED_SOLO_5x5"))
             .or(Some(rk));
         if let Some(s) = solo {
-            rank_tier = s.get("tier").and_then(|v| v.as_str()).map(|s| s.to_string());
+            rank_tier = s
+                .get("tier")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             rank_division = s
                 .get("division")
                 .and_then(|v| v.as_str())
@@ -715,7 +718,11 @@ fn extract_lobby_summary(
         .and_then(|m| m.get("summonerName").or_else(|| m.get("gameName")))
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .or_else(|| summoner.map(|s| s.display_name.as_str()).filter(|s| !s.is_empty()));
+        .or_else(|| {
+            summoner
+                .map(|s| s.display_name.as_str())
+                .filter(|s| !s.is_empty())
+        });
 
     let mut members = Vec::new();
     let mut matched_any_self = false;
@@ -732,14 +739,8 @@ fn extract_lobby_summary(
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string());
-            let m_summoner_id = m
-                .get("summonerId")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let is_leader = m
-                .get("isLeader")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let m_summoner_id = m.get("summonerId").and_then(|v| v.as_u64()).unwrap_or(0);
+            let is_leader = m.get("isLeader").and_then(|v| v.as_bool()).unwrap_or(false);
             let ready = m.get("ready").and_then(|v| v.as_bool()).unwrap_or(true);
             let first_position = m
                 .get("firstPositionPreference")
@@ -756,8 +757,7 @@ fn extract_lobby_summary(
                 .is_some_and(|(a, b)| a == b)
                 || (local_summoner_id > 0 && m_summoner_id == local_summoner_id)
                 || local_name.is_some_and(|ln| {
-                    summoner_name == ln
-                        || summoner.is_some_and(|s| summoner_name == s.riot_id())
+                    summoner_name == ln || summoner.is_some_and(|s| summoner_name == s.riot_id())
                 });
             if is_self {
                 matched_any_self = true;
@@ -961,10 +961,7 @@ fn parse_champ_select_actions(
             .get("isInProgress")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let champ_id = act
-            .get("championId")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+        let champ_id = act.get("championId").and_then(|v| v.as_i64()).unwrap_or(0);
 
         if in_progress && !completed {
             if acting_cell_id.is_none() {
@@ -1083,23 +1080,14 @@ fn extract_champ_select_summary(
                 lang,
                 true,
             );
-            let spell1_id = member
-                .get("spell1Id")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            let spell2_id = member
-                .get("spell2Id")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
+            let spell1_id = member.get("spell1Id").and_then(|v| v.as_i64()).unwrap_or(0);
+            let spell2_id = member.get("spell2Id").and_then(|v| v.as_i64()).unwrap_or(0);
             let selected_skin_id = member
                 .get("selectedSkinId")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0);
 
-            let raw_puuid = member
-                .get("puuid")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let raw_puuid = member.get("puuid").and_then(|v| v.as_str()).unwrap_or("");
             let summoner_id = member
                 .get("summonerId")
                 .and_then(|v| v.as_u64())
@@ -1129,7 +1117,9 @@ fn extract_champ_select_summary(
                     .map(|s| s.to_string())
                     .or_else(|| {
                         if is_self {
-                            summoner.map(SummonerSummary::riot_id).filter(|s| !s.is_empty())
+                            summoner
+                                .map(SummonerSummary::riot_id)
+                                .filter(|s| !s.is_empty())
                         } else {
                             None
                         }
@@ -1171,7 +1161,9 @@ fn extract_champ_select_summary(
                 is_premade,
                 selected_skin_id,
                 pick_locked: champ_id > 0
-                    && locked_cells.as_ref().is_none_or(|cells| cells.contains(&cell_id)),
+                    && locked_cells
+                        .as_ref()
+                        .is_none_or(|cells| cells.contains(&cell_id)),
                 acting_type: cell_acting.get(&cell_id).cloned(),
                 position_swap_id: p_swap.as_ref().map(|x| x.0),
                 position_swap_state: p_swap.map(|x| x.1),
@@ -1390,7 +1382,10 @@ fn extract_rune_pages(pages_val: Option<&Value>, lang: Lang) -> (Vec<RemoteRuneP
         .filter_map(|p| {
             let id = p.get("id")?.as_i64()?;
             let name = p.get("name")?.as_str()?.to_string();
-            let primary_style_id = p.get("primaryStyleId").and_then(|v| v.as_i64()).unwrap_or(8000);
+            let primary_style_id = p
+                .get("primaryStyleId")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(8000);
             let sub_style_id = p.get("subStyleId").and_then(|v| v.as_i64()).unwrap_or(8400);
             let selected_perk_ids: Vec<i64> = p
                 .get("selectedPerkIds")
@@ -1508,10 +1503,7 @@ fn extract_live_game_summary(
                 .get("riotIdGameName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let p_summoner_name = p
-                .get("summonerName")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let p_summoner_name = p.get("summonerName").and_then(|v| v.as_str()).unwrap_or("");
             let is_self = (!active_riot_id.is_empty() && p_riot_id == active_riot_id)
                 || (!active_game_name.is_empty() && p_game_name == active_game_name)
                 || (!active_summoner_name.is_empty()
@@ -1558,13 +1550,18 @@ fn extract_live_game_summary(
                 .unwrap_or(0) as u32;
 
             let is_dead = p.get("isDead").and_then(|v| v.as_bool()).unwrap_or(false);
-            let respawn_timer_sec = p.get("respawnTimer").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let respawn_timer_sec = p
+                .get("respawnTimer")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let skin_id = p.get("skinID").and_then(|v| v.as_i64()).unwrap_or(0);
             let champion_id = p
                 .get("championId")
                 .and_then(|v| v.as_i64())
                 .filter(|&id| id > 0)
-                .unwrap_or_else(|| champions.resolve_champion_id_with_alias(&champ, &champion_alias));
+                .unwrap_or_else(|| {
+                    champions.resolve_champion_id_with_alias(&champ, &champion_alias)
+                });
             let summary = LiveGamePlayerSummary {
                 is_dead,
                 respawn_timer_sec,
@@ -1608,7 +1605,11 @@ fn extract_live_game_summary(
     let raw_active_champion = matched_self
         .as_ref()
         .map(|m| m.champion_name.as_str())
-        .or_else(|| active.and_then(|a| a.get("championName")).and_then(|v| v.as_str()))
+        .or_else(|| {
+            active
+                .and_then(|a| a.get("championName"))
+                .and_then(|v| v.as_str())
+        })
         .unwrap_or("");
     let active_champion_id = matched_self
         .as_ref()
@@ -1670,7 +1671,11 @@ fn extract_live_game_summary(
     let mut recent_events = Vec::new();
     let ev_array = events_val
         .and_then(|ev| ev.get("Events"))
-        .or_else(|| allgame_val.and_then(|ag| ag.get("events")).and_then(|e| e.get("Events")))
+        .or_else(|| {
+            allgame_val
+                .and_then(|ag| ag.get("events"))
+                .and_then(|e| e.get("Events"))
+        })
         .and_then(|v| v.as_array());
 
     if let Some(arr) = ev_array {
@@ -1755,7 +1760,10 @@ fn eog_player(
         .unwrap_or("")
         .to_string();
     let puuid = text("puuid");
-    let is_self = p.get("isLocalPlayer").and_then(|v| v.as_bool()).unwrap_or(false)
+    let is_self = p
+        .get("isLocalPlayer")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
         || (!local_puuid.is_empty() && puuid == local_puuid);
     let stats = p.get("stats");
     EndOfGamePlayer {
@@ -1783,10 +1791,7 @@ fn extract_eog_summary(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let game_length_sec = eog
-        .get("gameLength")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+    let game_length_sec = eog.get("gameLength").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
     let local = eog.get("localPlayer");
     let raw_champ_id = local
         .and_then(|l| l.get("championId"))
@@ -1794,7 +1799,9 @@ fn extract_eog_summary(
         .unwrap_or(0);
     let (champion_id, champion_name) = resolve_champion_pair(
         raw_champ_id,
-        local.and_then(|l| l.get("championName")).and_then(|v| v.as_str()),
+        local
+            .and_then(|l| l.get("championName"))
+            .and_then(|v| v.as_str()),
         champions,
         lang,
         false,
@@ -1835,13 +1842,23 @@ fn extract_eog_summary(
                     let players: Vec<EndOfGamePlayer> = t
                         .get("players")
                         .and_then(|v| v.as_array())
-                        .map(|ps| ps.iter().map(|p| eog_player(p, local_puuid, champions, lang)).collect())
+                        .map(|ps| {
+                            ps.iter()
+                                .map(|p| eog_player(p, local_puuid, champions, lang))
+                                .collect()
+                        })
                         .unwrap_or_default();
-                    let is_player_team = t.get("isPlayerTeam").and_then(|v| v.as_bool()).unwrap_or(false)
+                    let is_player_team = t
+                        .get("isPlayerTeam")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
                         || players.iter().any(|p| p.is_self);
                     EndOfGameTeam {
                         is_player_team,
-                        won: t.get("isWinningTeam").and_then(|v| v.as_bool()).unwrap_or(false),
+                        won: t
+                            .get("isWinningTeam")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
                         players,
                     }
                 })
@@ -1866,7 +1883,10 @@ fn extract_eog_summary(
         total_gold,
         damage_to_champions,
         skin_id: skin_id_from_splash_path(
-            local.and_then(|l| l.get("skinSplashPath")).and_then(|v| v.as_str()).unwrap_or(""),
+            local
+                .and_then(|l| l.get("skinSplashPath"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
         ),
         creep_score: eog_stat(stats, "MINIONS_KILLED") + eog_stat(stats, "NEUTRAL_MINIONS_KILLED"),
         vision_score: eog_stat(stats, "VISION_SCORE"),
@@ -1902,7 +1922,8 @@ mod tests {
 
     #[test]
     fn projects_lobby_matchmaking_and_ready_check_across_languages() {
-        let summoner = json!({"gameName": "Ezo", "tagLine": "EUW", "puuid": "p-self", "profileIconId": 548});
+        let summoner =
+            json!({"gameName": "Ezo", "tagLine": "EUW", "puuid": "p-self", "profileIconId": 548});
         let lobby = json!({
             "queueId": 420,
             "localMember": {
@@ -2001,7 +2022,10 @@ mod tests {
         assert!(p.my_team[0].is_anonymized);
         assert_eq!(p.my_team[0].summoner_name, "Allié 1");
         assert_eq!(p.my_team[0].position_swap_id, Some(99));
-        assert_eq!(p.my_team[0].position_swap_state.as_deref(), Some("RECEIVED"));
+        assert_eq!(
+            p.my_team[0].position_swap_state.as_deref(),
+            Some("RECEIVED")
+        );
 
         assert!(p.my_team[1].is_self);
         assert_eq!(p.my_team[1].assigned_position, "MIDDLE");
@@ -2116,7 +2140,14 @@ mod tests {
         assert!(mine.players[0].is_self);
         assert_eq!(mine.players[0].position, "MIDDLE");
         assert_eq!(mine.players[0].skin_id, 103027);
-        assert_eq!((mine.players[0].kills, mine.players[0].deaths, mine.players[0].assists), (5, 1, 7));
+        assert_eq!(
+            (
+                mine.players[0].kills,
+                mine.players[0].deaths,
+                mine.players[0].assists
+            ),
+            (5, 1, 7)
+        );
         assert_eq!(mine.players[0].creep_score, 192);
         assert_eq!(mine.players[1].position, "TOP");
         assert_eq!(mine.players[1].skin_id, 0);
@@ -2139,7 +2170,10 @@ mod tests {
             ]
         });
         let snap = project_match(
-            &MatchInputs { champ_select: Some(&cs), ..Default::default() },
+            &MatchInputs {
+                champ_select: Some(&cs),
+                ..Default::default()
+            },
             &CustomSyncedLookup,
             Lang::En,
         );
@@ -2153,7 +2187,10 @@ mod tests {
             "myTeam": [{"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 1, "puuid": "a"}]
         });
         let snap = project_match(
-            &MatchInputs { champ_select: Some(&bare), ..Default::default() },
+            &MatchInputs {
+                champ_select: Some(&bare),
+                ..Default::default()
+            },
             &CustomSyncedLookup,
             Lang::En,
         );

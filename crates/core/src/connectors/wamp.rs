@@ -103,7 +103,11 @@ pub fn handle_wamp_message(source: SourceId, text: &str, ctx: &ConnectorContext)
 /// Seeds the store with read-only GET snapshots of every projected resource.
 async fn bootstrap_source_state(source: SourceId, target: &WampTarget, ctx: &ConnectorContext) {
     for path in projected_uris(source) {
-        match ctx.client.get(target.port, Some(&target.password), path).await {
+        match ctx
+            .client
+            .get(target.port, Some(&target.password), path)
+            .await
+        {
             Ok((status, _, body)) if status.is_success() => {
                 tracing::debug!("{source}: bootstrapped {path}");
                 if source == SourceId::LeagueClient
@@ -125,9 +129,8 @@ async fn bootstrap_source_state(source: SourceId, target: &WampTarget, ctx: &Con
     }
 }
 
-type WampStream = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type WampStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 async fn send_wamp(ws: &mut WampStream, opcode: u8, topic: &str) -> anyhow::Result<()> {
     let frame = serde_json::json!([opcode, topic]).to_string();
@@ -143,7 +146,10 @@ async fn switch_subscription(
     previous: Option<bool>,
     full: bool,
 ) -> anyhow::Result<()> {
-    let focused: Vec<String> = projected_uris(source).iter().map(|u| topic_for_uri(u)).collect();
+    let focused: Vec<String> = projected_uris(source)
+        .iter()
+        .map(|u| topic_for_uri(u))
+        .collect();
     match previous {
         Some(true) => send_wamp(ws, WAMP_UNSUBSCRIBE, ALL_EVENTS_TOPIC).await?,
         Some(false) => {
@@ -198,9 +204,13 @@ async fn connect_and_listen(
 
     let (mut ws, _) =
         tokio_tungstenite::connect_async_tls_with_config(req, None, false, Some(connector)).await?;
-    tracing::info!("{source}: connected to WAMP WebSocket on port {}", target.port);
+    tracing::info!(
+        "{source}: connected to WAMP WebSocket on port {}",
+        target.port
+    );
     if source == SourceId::LeagueClient {
-        ctx.assets.trigger_metadata_sync(&ctx.discovery, &ctx.client);
+        ctx.assets
+            .trigger_metadata_sync(&ctx.discovery, &ctx.client);
         if ctx.flags.demo_prefetch() && ctx.flags.game_icons() {
             ctx.assets.prefetch_demo_showcase_with(
                 &ctx.discovery,
@@ -265,7 +275,10 @@ async fn connect_and_listen(
 }
 
 /// Spawns the WAMP connector for `source`, reconnecting with exponential backoff.
-pub fn spawn_wamp_connector(source: SourceId, ctx: ConnectorContext) -> tokio::task::JoinHandle<()> {
+pub fn spawn_wamp_connector(
+    source: SourceId,
+    ctx: ConnectorContext,
+) -> tokio::task::JoinHandle<()> {
     const INITIAL_BACKOFF: Duration = Duration::from_millis(500);
     tokio::spawn(async move {
         let mut backoff = INITIAL_BACKOFF;
@@ -369,7 +382,12 @@ mod tests {
         }
         assert!(ctx.store.read().unwrap().is_empty());
 
-        let msg = frame("OnJsonApiEvent", "/lol-lobby/v2/lobby", "Create", json!({ "id": 123 }));
+        let msg = frame(
+            "OnJsonApiEvent",
+            "/lol-lobby/v2/lobby",
+            "Create",
+            json!({ "id": 123 }),
+        );
         handle_wamp_message(SourceId::LeagueClient, &msg, &ctx);
         let store = ctx.store.read().unwrap();
         assert_eq!(store.get_event(1).unwrap().meta.kind, EventKind::Create);
@@ -381,14 +399,26 @@ mod tests {
         let topic = topic_for_uri("/lol-gameflow/v1/gameflow-phase");
         assert_eq!(topic, "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase");
 
-        let phase = frame(&topic, "/lol-gameflow/v1/gameflow-phase", "Update", json!("Lobby"));
+        let phase = frame(
+            &topic,
+            "/lol-gameflow/v1/gameflow-phase",
+            "Update",
+            json!("Lobby"),
+        );
         handle_wamp_message(SourceId::LeagueClient, &phase, &ctx);
-        let chatter = frame("OnJsonApiEvent", "/lol-chat/v1/me", "Update", json!({ "a": 1 }));
+        let chatter = frame(
+            "OnJsonApiEvent",
+            "/lol-chat/v1/me",
+            "Update",
+            json!({ "a": 1 }),
+        );
         handle_wamp_message(SourceId::LeagueClient, &chatter, &ctx);
 
         let store = ctx.store.read().unwrap();
         assert_eq!(store.phase().unwrap().phase, "Lobby");
-        assert!(store.get_state(SourceId::LeagueClient, "/lol-chat/v1/me").is_none());
+        assert!(store
+            .get_state(SourceId::LeagueClient, "/lol-chat/v1/me")
+            .is_none());
         assert_eq!(store.source_stats(SourceId::LeagueClient).0, 2);
         assert!(store.is_empty());
         assert!(ctx.catalog.read().unwrap().is_empty());

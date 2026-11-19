@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::champions::Position;
 use crate::i18n::Lang;
 use crate::summary::{
-    format_clock_mm_ss, ChampSelectEnemy, EndOfGameSummary, LiveGamePlayerSummary, SummarySnapshot, SummonerSummary,
+    format_clock_mm_ss, ChampSelectEnemy, EndOfGameSummary, LiveGamePlayerSummary, SummarySnapshot,
+    SummonerSummary,
 };
 
 /// Strict, closed allowlist of user-initiated commands accepted by the Mobile Remote.
@@ -14,10 +15,7 @@ use crate::summary::{
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum RemoteCommand {
     /// Choose primary and secondary role in Lobby (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`, `FILL`).
-    SetLobbyPositions {
-        first: String,
-        second: String,
-    },
+    SetLobbyPositions { first: String, second: String },
     /// Start matchmaking queue from Lobby.
     StartMatchmaking,
     /// Cancel matchmaking queue.
@@ -27,27 +25,15 @@ pub enum RemoteCommand {
     /// Decline the Ready Check.
     DeclineReadyCheck,
     /// Hover a champion during the player's ban or pick action.
-    HoverChampion {
-        action_id: i64,
-        champion_id: i64,
-    },
+    HoverChampion { action_id: i64, champion_id: i64 },
     /// Lock in the currently hovered ban or pick action.
-    LockAction {
-        action_id: i64,
-    },
+    LockAction { action_id: i64 },
     /// Select both summoner spells (`spell1_id` = D, `spell2_id` = F).
-    SetSummonerSpells {
-        spell1_id: i64,
-        spell2_id: i64,
-    },
+    SetSummonerSpells { spell1_id: i64, spell2_id: i64 },
     /// Select a skin for the locked-in champion.
-    SetSkin {
-        skin_id: i64,
-    },
+    SetSkin { skin_id: i64 },
     /// Activate an existing rune page by ID.
-    SelectRunePage {
-        page_id: i64,
-    },
+    SelectRunePage { page_id: i64 },
     /// Save and activate a rune page (recommended preset or custom 1-hand builder).
     SaveRunePage {
         name: String,
@@ -56,48 +42,25 @@ pub enum RemoteCommand {
         selected_perk_ids: Vec<i64>,
     },
     /// Request a role / lane swap with an ally (`position-swaps/{swap_id}/request`).
-    RequestPositionSwap {
-        swap_id: i64,
-    },
+    RequestPositionSwap { swap_id: i64 },
     /// Accept or decline an incoming role / lane swap (`position-swaps/{swap_id}/accept|decline`).
-    RespondPositionSwap {
-        swap_id: i64,
-        accept: bool,
-    },
+    RespondPositionSwap { swap_id: i64, accept: bool },
     /// Cancel an outgoing role / lane swap request.
-    CancelPositionSwap {
-        swap_id: i64,
-    },
+    CancelPositionSwap { swap_id: i64 },
     /// Request a pick-order swap with an ally (`swaps/{swap_id}/request`).
-    RequestPickOrderSwap {
-        swap_id: i64,
-    },
+    RequestPickOrderSwap { swap_id: i64 },
     /// Accept or decline an incoming pick-order swap.
-    RespondPickOrderSwap {
-        swap_id: i64,
-        accept: bool,
-    },
+    RespondPickOrderSwap { swap_id: i64, accept: bool },
     /// Cancel an outgoing pick-order swap.
-    CancelPickOrderSwap {
-        swap_id: i64,
-    },
+    CancelPickOrderSwap { swap_id: i64 },
     /// Request a champion trade with an ally (`trades/{trade_id}/request`).
-    RequestChampionTrade {
-        trade_id: i64,
-    },
+    RequestChampionTrade { trade_id: i64 },
     /// Accept or decline an incoming champion trade.
-    RespondChampionTrade {
-        trade_id: i64,
-        accept: bool,
-    },
+    RespondChampionTrade { trade_id: i64, accept: bool },
     /// Cancel an outgoing champion trade.
-    CancelChampionTrade {
-        trade_id: i64,
-    },
+    CancelChampionTrade { trade_id: i64 },
     /// In Demo Mode only: jump directly to a phase (`Lobby`, `Matchmaking`, `ReadyCheck`, `ChampSelect`, `InProgress`).
-    DemoSetPhase {
-        phase: String,
-    },
+    DemoSetPhase { phase: String },
     /// In Demo Mode only: simulate an incoming role/lane swap request from an ally.
     DemoSimulateIncomingSwap,
 }
@@ -551,7 +514,8 @@ pub fn project_remote_state(
                         "your_pick"
                     };
                     let title = if act.action_type == "ban" {
-                        lang.pick("Your turn to BAN!", "À vous de bannir !").to_string()
+                        lang.pick("Your turn to BAN!", "À vous de bannir !")
+                            .to_string()
                     } else {
                         let pos = Position::parse(&cs.assigned_position)
                             .unwrap_or(Position::Fill)
@@ -603,7 +567,11 @@ pub fn project_remote_state(
                 is_self: p.is_self,
                 dead: p.is_dead,
                 respawn_sec: p.respawn_timer_sec.ceil() as i32,
-                skin_id: if p.champion_id > 0 { p.champion_id * 1000 + p.skin_id } else { 0 },
+                skin_id: if p.champion_id > 0 {
+                    p.champion_id * 1000 + p.skin_id
+                } else {
+                    0
+                },
             };
             let allies = lg
                 .players
@@ -676,7 +644,10 @@ pub fn project_remote_state(
         None
     };
 
-    let end_of_game = if matches!(phase.as_str(), "PreEndOfGame" | "WaitingForStats" | "EndOfGame") {
+    let end_of_game = if matches!(
+        phase.as_str(),
+        "PreEndOfGame" | "WaitingForStats" | "EndOfGame"
+    ) {
         summary.end_of_game.clone()
     } else {
         None
@@ -732,6 +703,9 @@ mod tests {
         assert_eq!(remote.phase, "ChampSelect");
         assert!(remote.is_demo);
         assert_eq!(alerts.last_kind.as_deref(), Some("your_ban"));
-        assert_eq!(remote.champ_select.unwrap().available_spells[0].name, "Saut éclair");
+        assert_eq!(
+            remote.champ_select.unwrap().available_spells[0].name,
+            "Saut éclair"
+        );
     }
 }

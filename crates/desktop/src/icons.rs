@@ -27,7 +27,12 @@ impl IconLookup for NoopIconLookup {
         Image::default()
     }
 
-    fn resolve_skin_art(&mut self, _category: &'static str, _skin_id: i64, _champ_id: i64) -> Image {
+    fn resolve_skin_art(
+        &mut self,
+        _category: &'static str,
+        _skin_id: i64,
+        _champ_id: i64,
+    ) -> Image {
         Image::default()
     }
 }
@@ -61,7 +66,11 @@ impl IconLookup for AppIconLookup<'_> {
         let base_id = champ_id * 1000;
         if champ_id > 0
             && base_id != target_id
-            && self.app.assets.cached_image_path(category, base_id).is_some()
+            && self
+                .app
+                .assets
+                .cached_image_path(category, base_id)
+                .is_some()
         {
             return self.loader.resolve(self.app, category, base_id);
         }
@@ -131,9 +140,9 @@ impl DesktopAssetLoader {
         }
         let mut removed = 0u64;
         self.images.retain(|key, entry| {
-            let matches = categories.iter().any(|cat| {
-                key.starts_with(cat) && key.as_bytes().get(cat.len()) == Some(&b'/')
-            });
+            let matches = categories
+                .iter()
+                .any(|cat| key.starts_with(cat) && key.as_bytes().get(cat.len()) == Some(&b'/'));
             if matches {
                 removed = removed.saturating_add(entry.approx_bytes);
             }
@@ -176,7 +185,8 @@ impl DesktopAssetLoader {
         self.clock = next_clock;
 
         if let Some(existing) = self.images.get_mut(&key) {
-            self.total_bytes = self.total_bytes.saturating_sub(existing.approx_bytes) + approx_bytes;
+            self.total_bytes =
+                self.total_bytes.saturating_sub(existing.approx_bytes) + approx_bytes;
             existing.image = img.clone();
             existing.approx_bytes = approx_bytes;
             existing.last_used = next_clock;
@@ -259,7 +269,9 @@ mod tests {
 
         let cache = GameAssetCache::with_dir(dir.clone());
         let mut loader = DesktopAssetLoader::default();
-        let img = loader.load_cached_only(&cache, "champion", 103).expect("should decode cached 1x1 PNG");
+        let img = loader
+            .load_cached_only(&cache, "champion", 103)
+            .expect("should decode cached 1x1 PNG");
         assert_eq!(img.size().width, 1);
         assert_eq!(img.size().height, 1);
         assert_eq!(loader.stats(), (1, 4));

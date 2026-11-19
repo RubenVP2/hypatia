@@ -399,7 +399,10 @@ pub async fn discover_endpoints(
         }
         let endpoints = parse(source, &body);
         if !endpoints.is_empty() {
-            tracing::info!("{source}: discovered {} endpoints via {path}", endpoints.len());
+            tracing::info!(
+                "{source}: discovered {} endpoints via {path}",
+                endpoints.len()
+            );
             return endpoints;
         }
     }
@@ -490,10 +493,7 @@ mod tests {
 
         let eps = parse_help_format_full(SourceId::LeagueClient, &doc);
         assert_eq!(eps.len(), 1);
-        assert_eq!(
-            eps[0].path_template,
-            "/lol-gameflow/v1/gameflow-phase"
-        );
+        assert_eq!(eps[0].path_template, "/lol-gameflow/v1/gameflow-phase");
         assert_eq!(eps[0].method, "GET");
         assert_eq!(eps[0].namespace, "lol-gameflow");
         assert_eq!(eps[0].origin, EndpointOrigin::Declared);

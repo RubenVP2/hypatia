@@ -172,7 +172,10 @@ impl GameAssetCache {
         for ext in ["png", "jpg"] {
             let candidate = self.file_path(category, id, ext);
             if candidate.is_file() {
-                self.disk_paths.write().unwrap().insert(key, candidate.clone());
+                self.disk_paths
+                    .write()
+                    .unwrap()
+                    .insert(key, candidate.clone());
                 return Some(candidate);
             }
         }
@@ -212,8 +215,11 @@ impl GameAssetCache {
         let this = Arc::clone(self);
         let client = client.clone();
         tokio::spawn(async move {
-            this.ensure_metadata_synced_with_creds(port, &password, &client).await;
-            let _ = this.fetch_from_lcu_with_creds(category, id, port, &password, &client).await;
+            this.ensure_metadata_synced_with_creds(port, &password, &client)
+                .await;
+            let _ = this
+                .fetch_from_lcu_with_creds(category, id, port, &password, &client)
+                .await;
             this.in_flight.lock().unwrap().remove(&key);
         });
     }
@@ -294,11 +300,15 @@ impl GameAssetCache {
         let this = Arc::clone(self);
         let client = client.clone();
         tokio::spawn(async move {
-            this.ensure_metadata_synced_with_creds(port, &password, &client).await;
+            this.ensure_metadata_synced_with_creds(port, &password, &client)
+                .await;
             const ICON_GROUPS: &[(&str, &[i64])] = &[
                 (
                     "champion",
-                    &[266, 64, 103, 222, 412, 122, 234, 89, 81, 99, 86, 238, 145, 111, 157, 35, 777, 875, 233],
+                    &[
+                        266, 64, 103, 222, 412, 122, 234, 89, 81, 99, 86, 238, 145, 111, 157, 35,
+                        777, 875, 233,
+                    ],
                 ),
                 ("spell", &[4, 7, 11, 12, 14]),
             ];
@@ -306,14 +316,19 @@ impl GameAssetCache {
                 ("splash", &[103027, 103000, 266000, 64000, 222000, 412000]),
                 (
                     crate::art::BANNER_CATEGORY,
-                    &[266000, 64000, 103027, 222000, 412000, 86000, 122000, 234000, 238000, 145000, 111000],
+                    &[
+                        266000, 64000, 103027, 222000, 412000, 86000, 122000, 234000, 238000,
+                        145000, 111000,
+                    ],
                 ),
                 (crate::art::CATEGORY, &[1, 2, 3, 4, 5, 6]),
             ];
             for &(cat, ids) in ICON_GROUPS {
                 for &id in ids {
                     if this.cached_image_path(cat, id).is_none() {
-                        let _ = this.fetch_from_lcu_with_creds(cat, id, port, &password, &client).await;
+                        let _ = this
+                            .fetch_from_lcu_with_creds(cat, id, port, &password, &client)
+                            .await;
                     }
                 }
             }
@@ -321,7 +336,9 @@ impl GameAssetCache {
                 for &(cat, ids) in ARTWORK_GROUPS {
                     for &id in ids {
                         if this.cached_image_path(cat, id).is_none() {
-                            let _ = this.fetch_from_lcu_with_creds(cat, id, port, &password, &client).await;
+                            let _ = this
+                                .fetch_from_lcu_with_creds(cat, id, port, &password, &client)
+                                .await;
                         }
                     }
                 }
@@ -397,10 +414,19 @@ impl GameAssetCache {
         }
 
         let meta_specs = [
-            ("champion-summary.json", "/lol-game-data/assets/v1/champion-summary.json"),
-            ("summoner-spells.json", "/lol-game-data/assets/v1/summoner-spells.json"),
+            (
+                "champion-summary.json",
+                "/lol-game-data/assets/v1/champion-summary.json",
+            ),
+            (
+                "summoner-spells.json",
+                "/lol-game-data/assets/v1/summoner-spells.json",
+            ),
             ("perks.json", "/lol-game-data/assets/v1/perks.json"),
-            ("perkstyles.json", "/lol-game-data/assets/v1/perkstyles.json"),
+            (
+                "perkstyles.json",
+                "/lol-game-data/assets/v1/perkstyles.json",
+            ),
             ("skins.json", "/lol-game-data/assets/v1/skins.json"),
         ];
 
@@ -568,15 +594,19 @@ impl GameAssetCache {
                 }
                 if id >= 1000 {
                     let champ_id = id / 1000;
-                    let canonical = format!("/lol-game-data/assets/v1/champion-tiles/{champ_id}/{id}.jpg");
+                    let canonical =
+                        format!("/lol-game-data/assets/v1/champion-tiles/{champ_id}/{id}.jpg");
                     if !out.contains(&canonical) {
                         out.push(canonical);
                     }
                 }
             }
             "splash" | crate::art::BANNER_CATEGORY => {
-                let (champ_id, skin_id) =
-                    if id >= 1000 { (id / 1000, id) } else { (id, id * 1000) };
+                let (champ_id, skin_id) = if id >= 1000 {
+                    (id / 1000, id)
+                } else {
+                    (id, id * 1000)
+                };
                 let base_id = champ_id * 1000;
                 {
                     let splashes = self.splash_paths.read().unwrap();
@@ -633,7 +663,9 @@ impl GameAssetCache {
     pub fn ingest_metadata(&self, file_name: &str, json: &Value) {
         match file_name {
             "champion-summary.json" => {
-                let Some(arr) = json.as_array() else { return; };
+                let Some(arr) = json.as_array() else {
+                    return;
+                };
                 let mut names = self.champ_names_by_id.write().unwrap();
                 let mut keys = self.champ_ids_by_key.write().unwrap();
                 let mut paths = self.champ_paths.write().unwrap();
@@ -654,7 +686,8 @@ impl GameAssetCache {
                     if let Some(alias) = entry.get("alias").and_then(|v| v.as_str()) {
                         keep_lowest_id(&mut keys, normalize_champion_key(alias), id);
                     }
-                    if let Some(raw_path) = entry.get("squarePortraitPath").and_then(|v| v.as_str()) {
+                    if let Some(raw_path) = entry.get("squarePortraitPath").and_then(|v| v.as_str())
+                    {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
                             paths.insert(id, clean);
                         }
@@ -683,10 +716,14 @@ impl GameAssetCache {
                 self.signal.bump();
             }
             "summoner-spells.json" => {
-                let Some(arr) = json.as_array() else { return; };
+                let Some(arr) = json.as_array() else {
+                    return;
+                };
                 let mut map = self.spell_paths.write().unwrap();
                 for entry in arr {
-                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else { continue; };
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
                     if let Some(raw_path) = entry.get("iconPath").and_then(|v| v.as_str()) {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
                             map.insert(id, clean);
@@ -695,10 +732,14 @@ impl GameAssetCache {
                 }
             }
             "perks.json" => {
-                let Some(arr) = json.as_array() else { return; };
+                let Some(arr) = json.as_array() else {
+                    return;
+                };
                 let mut map = self.perk_paths.write().unwrap();
                 for entry in arr {
-                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else { continue; };
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
                     if let Some(raw_path) = entry.get("iconPath").and_then(|v| v.as_str()) {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
                             map.insert(id, clean);
@@ -711,10 +752,14 @@ impl GameAssetCache {
                     .get("styles")
                     .and_then(|v| v.as_array())
                     .or_else(|| json.as_array());
-                let Some(arr) = styles else { return; };
+                let Some(arr) = styles else {
+                    return;
+                };
                 let mut map = self.style_paths.write().unwrap();
                 for entry in arr {
-                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else { continue; };
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
                     if let Some(raw_path) = entry.get("iconPath").and_then(|v| v.as_str()) {
                         if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
                             map.insert(id, clean);
@@ -733,7 +778,9 @@ impl GameAssetCache {
                 let mut skins = self.skin_paths.write().unwrap();
                 let mut splashes = self.splash_paths.write().unwrap();
                 for entry in entries {
-                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else { continue; };
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
                     if let Some(clean) = entry
                         .get("tilePath")
                         .and_then(|v| v.as_str())
@@ -785,9 +832,9 @@ impl GameAssetCache {
         let mut guard = self.bytes_cache.lock().unwrap();
         let mut removed = 0usize;
         guard.entries.retain(|key, blob| {
-            let matches = categories.iter().any(|cat| {
-                key.starts_with(cat) && key.as_bytes().get(cat.len()) == Some(&b'/')
-            });
+            let matches = categories
+                .iter()
+                .any(|cat| key.starts_with(cat) && key.as_bytes().get(cat.len()) == Some(&b'/'));
             if matches {
                 removed += blob.bytes.len();
             }
@@ -980,7 +1027,10 @@ pub fn sanitize_lcu_asset_path(raw: &str) -> Option<String> {
     if trimmed.is_empty() || trimmed.contains("..") || trimmed.contains("://") {
         return None;
     }
-    if trimmed.bytes().any(|b| b.is_ascii_control() || b == b'\\' || b == b' ') {
+    if trimmed
+        .bytes()
+        .any(|b| b.is_ascii_control() || b == b'\\' || b == b' ')
+    {
         return None;
     }
     let normalized = if trimmed.starts_with('/') {
@@ -988,7 +1038,10 @@ pub fn sanitize_lcu_asset_path(raw: &str) -> Option<String> {
     } else {
         format!("/{trimmed}")
     };
-    if normalized.to_ascii_lowercase().starts_with("/lol-game-data/assets/") {
+    if normalized
+        .to_ascii_lowercase()
+        .starts_with("/lol-game-data/assets/")
+    {
         Some(normalized)
     } else {
         None
@@ -1008,7 +1061,12 @@ fn keep_lowest_id(keys: &mut HashMap<String, i64>, key: String, id: i64) {
 fn is_valid_asset_id(category: &str, id: i64) -> bool {
     match category {
         "profile" => id >= 0,
-        "champion" | "spell" | "perk" | "style" | "skin" | "splash"
+        "champion"
+        | "spell"
+        | "perk"
+        | "style"
+        | "skin"
+        | "splash"
         | crate::art::BANNER_CATEGORY => id > 0,
         crate::art::CATEGORY => crate::art::ClientArt::from_id(id).is_some(),
         _ => false,
@@ -1133,19 +1191,22 @@ mod tests {
     use serde_json::json;
 
     fn temp_cache_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "hypatia_asset_test_{}_{}",
-            std::process::id(),
-            tag
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("hypatia_asset_test_{}_{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
 
     #[test]
     fn validates_magic_bytes_and_lcu_asset_paths() {
-        assert_eq!(detect_image_format(b"\x89PNG\r\n\x1a\nrest"), Some(("png", "image/png")));
-        assert_eq!(detect_image_format(b"\xff\xd8\xff\xe0data"), Some(("jpg", "image/jpeg")));
+        assert_eq!(
+            detect_image_format(b"\x89PNG\r\n\x1a\nrest"),
+            Some(("png", "image/png"))
+        );
+        assert_eq!(
+            detect_image_format(b"\xff\xd8\xff\xe0data"),
+            Some(("jpg", "image/jpeg"))
+        );
         assert_eq!(detect_image_format(b"<html>not an image</html>"), None);
 
         assert_eq!(
@@ -1156,9 +1217,18 @@ mod tests {
             sanitize_lcu_asset_path("lol-game-data/assets/v1/profile-icons/0.jpg"),
             Some("/lol-game-data/assets/v1/profile-icons/0.jpg".to_string())
         );
-        assert_eq!(sanitize_lcu_asset_path("/lol-summoner/v1/current-summoner"), None);
-        assert_eq!(sanitize_lcu_asset_path("/lol-game-data/assets/../../etc/passwd"), None);
-        assert_eq!(sanitize_lcu_asset_path("https://cdn.example.com/103.png"), None);
+        assert_eq!(
+            sanitize_lcu_asset_path("/lol-summoner/v1/current-summoner"),
+            None
+        );
+        assert_eq!(
+            sanitize_lcu_asset_path("/lol-game-data/assets/../../etc/passwd"),
+            None
+        );
+        assert_eq!(
+            sanitize_lcu_asset_path("https://cdn.example.com/103.png"),
+            None
+        );
     }
 
     #[test]
@@ -1178,7 +1248,11 @@ mod tests {
         assert_eq!(cache.resolve_champion_id("Ahri"), 103);
         assert_eq!(cache.resolve_champion_id("Jade_Ahri"), 60103);
         let catalog = cache.champion_catalog();
-        let garens: Vec<i64> = catalog.iter().filter(|c| c.name == "Garen").map(|c| c.id).collect();
+        let garens: Vec<i64> = catalog
+            .iter()
+            .filter(|c| c.name == "Garen")
+            .map(|c| c.id)
+            .collect();
         assert_eq!(garens, vec![86], "one picker entry per champion name");
         assert!(catalog.iter().all(|c| c.id < 60000));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1204,13 +1278,26 @@ mod tests {
         );
         assert_eq!(cache.resolve_champion_id("Test Champ"), 999);
         assert_eq!(cache.resolve_champion_id("TestChamp"), 999);
-        assert_eq!(cache.resolve_champion_name_localized(999, Lang::En), "Test Champ");
-        assert_eq!(cache.resolve_champion_name_localized(0, Lang::En), "Selecting...");
-        assert_eq!(cache.resolve_champion_name_localized(0, Lang::Fr), "Sélection...");
+        assert_eq!(
+            cache.resolve_champion_name_localized(999, Lang::En),
+            "Test Champ"
+        );
+        assert_eq!(
+            cache.resolve_champion_name_localized(0, Lang::En),
+            "Selecting..."
+        );
+        assert_eq!(
+            cache.resolve_champion_name_localized(0, Lang::Fr),
+            "Sélection..."
+        );
 
         let catalog = cache.champion_catalog();
-        assert!(catalog.iter().any(|c| c.id == 999 && c.roles == vec!["MIDDLE".to_string()]));
-        assert!(catalog.iter().any(|c| c.id == 64 && c.roles == vec!["JUNGLE".to_string()]));
+        assert!(catalog
+            .iter()
+            .any(|c| c.id == 999 && c.roles == vec!["MIDDLE".to_string()]));
+        assert!(catalog
+            .iter()
+            .any(|c| c.id == 64 && c.roles == vec!["JUNGLE".to_string()]));
 
         cache.ingest_metadata(
             "perks.json",
@@ -1261,9 +1348,12 @@ mod tests {
         let disk_path = cache.cached_image_path("champion", 103).unwrap();
         assert!(disk_path.ends_with("103.png"));
 
-        let disc = DiscoveryManager::new_demo(crate::redaction::SecretVault::new(), ChangeSignal::new());
+        let disc =
+            DiscoveryManager::new_demo(crate::redaction::SecretVault::new(), ChangeSignal::new());
         let client = ReadOnlyRiotClient::new();
-        let fetched = cache.get_or_fetch_bytes("champion", 103, &disc, &client).await;
+        let fetched = cache
+            .get_or_fetch_bytes("champion", 103, &disc, &client)
+            .await;
         assert_eq!(fetched, Some(("image/png", png_bytes)));
 
         let _ = std::fs::remove_dir_all(&dir);

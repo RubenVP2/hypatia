@@ -340,7 +340,10 @@ impl DemoRemoteState {
                 if *champion_id <= 0 {
                     bail!(
                         "{}",
-                        lang.pick("Select a champion first", "Sélectionnez d'abord un champion")
+                        lang.pick(
+                            "Select a champion first",
+                            "Sélectionnez d'abord un champion"
+                        )
                     );
                 }
                 if self.my_action_type == "ban" {
@@ -663,7 +666,10 @@ impl DemoRemoteState {
                 let name = if p.id == 101 && p.name == "Mid Burst (Electrocute)" {
                     lang.pick("Mid Burst (Electrocute)", "Mid Burst (Électrocution)")
                 } else if p.id == 102 && p.name == "All-In Fighter (Conqueror)" {
-                    lang.pick("All-In Fighter (Conqueror)", "Combattant All-In (Conquérant)")
+                    lang.pick(
+                        "All-In Fighter (Conqueror)",
+                        "Combattant All-In (Conquérant)",
+                    )
                 } else {
                     p.name.as_str()
                 };
@@ -945,7 +951,10 @@ pub fn spawn_demo_generator(
                 } else {
                     dr.tick_counter = dr.tick_counter.wrapping_add(1);
                 }
-                if !dr.manual_override && dr.phase == "ReadyCheck" && phase_start.elapsed().as_secs_f64() >= 4.5 {
+                if !dr.manual_override
+                    && dr.phase == "ReadyCheck"
+                    && phase_start.elapsed().as_secs_f64() >= 4.5
+                {
                     dr.ready_response = "Accepted".to_string();
                 }
                 (dr.manual_override, dr.phase.clone())
@@ -1150,8 +1159,13 @@ const DEMO_ALLY_LOCK: [(i64, u32); 4] = [(0, 7), (1, 10), (3, 11), (4, 13)];
 
 /// Enemy champion select picks, each revealed at its step of the scripted draft.
 fn demo_their_team(step: u32) -> Value {
-    const ENEMIES: [(i64, &str); 5] =
-        [(122, "Darius"), (234, "Viego"), (89, "Leona"), (81, "Ezreal"), (99, "Lux")];
+    const ENEMIES: [(i64, &str); 5] = [
+        (122, "Darius"),
+        (234, "Viego"),
+        (89, "Leona"),
+        (81, "Ezreal"),
+        (99, "Lux"),
+    ];
     const REVEAL: [u32; 5] = [8, 9, 12, 14, 15];
     let members: Vec<Value> = ENEMIES
         .iter()
@@ -1452,18 +1466,21 @@ mod tests {
         assert_eq!(cs.time_left_sec, 24);
 
         // /lol-perks/v1/pages must be emitted into EventStore like live LCU data.
-        assert!(
-            app.store
-                .read()
-                .unwrap()
-                .current(SourceId::LeagueClient, "/lol-perks/v1/pages")
-                .is_some()
-        );
+        assert!(app
+            .store
+            .read()
+            .unwrap()
+            .current(SourceId::LeagueClient, "/lol-perks/v1/pages")
+            .is_some());
 
         // Stepping a tick advances the phase clock instead of freezing at 24s.
         app.demo_remote.write().unwrap().step_tick(&app);
         assert_eq!(
-            app.get_summary().champ_select.as_ref().unwrap().time_left_sec,
+            app.get_summary()
+                .champ_select
+                .as_ref()
+                .unwrap()
+                .time_left_sec,
             23
         );
 
@@ -1499,8 +1516,15 @@ mod tests {
             dr.sync_to_store(&app);
         }
         let summary = app.get_summary();
-        let live = summary.live_game.as_ref().expect("live game should be projected");
-        let me = live.players.iter().find(|p| p.is_self).expect("the player's row");
+        let live = summary
+            .live_game
+            .as_ref()
+            .expect("live game should be projected");
+        let me = live
+            .players
+            .iter()
+            .find(|p| p.is_self)
+            .expect("the player's row");
         assert_eq!(me.champion_name, "Ahri");
         assert!(me.is_dead);
         assert!(me.respawn_timer_sec > 0.0);

@@ -443,16 +443,6 @@ msgctxt "MainWindow"
 msgid "Mobile Remote"
 msgstr "App Mobile"
 
-#: ui/app.slint:2059
-msgctxt "MainWindow"
-msgid "OPEN"
-msgstr "OUVERT"
-
-#: ui/app.slint:2067
-msgctxt "MainWindow"
-msgid "ECO"
-msgstr "ÉCO"
-
 #: ui/app.slint:2079
 msgctxt "MainWindow"
 msgid "Demo Mode"
@@ -605,112 +595,282 @@ msgctxt "MainWindow"
 msgid "Stop server"
 msgstr "Arrêter le serveur"
 
-#: ui/app.slint:2568
+#: ui/app.slint:2953
 msgctxt "MainWindow"
 msgid "PERFORMANCE & FEATURES"
 msgstr "PERFORMANCE ET FONCTIONS"
 
-#: ui/app.slint:2575
+#: ui/app.slint:2960
 msgctxt "MainWindow"
-msgid "Switch off what you do not need: a disabled feature costs nothing."
-msgstr "Désactivez ce dont vous n'avez pas besoin : une fonction éteinte ne consomme rien."
+msgid "Adapt Hypatia to your PC: pick a preset or fine-tune what runs in the background."
+msgstr "Adaptez Hypatia à votre PC : choisissez un profil ou ajustez finement les tâches en arrière-plan."
 
-#: ui/app.slint:2589
+#: ui/app.slint:2990
 msgctxt "MainWindow"
-msgid "COMPANION"
-msgstr "COMPAGNON"
+msgid "THIS APP RIGHT NOW"
+msgstr "CETTE APPLICATION EN DIRECT"
 
-#: ui/app.slint:2592
+#: ui/app.slint:3030
 msgctxt "MainWindow"
-msgid "Live game board"
-msgstr "Suivi de partie en direct"
+msgid "MEMORY"
+msgstr "MÉMOIRE"
 
-#: ui/app.slint:2932
+#: ui/app.slint:3049
 msgctxt "MainWindow"
-msgid "Polls the game once per second while you play (score, towers, objectives)."
-msgstr "Interroge le jeu une fois par seconde pendant la partie (score, tours, objectifs)."
+msgid "CPU"
+msgstr "CPU"
 
-#: ui/app.slint:2598
+#: ui/app.slint:3080
+msgctxt "MainWindow"
+msgid "Disk: {0}"
+msgstr "Disque : {0}"
+
+#: ui/app.slint:3088
+msgctxt "MainWindow"
+msgid "ASSET CACHE"
+msgstr "CACHE IMAGES"
+
+#: ui/app.slint:3127
+msgctxt "MainWindow"
+msgid "Clear RAM cache"
+msgstr "Vider le cache RAM"
+
+#: ui/app.slint:3131
+msgctxt "MainWindow"
+msgid "Clear disk cache"
+msgstr "Vider le cache disque"
+
+#: ui/app.slint:3143
+msgctxt "MainWindow"
+msgid "PERFORMANCE PROFILE"
+msgstr "PROFIL DE PERFORMANCE"
+
+#: ui/app.slint:3149
+msgctxt "MainWindow"
+msgid "Auto"
+msgstr "Auto"
+
+#: ui/app.slint:3154
+msgctxt "MainWindow"
+msgid "Ultra-light"
+msgstr "Ultra-léger"
+
+#: ui/app.slint:3159
+msgctxt "MainWindow"
+msgid "Eco"
+msgstr "Éco"
+
+#: ui/app.slint:3164
+msgctxt "MainWindow"
+msgid "Balanced"
+msgstr "Équilibré"
+
+#: ui/app.slint:3177
+msgctxt "MainWindow"
+msgid "Custom"
+msgstr "Personnalisé"
+
+#: ui/app.slint:3188
+msgctxt "MainWindow"
+msgid "Recommended for this PC: {0}"
+msgstr "Recommandé pour ce PC : {0}"
+
+#: ui/app.slint:3211
+msgctxt "MainWindow"
+msgid "ADVANCED CONTROLS"
+msgstr "CONTRÔLES AVANCÉS"
+
+#: ui/app.slint:3213
+msgctxt "MainWindow"
+msgid "Adjust individual polling rates, image memory limits, sleep behavior, and background connections."
+msgstr "Ajustez les fréquences d'interrogation, la mémoire des images, la mise en veille et les connexions."
+
+#: ui/app.slint:3222
+msgctxt "MainWindow"
+msgid "Hide"
+msgstr "Masquer"
+
+#: ui/app.slint:3222
+msgctxt "MainWindow"
+msgid "Show"
+msgstr "Afficher"
+
+#: ui/app.slint:3233
+msgctxt "MainWindow"
+msgid "POLLING & SLEEP"
+msgstr "FRÉQUENCES ET VEILLE"
+
+#: ui/app.slint:3236
+msgctxt "MainWindow"
+msgid "Live game polling"
+msgstr "Fréquence en partie"
+
+#: ui/app.slint:3237
+msgctxt "MainWindow"
+msgid "How often Live Client Data (:2999) refreshes while a match is running."
+msgstr "Intervalle de rafraîchissement des données en jeu (:2999) pendant une partie."
+
+#: ui/app.slint:3244
+msgctxt "MainWindow"
+msgid "Riot client detection"
+msgstr "Détection des clients Riot"
+
+#: ui/app.slint:3245
+msgctxt "MainWindow"
+msgid "How often Hypatia scans for League / Riot processes and lockfiles."
+msgstr "Intervalle de détection des processus League / Riot et fichiers lockfile."
+
+#: ui/app.slint:3246
+msgctxt "MainWindow"
+msgid "Normal"
+msgstr "Normal"
+
+#: ui/app.slint:3246
+msgctxt "MainWindow"
+msgid "Slow"
+msgstr "Lent"
+
+#: ui/app.slint:3251
+msgctxt "MainWindow"
+msgid "Interface & clock ticks"
+msgstr "Interface et compteurs"
+
+#: ui/app.slint:3252
+msgctxt "MainWindow"
+msgid "How often timers and UI updates refresh (250 ms smooth or 1 s low CPU)."
+msgstr "Fréquence des compteurs et rafraîchissements UI (250 ms fluide ou 1 s éco CPU)."
+
+#: ui/app.slint:3258
+msgctxt "MainWindow"
+msgid "Sleep when minimized"
+msgstr "Veille lorsque réduit"
+
+#: ui/app.slint:3259
+msgctxt "MainWindow"
+msgid "Pauses interface rebuilds and slows clock timers while the main window is minimized."
+msgstr "Met l'interface et les compteurs en pause quand la fenêtre principale est réduite."
+
+#: ui/app.slint:3277
+msgctxt "MainWindow"
+msgid "VISUALS & ASSET CACHE"
+msgstr "VISUELS ET CACHE IMAGES"
+
+#: ui/app.slint:3280
 msgctxt "MainWindow"
 msgid "Game icons"
 msgstr "Icônes du jeu"
 
-#: ui/app.slint:2599
+#: ui/app.slint:3281
 msgctxt "MainWindow"
 msgid "Fetches and shows champion portraits, spells and profile icons. Otherwise: initials."
 msgstr "Télécharge et affiche les portraits de champions, sorts et icônes de profil. Sinon : initiales."
 
-#: ui/app.slint:2604
+#: ui/app.slint:3286
 msgctxt "MainWindow"
-msgid "Riot Client connection"
-msgstr "Connexion au Client Riot"
+msgid "Client artwork"
+msgstr "Illustrations du client"
 
-#: ui/app.slint:2605
+#: ui/app.slint:3287
 msgctxt "MainWindow"
-msgid "Keeps a second WebSocket open to the Riot Client (chat presence)."
-msgstr "Garde un second WebSocket ouvert vers le Client Riot (présence du chat)."
+msgid "Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map."
+msgstr "Affiche les splash arts en cache et les illustrations de la Faille du client League derrière les en-têtes et la carte."
 
-#: ui/app.slint:2610
+#: ui/app.slint:3293
 msgctxt "MainWindow"
-msgid "Mobile Remote at launch"
-msgstr "App Mobile au démarrage"
+msgid "Image memory budget"
+msgstr "Budget mémoire des images"
 
-#: ui/app.slint:2611
+#: ui/app.slint:3294
 msgctxt "MainWindow"
-msgid "Starts the local pairing server. Off: no port is opened on your network."
-msgstr "Démarre le serveur local d'association. Éteint : aucun port ouvert sur le réseau."
+msgid "Maximum decoded textures and cached blobs kept in RAM (16, 64, or 256)."
+msgstr "Nombre maximal de textures décodées et d'images gardées en RAM (16, 64 ou 256)."
 
-#: ui/app.slint:2616
-msgctxt "MainWindow"
-msgid "Eco mode"
-msgstr "Mode éco"
-
-#: ui/app.slint:2617
-msgctxt "MainWindow"
-msgid "Halves refresh rates (interface, detection, live game)."
-msgstr "Divise par deux les fréquences de rafraîchissement (interface, détection, partie en direct)."
-
-#: ui/app.slint:2622
+#: ui/app.slint:3301
 msgctxt "MainWindow"
 msgid "Reduce motion"
 msgstr "Réduire les animations"
 
-#: ui/app.slint:2623
+#: ui/app.slint:3302
 msgctxt "MainWindow"
 msgid "Turns every animation off. The Windows animation setting is honoured either way."
 msgstr "Coupe toutes les animations. Le réglage d'animations de Windows est respecté dans tous les cas."
 
-#: ui/app.slint:2630
+#: ui/app.slint:3307
+msgctxt "MainWindow"
+msgid "Preload showcase art on connect"
+msgstr "Précharger les visuels de démo"
+
+#: ui/app.slint:3308
+msgctxt "MainWindow"
+msgid "Pre-caches ~36 sample icons and splashes when League connects for instant previews."
+msgstr "Précharge ~36 icônes et splashs d'exemple à la connexion de League pour des aperçus instantanés."
+
+#: ui/app.slint:3315
+msgctxt "MainWindow"
+msgid "CONNECTIONS"
+msgstr "CONNEXIONS"
+
+#: ui/app.slint:3318
+msgctxt "MainWindow"
+msgid "Live game board"
+msgstr "Suivi de partie en direct"
+
+#: ui/app.slint:3319
+msgctxt "MainWindow"
+msgid "Reads live scoreboard, towers, and objectives while you play."
+msgstr "Lit le tableau des scores, tourelles et objectifs en direct pendant la partie."
+
+#: ui/app.slint:3324
+msgctxt "MainWindow"
+msgid "Riot Client connection"
+msgstr "Connexion au Client Riot"
+
+#: ui/app.slint:3325
+msgctxt "MainWindow"
+msgid "Keeps a second WebSocket open to the Riot Client (chat presence)."
+msgstr "Garde un second WebSocket ouvert vers le Client Riot (présence du chat)."
+
+#: ui/app.slint:3318
+msgctxt "MainWindow"
+msgid "Mobile Remote at launch"
+msgstr "App Mobile au démarrage"
+
+#: ui/app.slint:3319
+msgctxt "MainWindow"
+msgid "Starts the local pairing server. Off: no port is opened on your network."
+msgstr "Démarre le serveur local d'association. Éteint : aucun port ouvert sur le réseau."
+
+#: ui/app.slint:3326
 msgctxt "MainWindow"
 msgid "OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)"
 msgstr "OBSERVATOIRE (ACTIF UNIQUEMENT QUAND IL EST OUVERT)"
 
-#: ui/app.slint:2634
+#: ui/app.slint:3330
 msgctxt "MainWindow"
 msgid "System footprint"
 msgstr "Empreinte système"
 
-#: ui/app.slint:2635
+#: ui/app.slint:3331
 msgctxt "MainWindow"
 msgid "Samples Riot process CPU / RAM and lists their ports and connections."
 msgstr "Mesure CPU / RAM des processus Riot et liste leurs ports et connexions."
 
-#: ui/app.slint:2640
+#: ui/app.slint:3336
 msgctxt "MainWindow"
 msgid "Endpoint catalog"
 msgstr "Catalogue des endpoints"
 
-#: ui/app.slint:2641
+#: ui/app.slint:3337
 msgctxt "MainWindow"
 msgid "Imports the clients' Swagger / help listing (several thousand entries)."
 msgstr "Importe la liste Swagger / help des clients (plusieurs milliers d'entrées)."
 
-#: ui/app.slint:2646
+#: ui/app.slint:3342
 msgctxt "MainWindow"
 msgid "Replay API probe"
 msgstr "Sonde API Replay"
 
-#: ui/app.slint:2647
+#: ui/app.slint:3343
 msgctxt "MainWindow"
 msgid "Queries /replay/game every 5 seconds during a game."
 msgstr "Interroge /replay/game toutes les 5 secondes pendant une partie."
@@ -819,16 +979,6 @@ msgstr "Niv. {0} · {1} CS"
 msgctxt "Theme"
 msgid "Fill"
 msgstr "Tous postes"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Client artwork"
-msgstr "Illustrations du client"
-
-#: ui/app.slint
-msgctxt "MainWindow"
-msgid "Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map."
-msgstr "Affiche les splash arts en cache et les illustrations de la Faille du client League derrière les en-têtes et la carte."
 
 #: ui/app.slint
 msgctxt "RiftWatchList"

@@ -163,6 +163,20 @@ async fn switch_subscription(
     Ok(())
 }
 
+fn housekeeping_interval(flags: &crate::settings::Flags) -> Duration {
+    match flags.discovery_rate() {
+        crate::settings::DiscoveryRate::Normal => {
+            if flags.eco_mode() {
+                Duration::from_millis(2000)
+            } else {
+                Duration::from_millis(1000)
+            }
+        }
+        crate::settings::DiscoveryRate::Eco => Duration::from_millis(2000),
+        crate::settings::DiscoveryRate::Slow => Duration::from_millis(3000),
+    }
+}
+
 /// Connects to a WAMP server and processes messages until disconnection or target change.
 async fn connect_and_listen(
     source: SourceId,
@@ -187,14 +201,19 @@ async fn connect_and_listen(
     tracing::info!("{source}: connected to WAMP WebSocket on port {}", target.port);
     if source == SourceId::LeagueClient {
         ctx.assets.trigger_metadata_sync(&ctx.discovery, &ctx.client);
-        if ctx.flags.game_icons() {
-            ctx.assets.prefetch_demo_showcase(&ctx.discovery, &ctx.client);
+        if ctx.flags.demo_prefetch() && ctx.flags.game_icons() {
+            ctx.assets.prefetch_demo_showcase_with(
+                &ctx.discovery,
+                &ctx.client,
+                ctx.flags.splash_backdrops(),
+            );
         }
     }
 
     // Subscribe before bootstrapping so no update can slip between the two.
     let mut full_stream: Option<bool> = None;
-    let mut housekeeping = tokio::time::interval(Duration::from_millis(1000));
+    let mut hk_period = housekeeping_interval(&ctx.flags);
+    let mut housekeeping = tokio::time::interval(hk_period);
 
     loop {
         tokio::select! {
@@ -202,6 +221,11 @@ async fn connect_and_listen(
                 if wamp_target(source, ctx).as_ref() != Some(target) {
                     tracing::info!("{source}: WAMP target changed or disappeared, disconnecting");
                     return Ok(());
+                }
+                let next_period = housekeeping_interval(&ctx.flags);
+                if next_period != hk_period {
+                    hk_period = next_period;
+                    housekeeping = tokio::time::interval(hk_period);
                 }
                 // Telemetry Lab open: full firehose. Closed: only what the projection reads.
                 let want_full = ctx.flags.telemetry();
@@ -249,7 +273,7 @@ pub fn spawn_wamp_connector(source: SourceId, ctx: ConnectorContext) -> tokio::t
 
         loop {
             let Some(target) = wamp_target(source, &ctx) else {
-                tokio::time::sleep(Duration::from_millis(1000)).await;
+                tokio::time::sleep(housekeeping_interval(&ctx.flags)).await;
                 continue;
             };
             if last_target.as_ref() != Some(&target) {

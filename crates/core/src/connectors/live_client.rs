@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::time::Duration;
 
 use hypatia_shared::{EventKind, SourceId};
 use serde_json::Value;
@@ -14,8 +13,8 @@ const EVENTDATA: &str = "/liveclientdata/eventdata";
 ///
 /// Invariants:
 /// - No request is made unless `League of Legends.exe` runs and the live-game feature is on.
-/// - While in game, a single `GET /liveclientdata/allgamedata` per second (every other second
-///   in eco mode) feeds the live board; the game event list is read from that same payload.
+/// - While in game, a single `GET /liveclientdata/allgamedata` per poll interval (`1s`, `2s`, or `4s`)
+///   feeds the live board; the game event list is read from that same payload.
 /// - While the Telemetry Lab is open, each new game event is also recorded individually.
 pub fn spawn_live_client_poller(ctx: ConnectorContext) {
     tokio::spawn(async move {
@@ -23,7 +22,7 @@ pub fn spawn_live_client_poller(ctx: ConnectorContext) {
         let mut was_running = false;
 
         loop {
-            let period = Duration::from_millis(if ctx.flags.eco_mode() { 2000 } else { 1000 });
+            let period = ctx.flags.live_poll_interval();
             let running = ctx.flags.live_game() && ctx.discovery.is_live_real(SourceId::LiveGame);
             if running != was_running {
                 info!(
@@ -34,7 +33,7 @@ pub fn spawn_live_client_poller(ctx: ConnectorContext) {
                 was_running = running;
             }
             if !running {
-                tokio::time::sleep(Duration::from_millis(1000)).await;
+                tokio::time::sleep(ctx.flags.live_idle_interval()).await;
                 continue;
             }
 

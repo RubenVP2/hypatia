@@ -316,6 +316,35 @@ fn sync_rows<T: Clone + PartialEq + 'static>(model: &Rc<VecModel<T>>, rows: Vec<
     ModelRc::from(model.clone())
 }
 
+fn clear_model<T: Clone + 'static>(model: &Rc<VecModel<T>>) {
+    while model.row_count() > 0 {
+        model.remove(model.row_count() - 1);
+    }
+}
+
+impl DraftModels {
+    fn clear(&self) {
+        clear_model(&self.allies);
+        clear_model(&self.map_allies);
+        clear_model(&self.enemies);
+        clear_model(&self.my_bans);
+        clear_model(&self.their_bans);
+    }
+}
+
+impl LiveModels {
+    fn clear(&self) {
+        clear_model(&self.my_players);
+        clear_model(&self.enemy_players);
+        clear_model(&self.towers);
+        clear_model(&self.my_objectives);
+        clear_model(&self.enemy_objectives);
+        clear_model(&self.feed);
+        clear_model(&self.sightings);
+        clear_model(&self.pits);
+    }
+}
+
 pub fn build_champ_select_view(
     cs: &ChampSelectSummary,
     icons: &mut impl IconLookup,
@@ -706,7 +735,7 @@ fn format_thousands(value: u32, lang: Lang) -> String {
     let separator = if lang.is_fr() { ' ' } else { ',' };
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(separator);
         }
         out.push(c);
@@ -1148,6 +1177,23 @@ pub struct Companion {
     live: LiveModels,
 }
 
+fn reset_client_art(main_win: &MainWindow) {
+    let target = main_win.global::<ClientArt>();
+    target.set_map_south(Image::default());
+    target.set_map_north(Image::default());
+    target.set_ready_check(Image::default());
+    target.set_victory(Image::default());
+    target.set_defeat(Image::default());
+    target.set_backdrop(Image::default());
+}
+
+fn reset_window_views(main_win: &MainWindow) {
+    main_win.set_wait(WaitView::default());
+    main_win.set_champ(ChampSelectView::default());
+    main_win.set_live(LiveView::default());
+    main_win.set_end(EndView::default());
+}
+
 impl Companion {
     pub fn refresh(&mut self, main_win: &MainWindow, app_state: &AppState) {
         let snapshot = app_state.get_summary();
@@ -1157,11 +1203,40 @@ impl Companion {
             splash_enabled: app_state.flags.splash_backdrops(),
             icons_revision: app_state.assets.image_revision(),
         };
+
+        let prev_context = self.shown.as_ref().map(|shown| shown.context);
+        let prev_view = self.shown.as_ref().map(|shown| shown.view);
+        let icons_turned_off =
+            prev_context.is_some_and(|prev| prev.icons_enabled && !context.icons_enabled);
+        let splashes_turned_off =
+            prev_context.is_some_and(|prev| prev.splash_enabled && !context.splash_enabled);
+
+        if context.icons_enabled {
+            self.loader
+                .set_max_entries(app_state.flags.asset_cache_budget().max_entries());
+        } else {
+            self.loader.set_max_entries(0);
+        }
+        if !context.splash_enabled {
+            self.loader
+                .evict_categories(&["splash", art::CATEGORY, art::BANNER_CATEGORY]);
+        }
+        if snapshot.champ_select.is_none() || icons_turned_off {
+            self.draft.clear();
+        }
+        if snapshot.live_game.is_none() || icons_turned_off {
+            self.live.clear();
+        }
+        if icons_turned_off || splashes_turned_off {
+            reset_window_views(main_win);
+        }
+
         let art_key = (context.splash_enabled, context.icons_revision);
         if self.art_key != Some(art_key) {
             apply_client_art(main_win, app_state, &mut self.loader, context.splash_enabled);
             self.art_key = Some(art_key);
         }
+
         // A different context invalidates every section; an identical projection none.
         let previous = self.shown.take().filter(|shown| shown.context == context);
         if let Some(shown) = previous {
@@ -1171,6 +1246,7 @@ impl Companion {
             }
             self.shown = Some(shown);
         }
+
         let view = apply_summary(
             main_win,
             app_state,
@@ -1181,7 +1257,7 @@ impl Companion {
             self.shown.as_ref(),
         );
         // Re-anchor only on a fresh reading of the same view's clock.
-        let same_view = self.shown.as_ref().is_some_and(|shown| shown.view == view);
+        let same_view = prev_view == Some(view);
         let current = if same_view { self.clock } else { None };
         self.clock = PhaseClock::follow(current, phase_clock(&snapshot, view));
         self.shown = Some(Shown {
@@ -1189,6 +1265,27 @@ impl Companion {
             view,
             context,
         });
+    }
+
+    /// Returns `(decoded_image_count, approx_rgba_bytes)` currently held in desktop memory.
+    pub fn loader_stats(&self) -> (usize, u64) {
+        self.loader.stats()
+    }
+
+    /// Forces the next `refresh` to repopulate client art and active views.
+    pub fn invalidate_visuals(&mut self) {
+        self.art_key = None;
+        self.shown = None;
+    }
+
+    /// Releases every decoded Slint texture from memory and clears cached window views.
+    pub fn clear_icon_cache(&mut self, main_win: &MainWindow) {
+        self.loader.clear();
+        reset_client_art(main_win);
+        reset_window_views(main_win);
+        self.draft.clear();
+        self.live.clear();
+        self.invalidate_visuals();
     }
 
     /// The clock the active view shows, if it has one.

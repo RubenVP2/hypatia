@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -15,9 +15,43 @@ use crate::discovery::DiscoveryManager;
 use crate::riot_http::ReadOnlyRiotClient;
 use crate::signal::ChangeSignal;
 
-const MAX_MEM_ENTRIES: usize = 512;
+const DEFAULT_MAX_MEM_ENTRIES: usize = 256;
 const RETRY_COOLDOWN_TRANSIENT: Duration = Duration::from_secs(20);
 const RETRY_COOLDOWN_NOT_FOUND: Duration = Duration::from_secs(300);
+
+const IMAGE_CATEGORIES: &[&str] = &[
+    "champion",
+    "profile",
+    "spell",
+    "perk",
+    "style",
+    "skin",
+    "splash",
+    crate::art::CATEGORY,
+    crate::art::BANNER_CATEGORY,
+];
+
+struct CachedBlob {
+    bytes: Vec<u8>,
+    mime: &'static str,
+    last_used: u64,
+}
+
+#[derive(Default)]
+struct ByteCacheState {
+    entries: HashMap<String, CachedBlob>,
+    clock: u64,
+    total_bytes: usize,
+}
+
+/// Instantaneous size of Hypatia's asset cache in RAM and on disk.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AssetCacheStats {
+    pub memory_entries: usize,
+    pub memory_bytes: u64,
+    pub disk_files: usize,
+    pub disk_bytes: u64,
+}
 
 /// Local persistent disk + in-memory cache for Riot LCU `/lol-game-data/assets/...` bitmaps
 /// and metadata JSONs. 100% local: only talks to `127.0.0.1:{lcu_port}` via `ReadOnlyRiotClient`.
@@ -26,7 +60,8 @@ pub struct GameAssetCache {
     signal: ChangeSignal,
     metadata_revision: AtomicU64,
     image_revision: AtomicU64,
-    bytes_cache: RwLock<HashMap<String, (Vec<u8>, &'static str)>>,
+    max_mem_entries: AtomicUsize,
+    bytes_cache: Mutex<ByteCacheState>,
     disk_paths: RwLock<HashMap<String, PathBuf>>,
     in_flight: Mutex<HashSet<String>>,
     failed_until: Mutex<HashMap<String, Instant>>,
@@ -61,7 +96,8 @@ impl GameAssetCache {
             signal,
             metadata_revision: AtomicU64::new(0),
             image_revision: AtomicU64::new(0),
-            bytes_cache: RwLock::new(HashMap::new()),
+            max_mem_entries: AtomicUsize::new(DEFAULT_MAX_MEM_ENTRIES),
+            bytes_cache: Mutex::new(ByteCacheState::default()),
             disk_paths: RwLock::new(HashMap::new()),
             in_flight: Mutex::new(HashSet::new()),
             failed_until: Mutex::new(HashMap::new()),
@@ -230,6 +266,16 @@ impl GameAssetCache {
         discovery: &Arc<DiscoveryManager>,
         client: &ReadOnlyRiotClient,
     ) {
+        self.prefetch_demo_showcase_with(discovery, client, true);
+    }
+
+    /// Prefetches demo showcase icons and optionally large artwork (`splash`, `banner`, `art`).
+    pub fn prefetch_demo_showcase_with(
+        self: &Arc<Self>,
+        discovery: &Arc<DiscoveryManager>,
+        client: &ReadOnlyRiotClient,
+        include_artwork: bool,
+    ) {
         let Some((port, password)) = resolve_live_lcu_creds(discovery) else {
             return;
         };
@@ -249,12 +295,14 @@ impl GameAssetCache {
         let client = client.clone();
         tokio::spawn(async move {
             this.ensure_metadata_synced_with_creds(port, &password, &client).await;
-            const GROUPS: &[(&str, &[i64])] = &[
+            const ICON_GROUPS: &[(&str, &[i64])] = &[
                 (
                     "champion",
                     &[266, 64, 103, 222, 412, 122, 234, 89, 81, 99, 86, 238, 145, 111, 157, 35, 777, 875, 233],
                 ),
                 ("spell", &[4, 7, 11, 12, 14]),
+            ];
+            const ARTWORK_GROUPS: &[(&str, &[i64])] = &[
                 ("splash", &[103027, 103000, 266000, 64000, 222000, 412000]),
                 (
                     crate::art::BANNER_CATEGORY,
@@ -262,10 +310,19 @@ impl GameAssetCache {
                 ),
                 (crate::art::CATEGORY, &[1, 2, 3, 4, 5, 6]),
             ];
-            for &(cat, ids) in GROUPS {
+            for &(cat, ids) in ICON_GROUPS {
                 for &id in ids {
                     if this.cached_image_path(cat, id).is_none() {
                         let _ = this.fetch_from_lcu_with_creds(cat, id, port, &password, &client).await;
+                    }
+                }
+            }
+            if include_artwork {
+                for &(cat, ids) in ARTWORK_GROUPS {
+                    for &id in ids {
+                        if this.cached_image_path(cat, id).is_none() {
+                            let _ = this.fetch_from_lcu_with_creds(cat, id, port, &password, &client).await;
+                        }
                     }
                 }
             }
@@ -302,7 +359,7 @@ impl GameAssetCache {
         let key = asset_key(category, id);
 
         // 1. In-memory bytes cache
-        if let Some((bytes, mime)) = self.bytes_cache.read().unwrap().get(&key).cloned() {
+        if let Some((bytes, mime)) = self.get_mem_cache(&key) {
             return Some((mime, bytes));
         }
 
@@ -703,18 +760,151 @@ impl GameAssetCache {
         }
     }
 
+    /// Updates the in-memory blob budget, immediately evicting LRU entries if shrunk (or
+    /// releasing everything when `max == 0`).
+    pub fn set_max_mem_entries(&self, max: usize) {
+        self.max_mem_entries.store(max, Ordering::Relaxed);
+        let mut guard = self.bytes_cache.lock().unwrap();
+        if max == 0 {
+            guard.entries.clear();
+            guard.entries.shrink_to_fit();
+            guard.total_bytes = 0;
+            return;
+        }
+        let evicted = evict_lru_excess(&mut guard, max);
+        if evicted && guard.entries.capacity() > max.saturating_mul(2).max(32) {
+            guard.entries.shrink_to_fit();
+        }
+    }
+
+    /// Removes all in-memory cached image blobs belonging to `categories` immediately.
+    pub fn evict_categories(&self, categories: &[&str]) {
+        if categories.is_empty() {
+            return;
+        }
+        let mut guard = self.bytes_cache.lock().unwrap();
+        let mut removed = 0usize;
+        guard.entries.retain(|key, blob| {
+            let matches = categories.iter().any(|cat| {
+                key.starts_with(cat) && key.as_bytes().get(cat.len()) == Some(&b'/')
+            });
+            if matches {
+                removed += blob.bytes.len();
+            }
+            !matches
+        });
+        guard.total_bytes = guard.total_bytes.saturating_sub(removed);
+        if removed > 0 && guard.entries.capacity() > guard.entries.len().saturating_mul(2).max(32) {
+            guard.entries.shrink_to_fit();
+        }
+    }
+
+    /// Drops all cached encoded image blobs from RAM while preserving disk files and metadata.
+    pub fn clear_memory_cache(&self) {
+        let mut guard = self.bytes_cache.lock().unwrap();
+        guard.entries.clear();
+        guard.entries.shrink_to_fit();
+        guard.total_bytes = 0;
+    }
+
+    /// Removes all cached images from both RAM and disk (`assets-cache/<category>`), preserving
+    /// metadata JSONs in `meta/`.
+    pub fn clear_disk_cache(&self) {
+        self.clear_memory_cache();
+        self.disk_paths.write().unwrap().clear();
+        self.failed_until.lock().unwrap().clear();
+        self.demo_warmed_port.store(0, Ordering::Relaxed);
+        for cat in IMAGE_CATEGORIES {
+            let dir = self.cache_dir.join(cat);
+            if dir.exists() {
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+        }
+        self.image_revision.fetch_add(1, Ordering::Relaxed);
+        self.signal.bump();
+    }
+
+    /// Returns `(entry_count, total_bytes)` currently held in the in-memory blob cache.
+    pub fn memory_stats(&self) -> (usize, u64) {
+        let guard = self.bytes_cache.lock().unwrap();
+        (guard.entries.len(), guard.total_bytes as u64)
+    }
+
+    /// Walks cached image directories on disk and returns `(file_count, total_bytes)`.
+    pub fn disk_stats(&self) -> (usize, u64) {
+        let mut files = 0usize;
+        let mut bytes = 0u64;
+        for cat in IMAGE_CATEGORIES {
+            let dir = self.cache_dir.join(cat);
+            let Ok(read_dir) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in read_dir.flatten() {
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_file() {
+                        files += 1;
+                        bytes = bytes.saturating_add(meta.len());
+                    }
+                }
+            }
+        }
+        (files, bytes)
+    }
+
+    /// Combined RAM + disk usage snapshot for the asset cache.
+    pub fn stats(&self) -> AssetCacheStats {
+        let (memory_entries, memory_bytes) = self.memory_stats();
+        let (disk_files, disk_bytes) = self.disk_stats();
+        AssetCacheStats {
+            memory_entries,
+            memory_bytes,
+            disk_files,
+            disk_bytes,
+        }
+    }
+
     fn file_path(&self, category: &str, id: i64, ext: &str) -> PathBuf {
         self.cache_dir.join(category).join(format!("{id}.{ext}"))
     }
 
+    fn get_mem_cache(&self, key: &str) -> Option<(Vec<u8>, &'static str)> {
+        let mut guard = self.bytes_cache.lock().unwrap();
+        let next_clock = guard.clock.wrapping_add(1);
+        guard.clock = next_clock;
+        let entry = guard.entries.get_mut(key)?;
+        entry.last_used = next_clock;
+        Some((entry.bytes.clone(), entry.mime))
+    }
+
     fn put_mem_cache(&self, key: String, bytes: Vec<u8>, mime: &'static str) {
-        let mut guard = self.bytes_cache.write().unwrap();
-        if guard.len() >= MAX_MEM_ENTRIES && !guard.contains_key(&key) {
-            if let Some(evict_key) = guard.keys().next().cloned() {
-                guard.remove(&evict_key);
-            }
+        let max = self.max_mem_entries.load(Ordering::Relaxed);
+        if max == 0 {
+            return;
         }
-        guard.insert(key, (bytes, mime));
+        let mut guard = self.bytes_cache.lock().unwrap();
+        let next_clock = guard.clock.wrapping_add(1);
+        guard.clock = next_clock;
+        let new_len = bytes.len();
+        if let Some(existing) = guard.entries.get_mut(&key) {
+            let old_len = existing.bytes.len();
+            existing.bytes = bytes;
+            existing.mime = mime;
+            existing.last_used = next_clock;
+            guard.total_bytes = guard.total_bytes.saturating_sub(old_len) + new_len;
+            return;
+        }
+        if guard.entries.len() >= max {
+            evict_lru_excess(&mut guard, max.saturating_sub(1));
+        }
+        guard.total_bytes += new_len;
+        guard.entries.insert(
+            key,
+            CachedBlob {
+                bytes,
+                mime,
+                last_used: next_clock,
+            },
+        );
     }
 
     fn is_in_cooldown(&self, key: &str) -> bool {
@@ -734,6 +924,25 @@ impl GameAssetCache {
             .unwrap()
             .insert(key.to_string(), Instant::now() + ttl);
     }
+}
+
+fn evict_lru_excess(state: &mut ByteCacheState, keep_max: usize) -> bool {
+    let mut evicted = false;
+    while state.entries.len() > keep_max {
+        let Some(oldest_key) = state
+            .entries
+            .iter()
+            .min_by_key(|(_, blob)| blob.last_used)
+            .map(|(k, _)| k.clone())
+        else {
+            break;
+        };
+        if let Some(removed) = state.entries.remove(&oldest_key) {
+            state.total_bytes = state.total_bytes.saturating_sub(removed.bytes.len());
+            evicted = true;
+        }
+    }
+    evicted
 }
 
 pub fn default_cache_dir() -> PathBuf {
@@ -1056,6 +1265,65 @@ mod tests {
         let client = ReadOnlyRiotClient::new();
         let fetched = cache.get_or_fetch_bytes("champion", 103, &disc, &client).await;
         assert_eq!(fetched, Some(("image/png", png_bytes)));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn enforces_lru_budget_evicts_categories_and_clears_caches() {
+        let dir = temp_cache_dir("lru_and_clear");
+        let cache = GameAssetCache::with_dir(dir.clone());
+        cache.set_max_mem_entries(2);
+
+        cache.put_mem_cache("champion/103".into(), vec![1; 10], "image/png");
+        cache.put_mem_cache("splash/103000".into(), vec![2; 20], "image/jpeg");
+        // Touch champion/103 so splash/103000 becomes the least-recently used entry.
+        assert!(cache.get_mem_cache("champion/103").is_some());
+        cache.put_mem_cache("champion/64".into(), vec![3; 15], "image/png");
+
+        assert_eq!(cache.memory_stats(), (2, 25));
+        assert!(cache.get_mem_cache("splash/103000").is_none());
+        assert!(cache.get_mem_cache("champion/103").is_some());
+        assert!(cache.get_mem_cache("champion/64").is_some());
+
+        // Shrinking budget immediately drops oldest entry.
+        cache.set_max_mem_entries(1);
+        assert_eq!(cache.memory_stats().0, 1);
+        assert!(cache.get_mem_cache("champion/64").is_some());
+        assert!(cache.get_mem_cache("champion/103").is_none());
+
+        // Category eviction drops artwork while keeping icons.
+        cache.set_max_mem_entries(8);
+        cache.put_mem_cache("banner/266000".into(), vec![4; 30], "image/jpeg");
+        cache.put_mem_cache("art/1".into(), vec![5; 12], "image/jpeg");
+        cache.evict_categories(&["splash", crate::art::CATEGORY, crate::art::BANNER_CATEGORY]);
+        assert_eq!(cache.memory_stats(), (1, 15));
+
+        // Clear memory keeps disk intact; clear disk removes image directories while keeping meta/.
+        std::fs::create_dir_all(dir.join("champion")).unwrap();
+        std::fs::create_dir_all(dir.join("meta")).unwrap();
+        std::fs::write(dir.join("champion").join("64.png"), vec![9; 100]).unwrap();
+        std::fs::write(dir.join("meta").join("champion-summary.json"), b"[]").unwrap();
+
+        let stats = cache.stats();
+        assert_eq!(stats.memory_entries, 1);
+        assert_eq!(stats.disk_files, 1);
+        assert_eq!(stats.disk_bytes, 100);
+
+        cache.clear_memory_cache();
+        assert_eq!(cache.memory_stats(), (0, 0));
+        assert_eq!(cache.disk_stats(), (1, 100));
+
+        let rev_before = cache.image_revision();
+        cache.clear_disk_cache();
+        assert_eq!(cache.disk_stats(), (0, 0));
+        assert!(cache.image_revision() > rev_before);
+        assert!(dir.join("meta").join("champion-summary.json").is_file());
+
+        // Zero budget refuses retaining memory blobs.
+        cache.set_max_mem_entries(0);
+        cache.put_mem_cache("champion/64".into(), vec![3; 15], "image/png");
+        assert_eq!(cache.memory_stats(), (0, 0));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

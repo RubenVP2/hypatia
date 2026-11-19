@@ -798,7 +798,8 @@ impl DemoRemoteState {
         let victory = self.eog_round % 2 == 1;
         const IDS: [i64; 10] = [86, 64, 103, 222, 412, 122, 234, 238, 145, 111];
         // (kills, deaths, assists, lane minions, jungle monsters, level, gold, damage, vision)
-        const LINES: [(u32, u32, u32, u32, u32, u32, u32, u32, u32); 10] = [
+        type EogPlayerLine = (u32, u32, u32, u32, u32, u32, u32, u32, u32);
+        const LINES: [EogPlayerLine; 10] = [
             (4, 3, 6, 201, 4, 16, 11200, 18400, 14),
             (6, 2, 11, 38, 168, 15, 11950, 15200, 31),
             (9, 2, 14, 214, 12, 17, 14950, 34820, 28),
@@ -852,6 +853,7 @@ impl DemoRemoteState {
 
 /// Spawns the synthetic demo event generator. It only produces events while `active` is set,
 /// so leaving Demo mode stops all synthetic traffic.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_demo_generator(
     store: Arc<RwLock<EventStore>>,
     catalog: Arc<RwLock<CatalogStore>>,

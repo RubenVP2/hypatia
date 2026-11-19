@@ -1971,6 +1971,7 @@ export component SettingRow inherits Rectangle {
     in property <string> title;
     in property <string> detail;
     in property <bool> checked: false;
+    in property <bool> enabled: true;
     callback toggled();
     min-height: 50px;
 
@@ -1986,7 +1987,7 @@ export component SettingRow inherits Rectangle {
             spacing: Space.xxs;
             Text {
                 text: root.title;
-                color: Theme.text;
+                color: root.enabled ? Theme.text : Theme.muted;
                 font-size: Type.body;
                 font-weight: 800;
             }
@@ -2005,8 +2006,59 @@ export component SettingRow inherits Rectangle {
                 width: 100%;
                 text: root.checked ? "ON" : "OFF";
                 selected: root.checked;
+                enabled: root.enabled;
                 accessible-label: root.title;
                 clicked => { root.toggled(); }
+            }
+        }
+    }
+}
+
+// One discrete multi-option setting: title, detail, and quiet option selector buttons.
+export component ChoiceRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <[string]> options;
+    in property <int> current: 0;
+    in property <bool> enabled: true;
+    callback chosen(int);
+    min-height: 52px;
+
+    HorizontalLayout {
+        padding-top: Space.sm;
+        padding-bottom: Space.sm;
+        spacing: Space.md;
+        alignment: stretch;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: Space.xxs;
+            Text {
+                text: root.title;
+                color: root.enabled ? Theme.text : Theme.muted;
+                font-size: Type.body;
+                font-weight: 800;
+            }
+            Text {
+                text: root.detail;
+                color: Theme.muted;
+                font-size: Type.small;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: end;
+                for opt[i] in root.options: Action {
+                    text: opt;
+                    selected: root.current == i;
+                    enabled: root.enabled;
+                    clicked => { root.chosen(i); }
+                }
             }
         }
     }

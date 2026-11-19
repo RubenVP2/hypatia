@@ -1,141 +1,163 @@
 # Hypatia
 
-> **Hypatia · LoL companion — a local, read-only desktop app with an optional Observatory for what the Riot clients expose, and an opt-in Mobile Remote for one-handed control.**
+> **A lightweight, 100% local League of Legends companion for Windows — follows your match from lobby to post-game, with an optional phone remote and a built-in Observatory.**
 
-[![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/RubenVP2/hypatia)](https://github.com/RubenVP2/hypatia/releases/latest)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
-[![Slint](https://img.shields.io/badge/UI-Slint%201.18-purple.svg)](https://slint.dev)
+[![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
 ---
 
-## Overview
+## Download & Run
 
-**Hypatia** is a self-contained native desktop companion written in **Rust** and **Slint**. It automatically discovers and follows your local Riot Games and League of Legends client services:
+No installer, no account, no setup:
 
-- **Main Window (`MainWindow`)**: Phase-aware view with one running clock for Lobby, Queue, Ready Check, Champion Select (team line roster, lane diagram, enemy picks & bans), Live Game (team score, tower status map, objective ramp, event feed), and End of Game. Supports **Dark (Night)** and **Light (Day)** themes, as well as live **EN | FR** language switching (auto-detected from the OS on first launch, persisted locally, and synchronized with Mobile Remote).
-- **Observatory (`Observatory` in the left rail / `--telemetry`)**: Can be turned **ON or OFF** at any time and displayed **Side-by-Side (alongside the companion view)** or **Full Screen**:
-  1. **Live Telemetry Stream**: Real-time WAMP (`OnJsonApiEvent`) and LiveClient (`:2999`) event stream with source/kind filters, pause/resume, **JSON Payload Inspector**, **Previous vs Current State Diff**, and **Secret Reveal**.
-  2. **API Endpoints & GET Tester**: Interactive OpenAPI / `/help` catalog for LCU, Riot Client, and Live Game (`:2999`) with an integrated read-only `GET` runner.
-  3. **System Footprint**: Active Riot processes (PID, CPU, RAM, executable path), listening local ports (`127.0.0.1`), and established network connections.
-- **Mobile Remote Accessibility Companion (`Mobile remote` button / `--remote`)**: Opt-in LAN server paired via a 128-bit QR code token. Scan the QR code on your PC screen with your phone to control **Lobby role selection, Queue start/cancel, Match Found accept/decline, Champion ban & pick, Summoner Spells, Skins, Rune pages (1-tap recommended presets, saved pages, or 1-hand custom builder), and Role / Pick Order / Champion swaps** one-handed from your phone, with multi-layer **Notifications, Audio Chimes, Lock-Screen Media Controls, and Vibration**.
+1. Download **`hypatia-windows-x86_64.zip`** from the **[Latest Release](https://github.com/RubenVP2/hypatia/releases/latest)**.
+2. Unzip it anywhere and launch **`hypatia.exe`**.
+3. Open League of Legends as usual — Hypatia detects the client automatically and follows your match.
 
----
-
-## 🛡️ Security & Privacy Guarantees
-
-| Guarantee | Mechanism |
-|---|---|
-| **Read-Only Desktop Core** | The desktop observatory uses `ReadOnlyRiotClient` (strictly `GET` requests and passive WAMP WebSocket subscriptions). |
-| **Allowlisted Mobile Remote (Opt-in)** | Disabled by default. When enabled, `LcuActionClient` only accepts variants of the closed `RemoteCommand` enum — no arbitrary paths or payloads, and zero background automation. Every action requires an explicit user tap. |
-| **128-bit QR Pairing & Host Guard** | Pairing uses a random 128-bit token (`/?token=...`) exchangeable for an `HttpOnly; SameSite=Strict` session cookie, with one-click token rotation/revocation and `Host`/`Origin` validation. |
-| **Ephemeral Secret Vault** | Auth tokens (`accessToken`, JWTs, lockfile passwords) are automatically masked as `{"$secret": { id, len, hint }}` in an in-memory LRU vault. |
-| **Zero Telemetry** | 100% offline and local. Zero external CDN calls, zero analytics. |
+Want to try the interface without opening League? Turn on **Demo mode** from the left rail.
 
 ---
 
-## ⚡ Quick Start
+## What It Does
 
-```bash
-# Run Hypatia with a live League of Legends client
-cargo run -p hypatia
-
-# Run with the Telemetry Observatory open alongside the companion
-cargo run -p hypatia -- --telemetry
-
-# Run in Demo Mode with Telemetry and Mobile Remote QR code open on startup
-cargo run -p hypatia -- --demo --telemetry --remote
-```
+- **Follows every match phase automatically**
+  - **Lobby, Queue & Ready Check**: live status and timer without switching windows.
+  - **Champion Select**: roles, team picks, bans, and turn timer at a glance.
+  - **Live Game**: team score, towers, epic monster timers, last-seen enemy positions on Summoner's Rift, and a live event feed — designed to sit cleanly on a second monitor.
+  - **Post-Game**: match outcome, your key stats, and both teams' boards.
+- **Mobile Remote *(optional)***: control lobby roles, queue, Ready Check accept/decline, bans, picks, summoner spells, skins, rune pages, and swaps one-handed from your phone on the same Wi-Fi.
+- **Observatory *(optional)***: open it from the left rail whenever you want to inspect the live data your local Riot & League clients expose, browse available local endpoints, or check active Riot processes.
+- **Comfortable by default**: **Dark** and **Light** themes, instant **EN | FR** language switcher (auto-detected on first launch and synced with your phone), and reduced-motion support.
 
 ---
 
-## 📱 Mobile Remote (Accessibility Companion)
+## Safe & Private by Design
 
-1. Click **Mobile Remote** in the left rail of the Hypatia desktop window (or pass `--remote` on startup).
-2. Scan the QR code displayed on your PC with your phone camera (your phone and PC must be on the same local Wi-Fi network).
-3. Tap **Arm Alerts** at the top of the mobile screen once to arm:
-   - **Web Notifications & Service Worker**
-   - **Synthesized Web Audio Chimes & Background Audio Keep-Alive** (with lock-screen `MediaSession` status)
-   - **Haptic Vibration Patterns** (`navigator.vibrate`)
-   - **Screen Wake Lock** (`navigator.wakeLock`)
-4. Use the one-handed bottom thumb-zone dock to start queues, accept matches, ban/pick champions, switch Summoner Spells (including `D ↔ F` swap) and Skins, equip 1-tap Recommended or custom Runes, and request or accept Role / Pick Order / Champion swaps.
+- **100% local, zero telemetry** — no account, no ads, no analytics, no external servers. Everything stays on your PC (and your local Wi-Fi if you turn on Mobile Remote).
+- **Read-only by default, no game overlay** — Hypatia never injects into League of Legends and never automates actions in the background. When Mobile Remote is enabled, every action requires an explicit tap on your phone.
+- **Respects Riot privacy** — Ranked Solo/Duo teammates remain hidden exactly as Riot leaves them, and local auth tokens stay masked by default.
 
 ---
 
-## 🪶 Performance & Footprint
+## Using Mobile Remote
 
-Hypatia is event-driven end to end: when nothing changes on the Riot side it does not poll, re-project or repaint.
+1. Click **Mobile Remote** in the left rail of Hypatia.
+2. Scan the QR code on your PC screen with your phone camera (your phone and PC must be on the same local Wi-Fi).
+3. Tap **Arm Alerts** once at the top of the phone page to enable sound chimes, vibration, notifications, and screen wake lock for queue pops and draft turns.
+4. Use the one-handed bottom dock to queue, accept Ready Checks, ban/pick champions, swap spells (`D ↔ F`), skins, or rune pages, and handle role/pick/champion swaps.
 
-- **Idle**: one lightweight process-table scan every 2.5 s (1 s while a Riot process runs); no timers in the UI.
-- **Lobby / champion select**: only the dozen LCU resources the companion displays are subscribed to over WAMP; the rest of the client's event firehose is never sent to Hypatia.
-- **In game**: a single `GET /liveclientdata/allgamedata` per second, projected once and pushed to the views only where something changed.
-- **Memory**: flat over a session. Only the latest payload of each displayed resource is kept; the full event history exists solely while the Observatory is open, bounded by count and by bytes.
+You can revoke or regenerate the pairing QR code at any time in one click.
 
-Every background activity has its own switch under **Performance** in the left rail (persisted in `settings.json` next to the language preference):
+---
+
+## Light on Your PC
+
+Hypatia only reacts when something changes in League — no constant polling, no browser engine, no FPS tax.
+
+You can also toggle individual features under **Performance** in the left rail (saved automatically):
 
 | Switch | Default | When off |
 |---|---|---|
-| Live game board | on | No request to `:2999`; live view stays empty. |
-| Game icons | on | No icon downloads or decoding; initials are shown instead. |
-| Riot Client connection | on | Only the League Client WebSocket is kept open. |
-| Mobile Remote at launch | on | No LAN port is opened until you start it from the rail. |
-| Eco mode | off | When **on**: UI, discovery and live-game refresh rates are halved. |
-| System footprint *(Observatory)* | on | No per-process CPU/RAM sampling or socket enumeration. |
-| Endpoint catalog *(Observatory)* | on | No Swagger / `/help` import. |
-| Replay API probe *(Observatory)* | off | No `/replay/game` polling. |
+| Live game board | on | Does not read live match data; live view stays empty. |
+| Game icons | on | Shows initials instead of loading champion/item icons. |
+| Riot Client connection | on | Connects only to the League Client. |
+| Mobile Remote at launch | on | Keeps the local phone server off until you start it manually. |
+| Eco mode | off | When **on**: halves UI and live-game refresh rates. |
+| System footprint *(Observatory)* | on | Disables Riot process CPU/RAM and socket sampling. |
+| Endpoint catalog *(Observatory)* | on | Skips loading the local API endpoint list. |
+| Replay API probe *(Observatory)* | off | Does not check the local Replay API. |
 
-The Observatory and Demo mode are toggled from the rail; closing the Observatory frees its event history.
-
-### Benchmarks
-
-```bash
-# Hot paths (ingestion, projection, catalog, discovery)
-cargo run --release -p hypatia-core --example bench
-```
-
-```powershell
-# Whole-application CPU / memory in three scenarios (close League first)
-.\bench\measure.ps1
-```
+Closing the Observatory immediately frees its event history from memory.
 
 ---
 
-## ⚙️ CLI Reference
+## For Developers
+
+Hypatia is a native **Rust 1.85+** & **Slint 1.18** workspace targeting Windows (`x86_64-pc-windows-msvc`), portable enough to build and run in `--demo` mode on Linux and macOS.
+
+### Architecture
+
+```text
+crates/
+├── shared/    # Data models, Match Projection, LiveBoard, RemoteCommand & RemoteStateSnapshot
+├── core/      # Lockfile discovery, WAMP & LiveClient connectors, event store, settings, LcuActionClient, LAN Remote server
+└── desktop/   # Native Slint 1.18 desktop application
+    └── src/   #   main · companion · telemetry (Observatory) · icons · labels · cli · win_dpi
+bench/         # Whole-application footprint benchmark
+```
+
+### Technical Security Model
+
+| Guarantee | Mechanism |
+|---|---|
+| **Read-Only Desktop Core** | The desktop companion and Observatory use `ReadOnlyRiotClient` (strictly `GET` requests and passive WAMP WebSocket subscriptions on `127.0.0.1`). |
+| **Allowlisted Mobile Remote (Opt-in)** | `LcuActionClient` only accepts variants of the closed `RemoteCommand` enum — no arbitrary paths or payloads, zero background automation. |
+| **128-bit QR Pairing & Host Guard** | Pairing uses a random 128-bit token (`/?token=...`) exchanged for an `HttpOnly; SameSite=Strict` session cookie, with one-click token rotation/revocation and `Host`/`Origin` validation. |
+| **Ephemeral Secret Vault** | Auth tokens (`accessToken`, JWTs, lockfile passwords) are masked as `{"$secret": { id, len, hint }}` in an in-memory LRU vault until explicitly revealed in the Observatory. |
+| **Zero External Network Calls** | Fonts and assets ship in the binary; all traffic stays on loopback (`127.0.0.1`) and the paired LAN. |
+
+### Building & Running from Source
+
+```bash
+# Run with a live League of Legends client (Windows)
+cargo run -p hypatia
+
+# Run with the Observatory open alongside the companion
+cargo run -p hypatia -- --telemetry
+
+# Run in Demo mode (works on Windows, Linux, and macOS without League installed)
+cargo run -p hypatia -- --demo --telemetry --remote
+
+# Pin a specific phase in Demo mode
+cargo run -p hypatia -- --demo --phase champ-select
+```
+
+On Windows, `.\build.ps1` runs the workspace test suite and produces the release binary at `target/release/hypatia.exe`.
+
+### CLI Reference
 
 ```text
 Usage: hypatia [OPTIONS]
 
 Options:
-      --demo                   Start in demo mode with synthetic event streams
+      --demo                   Start in Demo mode with simulated event streams
       --demo-rate <DEMO_RATE>  Demo events generated per second [default: 2.0]
       --lang <LANG>            Interface language override (en or fr)
-      --telemetry              Open the Observatory (advanced view of what the Riot clients expose)
-      --remote                 Start with Mobile Remote server enabled and QR code visible
+      --telemetry              Open the Observatory on launch
+      --remote                 Enable Mobile Remote server and show QR pairing drawer on launch
       --no-remote              Disable automatic startup of the Mobile Remote server
-      --remote-port <PORT>     Preferred LAN port for Mobile Remote server [default: 7879]
+      --remote-port <PORT>     Preferred LAN port for the Mobile Remote server [default: 7879]
       --light                  Start in Light (Day) theme instead of Dark (Night)
-      --reduce-motion          Turn every UI animation off (the OS setting is honoured either way)
+      --reduce-motion          Turn every UI animation off (the OS reduced-motion setting is honoured either way)
       --phase <PHASE>          Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
   -h, --help                   Print help
   -V, --version                Print version
 ```
 
----
+### Benchmarks & Quality Checks
 
-## 🏗️ Architecture
+```bash
+# Hot paths (ingestion, projection, catalog, discovery)
+cargo run --release -p hypatia-core --example bench
 
-```text
-crates/
-├── shared/    # Common data models, Match Projection, LiveBoard, RemoteCommand & RemoteStateSnapshot
-├── core/      # Discovery, WAMP & LiveClient connectors, event store, settings, LcuActionClient, LAN Remote server
-└── desktop/   # Native Slint 1.18 desktop application
-    └── src/   #   main (wiring) · companion (phase views) · telemetry (Lab) · icons · labels · cli
-bench/         # Whole-application footprint benchmark
+# Formatting, lint, and tests
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
+```powershell
+# Whole-application CPU / memory in three scenarios on Windows (close League first)
+.\bench\measure.ps1
+```
+
+For domain invariants, visual design tokens, and EN/FR translation workflow, see [CONTEXT.md](CONTEXT.md), [DESIGN.md](DESIGN.md), [PRODUCT.md](PRODUCT.md), and [AGENTS.md](AGENTS.md).
+
 ---
 
-## 📄 License & Disclaimer
+## License & Disclaimer
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. Bundled fonts are under the [SIL Open Font License](crates/desktop/ui/fonts/OFL.txt).
 

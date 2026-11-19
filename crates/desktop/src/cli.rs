@@ -45,10 +45,6 @@ pub struct Cli {
     #[arg(long)]
     pub reduce_motion: bool,
 
-    /// Open the Always-on-Top Mini Widget on launch
-    #[arg(long)]
-    pub widget: bool,
-
     /// Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
     #[arg(long)]
     pub phase: Option<String>,

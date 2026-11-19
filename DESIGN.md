@@ -1,6 +1,6 @@
 ---
 name: Hypatia — Observatory Chronometer
-description: A calm, read-only observation instrument for League of Legends: desktop companion, mini widget, Observatory (advanced view), and LAN mobile remote.
+description: A calm, read-only observation instrument for League of Legends: desktop companion, Observatory (advanced view), and LAN mobile remote.
 colors:
   shell: "#070b12"
   ground: "#0b111b"
@@ -144,7 +144,7 @@ Hypatia is named after the Alexandrian astronomer: an instrument that observes a
 
 The product name always travels with its descriptor: **Hypatia · LoL companion** (FR: *compagnon LoL*). The advanced view is the **Observatory** (FR: *Observatoire*); player-facing copy avoids motorsport and "telemetry" vocabulary.
 
-Both the desktop native shell (`MainWindow` and `MiniWidget` in Slint) and the mobile LAN remote (`remote_ui.html`) speak one visual grammar built around three structural anchors: a persistent workspace rail separating mode navigation and Riot process health from phase telemetry, a single specimen-scale condensed timing clock or score, and a clean 1px grid with zero artificial drop shadows or decorative gradients.
+Both the desktop native shell (`MainWindow` in Slint) and the mobile LAN remote (`remote_ui.html`) speak one visual grammar built around three structural anchors: a persistent workspace rail separating mode navigation and Riot process health from phase telemetry, a single specimen-scale condensed timing clock or score, and a clean 1px grid with zero artificial drop shadows or decorative gradients.
 
 **Key Characteristics:**
 - Dark carbon timing wall (`Night`, default) paired with an unbleached drafting-paper variant (`Day`) meeting WCAG AA contrast.
@@ -207,9 +207,9 @@ Each piece is cropped, downscaled to about twice its largest on-screen size, and
 **Character:** Compressed telemetry numerals and urgent plate headlines cut vertical height cleanly against calm humanist prose and rigid JSON/URI inspection columns.
 
 ### Hierarchy
-- **Specimen** (`800`, `88px` desktop / `64px` compact and mini widget / `56px` mobile, `-1px` tracking): The one running clock, or the final KDA, on each phase header.
-- **Display Score** (`800`, `28px` in the desktop live HUD / `46px` mobile / `32px` mini widget): team kills. On desktop they sit in the `LiveHud` score band (blue plate, gold-ruled clock plate, red plate), like the in-game scoreboard; the respawn countdown that replaces the player's line while dead is `40px` `danger`.
-- **Timer** (`800`, `32px`): Secondary clocks such as the mini widget game time.
+- **Specimen** (`800`, `88px` desktop / `64px` compact / `56px` mobile, `-1px` tracking): The one running clock, or the final KDA, on each phase header.
+- **Display Score** (`800`, `28px` in the desktop live HUD / `46px` mobile): team kills. On desktop they sit in the `LiveHud` score band (blue plate, gold-ruled clock plate, red plate), like the in-game scoreboard; the respawn countdown that replaces the player's line while dead is `40px` `danger`.
+- **Timer** (`800`, `32px`): Secondary clocks.
 - **Headline / Title** (`800`, `22px–26px`, uppercase condensed in panel headers): Attention plates, modal headers, and mobile section headings.
 - **Body** (`600`, `14px`): Primary status copy, summoner/champion rows, and descriptions.
 - **Label / Mono** (`700`, `11px`, tabular figures): Clock timestamps, HTTP endpoints, JSON payloads, badges, and source ports.
@@ -221,9 +221,7 @@ Each piece is cropped, downscaled to about twice its largest on-screen size, and
 
 ## Layout
 
-Desktop uses a split horizontal shell: a fixed `216px` left workspace rail (scrollable when the window is short) housing Hypatia branding with its descriptor, mode switches (`Companion`, `Observatory`, `Mobile Remote`, `Mini Widget`, `Performance`), optional demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and EN/FR and Night/Day controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter). Every gap and padding comes from the spacing scale (`Space.xxs` 2 to `Space.xl` 20).
-
-The **mini widget** (360px wide, always on top) follows the phase with the main screens' Hextech grammar, cut to what reads at a glance, and fits its height to each phase (Rust `mini_height`; the width stays the player's): a quiet plate with the queue clock between games; the ready check medallion (168px) and its answer; in Champion Select the player's splash behind a glass turn plate (18px title) and the countdown, the five allied rows with skin banners and the lock glint, then one line of struck bans and enemy reveals; in game the compact score band (52px plates around an 80px gold-ruled clock) over the splash, the player's line or the red death veil with the respawn countdown, the ten-portrait strip with dead players faded and their respawn seconds, and one line of objectives per side; in Results the crest (110px), the outcome at 40px, the player's line and three compact tiles (KDA, CS per minute, damage). No tower map and no feed: the main window keeps those.
+Desktop uses a split horizontal shell: a fixed `216px` left workspace rail (scrollable when the window is short) housing Hypatia branding with its descriptor, mode switches (`Companion`, `Observatory`, `Mobile Remote`, `Performance`), optional demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and EN/FR and Night/Day controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter). Every gap and padding comes from the spacing scale (`Space.xxs` 2 to `Space.xl` 20).
 
 When the Observatory opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with a sticky topbar and a fixed thumb-zone bottom dock. The dock carries the phase's tabs and its one main action (Accept with a separate Decline below, Lock/Ban during your turn). Every tap target is at least `44px` (demo chips excepted). A state push patches the page in place instead of rebuilding it, so images do not reload, one-shot animations do not replay, and the scroll and the search field keep their place.
 

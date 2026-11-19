@@ -1,6 +1,6 @@
 # Hypatia
 
-> **Hypatia · LoL companion — a local, read-only desktop app with a second-monitor mini widget, an optional Observatory for what the Riot clients expose, and an opt-in Mobile Remote for one-handed control.**
+> **Hypatia · LoL companion — a local, read-only desktop app with an optional Observatory for what the Riot clients expose, and an opt-in Mobile Remote for one-handed control.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/badge/release-v0.5.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
@@ -18,7 +18,6 @@
   1. **Live Telemetry Stream**: Real-time WAMP (`OnJsonApiEvent`) and LiveClient (`:2999`) event stream with source/kind filters, pause/resume, **JSON Payload Inspector**, **Previous vs Current State Diff**, and **Secret Reveal**.
   2. **API Endpoints & GET Tester**: Interactive OpenAPI / `/help` catalog for LCU, Riot Client, and Live Game (`:2999`) with an integrated read-only `GET` runner.
   3. **System Footprint**: Active Riot processes (PID, CPU, RAM, executable path), listening local ports (`127.0.0.1`), and established network connections.
-- **Mini Widget (`MiniWidget`)**: Compact, always-on-top companion for a second monitor while playing.
 - **Mobile Remote Accessibility Companion (`Mobile remote` button / `--remote`)**: Opt-in LAN server paired via a 128-bit QR code token. Scan the QR code on your PC screen with your phone to control **Lobby role selection, Queue start/cancel, Match Found accept/decline, Champion ban & pick, Summoner Spells, Skins, Rune pages (1-tap recommended presets, saved pages, or 1-hand custom builder), and Role / Pick Order / Champion swaps** one-handed from your phone, with multi-layer **Notifications, Audio Chimes, Lock-Screen Media Controls, and Vibration**.
 
 ---
@@ -76,7 +75,7 @@ Every background activity has its own switch under **Performance** in the left r
 
 | Switch | Default | When off |
 |---|---|---|
-| Live game board | on | No request to `:2999`; live view and mini widget stay empty. |
+| Live game board | on | No request to `:2999`; live view stays empty. |
 | Game icons | on | No icon downloads or decoding; initials are shown instead. |
 | Riot Client connection | on | Only the League Client WebSocket is kept open. |
 | Mobile Remote at launch | on | No LAN port is opened until you start it from the rail. |
@@ -85,7 +84,7 @@ Every background activity has its own switch under **Performance** in the left r
 | Endpoint catalog *(Observatory)* | on | No Swagger / `/help` import. |
 | Replay API probe *(Observatory)* | off | No `/replay/game` polling. |
 
-The Observatory, Mini Widget and Demo mode are toggled from the rail; closing the Observatory frees its event history.
+The Observatory and Demo mode are toggled from the rail; closing the Observatory frees its event history.
 
 ### Benchmarks
 
@@ -116,7 +115,6 @@ Options:
       --remote-port <PORT>     Preferred LAN port for Mobile Remote server [default: 7879]
       --light                  Start in Light (Day) theme instead of Dark (Night)
       --reduce-motion          Turn every UI animation off (the OS setting is honoured either way)
-      --widget                 Open the always-on-top Mini Widget on startup
       --phase <PHASE>          Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
   -h, --help                   Print help
   -V, --version                Print version

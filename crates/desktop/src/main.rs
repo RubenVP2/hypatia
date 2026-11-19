@@ -5,6 +5,7 @@ mod companion;
 mod icons;
 mod labels;
 mod telemetry;
+mod win_dpi;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -49,10 +50,9 @@ fn with_ui(f: impl FnOnce(&Rc<Ui>)) {
     }
 }
 
-/// Windows, core state and view models owned by the event-loop thread.
+/// Window, core state and view models owned by the event-loop thread.
 struct Ui {
     main: MainWindow,
-    mini: MiniWidget,
     app: AppState,
     rt: tokio::runtime::Handle,
     cli: Cli,
@@ -63,7 +63,6 @@ struct Ui {
     telemetry_clock: Timer,
     /// Extrapolates the active phase clock between two LCU events; runs only while one exists.
     phase_clock: Timer,
-    widget_open: Cell<bool>,
     remote: RefCell<Option<RemoteServerHandle>>,
     remote_starting: Cell<bool>,
 }
@@ -72,9 +71,7 @@ impl Ui {
     /// Brings every visible view up to date. Cheap when nothing changed: the companion compares
     /// one `Arc` pointer and the Telemetry Lab one hash.
     fn refresh(&self) {
-        self.companion
-            .borrow_mut()
-            .refresh(&self.main, &self.mini, &self.app, self.widget_open.get());
+        self.companion.borrow_mut().refresh(&self.main, &self.app);
         self.refresh_telemetry();
         let clients = self
             .remote
@@ -92,8 +89,6 @@ impl Ui {
             Some(clock) => {
                 self.main.set_clock_total(clock.total_sec);
                 self.main.set_clock_down(clock.counts_down());
-                self.mini.set_clock_total(clock.total_sec);
-                self.mini.set_clock_down(clock.counts_down());
                 self.tick_phase_clock();
                 if !self.phase_clock.running() {
                     self.phase_clock.start(TimerMode::Repeated, CLOCK_TICK, || {
@@ -104,7 +99,6 @@ impl Ui {
             None => {
                 self.phase_clock.stop();
                 self.main.set_clock_seconds(-1);
-                self.mini.set_clock_seconds(-1);
             }
         }
     }
@@ -113,7 +107,6 @@ impl Ui {
         if let Some(clock) = self.companion.borrow().clock() {
             let secs = clock.seconds_now(Instant::now());
             self.main.set_clock_seconds(secs);
-            self.mini.set_clock_seconds(secs);
         }
     }
 
@@ -150,7 +143,6 @@ impl Ui {
 
     fn set_dark(&self, dark: bool) {
         Theme::get(&self.main).set_dark(dark);
-        Theme::get(&self.mini).set_dark(dark);
         let mut settings = self.settings.borrow_mut();
         if settings.light_theme == dark {
             settings.light_theme = !dark;
@@ -164,7 +156,6 @@ impl Ui {
             || self.settings.borrow().reduce_motion
             || os_prefers_reduced_motion());
         Theme::get(&self.main).set_motion(motion);
-        Theme::get(&self.mini).set_motion(motion);
     }
 
     fn set_demo_phase(&self, phase: &str) {
@@ -176,14 +167,6 @@ impl Ui {
         self.app.set_demo_active(next, self.cli.demo_rate);
         self.main.set_demo(next);
         self.telemetry.borrow_mut().invalidate_telemetry_cache();
-        self.refresh();
-    }
-
-    fn toggle_widget(&self) {
-        let open = !self.widget_open.get();
-        self.widget_open.set(open);
-        let _ = if open { self.mini.show() } else { self.mini.hide() };
-        self.main.set_widget_open(open);
         self.refresh();
     }
 
@@ -399,7 +382,6 @@ fn wire_callbacks(ui: &Rc<Ui>) {
             ui.refresh();
         })
     });
-    main.on_toggle_widget(|| with_ui(|ui| ui.toggle_widget()));
     main.on_toggle_setting(|key| with_ui(|ui| ui.toggle_setting(&key)));
 
     main.on_toggle_remote_panel(|| with_ui(|ui| ui.toggle_remote_panel()));
@@ -491,13 +473,11 @@ fn main() {
     let app = AppState::start_with(cli.demo, cli.demo_rate, lang, &settings);
 
     let main = MainWindow::new().expect("Failed to create MainWindow");
-    let mini = MiniWidget::new().expect("Failed to create MiniWidget");
     main.set_demo(cli.demo);
     main.set_perf(perf_settings(&settings));
 
     let ui = Rc::new(Ui {
         main,
-        mini,
         app,
         rt: rt.handle().clone(),
         cli,
@@ -506,7 +486,6 @@ fn main() {
         telemetry: RefCell::default(),
         telemetry_clock: Timer::default(),
         phase_clock: Timer::default(),
-        widget_open: Cell::new(false),
         remote: RefCell::new(None),
         remote_starting: Cell::new(false),
     });
@@ -523,15 +502,21 @@ fn main() {
     if ui.cli.telemetry {
         ui.set_telemetry(true);
     }
-    if ui.cli.widget {
-        ui.toggle_widget();
-    }
     if !ui.cli.no_remote && (settings.mobile_remote || ui.cli.remote) {
         ui.start_remote(ui.cli.remote);
     }
 
     ui.refresh();
     ui.main.show().expect("Failed to show MainWindow");
+    if !win_dpi::install(ui.main.window()) {
+        let _ = slint::invoke_from_event_loop(|| {
+            with_ui(|ui| {
+                if !win_dpi::install(ui.main.window()) {
+                    tracing::warn!("Could not install Windows DPI subclass on main window");
+                }
+            });
+        });
+    }
     spawn_refresh_bridge(rt.handle(), &ui.app);
 
     ui.main.run().expect("Slint event loop exited with error");

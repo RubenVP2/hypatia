@@ -625,10 +625,10 @@ msgctxt "MainWindow"
 msgid "Live game board"
 msgstr "Suivi de partie en direct"
 
-#: ui/app.slint:2593
+#: ui/app.slint:2932
 msgctxt "MainWindow"
-msgid "Polls the game once per second while you play (score, towers, objectives, mini widget)."
-msgstr "Interroge le jeu une fois par seconde pendant la partie (score, tours, objectifs, mini widget)."
+msgid "Polls the game once per second while you play (score, towers, objectives)."
+msgstr "Interroge le jeu une fois par seconde pendant la partie (score, tours, objectifs)."
 
 #: ui/app.slint:2598
 msgctxt "MainWindow"
@@ -714,72 +714,6 @@ msgstr "Sonde API Replay"
 msgctxt "MainWindow"
 msgid "Queries /replay/game every 5 seconds during a game."
 msgstr "Interroge /replay/game toutes les 5 secondes pendant une partie."
-
-#: ui/app.slint:2671
-msgctxt "MiniAllyRow"
-msgid "no pick yet"
-msgstr "pas encore choisi"
-
-#: ui/app.slint:2672
-msgctxt "MiniAllyRow"
-msgid ", acting now"
-msgstr ", à son tour"
-
-#: ui/app.slint:2695
-msgctxt "MiniAllyRow"
-msgid "Waiting"
-msgstr "En attente"
-
-#: ui/app.slint:2704
-msgctxt "MiniAllyRow"
-msgid "YOUR TURN"
-msgstr "À VOUS"
-
-#: ui/app.slint:2704
-msgctxt "MiniAllyRow"
-msgid "PICKING"
-msgstr "CHOISIT"
-
-#: ui/app.slint:2723
-msgctxt "MiniPlayerCell"
-msgid "{0}, dead, respawn {1}"
-msgstr "{0}, mort, réapparition {1}"
-
-#: ui/app.slint:2738
-msgctxt "MiniPlayerCell"
-msgid "Lv {0}"
-msgstr "Niv {0}"
-
-#: ui/app.slint:2748
-msgctxt "MiniWidget"
-msgid "Hypatia — Live"
-msgstr "Hypatia — En direct"
-
-#: ui/app.slint:2775
-msgctxt "MiniWidget"
-msgid "Waiting for a match"
-msgstr "En attente d'une partie"
-
-#: ui/app.slint:2776
-msgctxt "MiniWidget"
-msgid "Champion select and your game show up here automatically."
-msgstr "La sélection des champions et la partie s'afficheront ici automatiquement."
-
-msgctxt "MiniWidget"
-msgid "Score: allies {0}, enemies {1}, game time {2}"
-msgstr "Score : alliés {0}, ennemis {1}, temps de jeu {2}"
-
-msgctxt "MiniWidget"
-msgid "RESPAWN"
-msgstr "RÉAPPARITION"
-
-msgctxt "MiniWidget"
-msgid "Blue: none"
-msgstr "Bleu : aucun"
-
-msgctxt "MiniWidget"
-msgid "Red: none"
-msgstr "Rouge : aucun"
 
 #: ui/parts.slint:360
 msgctxt "ClockReadout"

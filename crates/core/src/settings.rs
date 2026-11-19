@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Poll Live Client Data (`:2999`) at 1 Hz while a game runs (live board, mini widget).
+    /// Poll Live Client Data (`:2999`) at 1 Hz while a game runs (live board).
     pub live_game: bool,
     /// Keep a WebSocket open to the Riot Client (chat presence).
     pub riot_client: bool,

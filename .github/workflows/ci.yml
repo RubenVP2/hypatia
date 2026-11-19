@@ -82,7 +82,7 @@ jobs:
         working-directory: crates/desktop
         run: |
           export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
-          slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint -o "$RUNNER_TEMP/hypatia.pot"
+          slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint ui/stats.slint ui/helper.slint -o "$RUNNER_TEMP/hypatia.pot"
           msgcmp --use-untranslated lang/hypatia.pot "$RUNNER_TEMP/hypatia.pot"
           msgcmp --use-untranslated "$RUNNER_TEMP/hypatia.pot" lang/hypatia.pot
           msgfmt -c -o /dev/null lang/fr/LC_MESSAGES/hypatia.po

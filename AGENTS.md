@@ -23,7 +23,7 @@ Trust is the product. Every change keeps these true:
 
 Strings have three homes, each with its own mechanism:
 
-- **Slint UI**: write `@tr("English")`. Then, from `crates/desktop`, regenerate the template with `slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint -o lang/hypatia.pot`, and add the French `msgstr` to `lang/fr/LC_MESSAGES/hypatia.po` by hand (no `msgmerge` here). Each entry carries a `msgctxt` equal to its Slint component name; copy it with the `msgid`.
+- **Slint UI**: write `@tr("English")`. Then, from `crates/desktop`, regenerate the template with `slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint ui/stats.slint ui/helper.slint -o lang/hypatia.pot`, and add the French `msgstr` to `lang/fr/LC_MESSAGES/hypatia.po` by hand (no `msgmerge` here). Each entry carries a `msgctxt` equal to its Slint component name; copy it with the `msgid`.
 - **Rust** (errors, labels, alerts): `lang.pick("English", "Français")`.
 - **Mobile page**: add the key under both `en` and `fr` in the `I18N` object of `remote_ui.html`, read with `t(key)`.
 
@@ -34,4 +34,4 @@ Player-facing copy says **Observatory** (FR *Observatoire*). Code and older text
 ## Done
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass. CI runs formatting, `cargo deny --locked check`, `cargo audit`, `.slint`/`.pot`/`.po` i18n sync, and `hypatia-shared`/`hypatia-core` tests on Ubuntu, plus full `clippy` and `cargo test --workspace` on Windows (`x86_64-pc-windows-msvc`), adding `cargo build --release -p hypatia` on `main`.
-- UI changes are seen running: `cargo run -p hypatia -- --demo`, with `--phase <lobby|queue|ready|champ-select|live|end>` to pin a phase and `--remote` for the phone view.
+- UI changes are seen running: `cargo run -p hypatia -- --demo`, with `--phase <lobby|queue|ready|champ-select|live|end>` to pin a phase and `--remote` for the phone view, `--stats <build|tiers|matchups|mine>` to open the Stats page. Headless screenshots of the Stats page in both themes and languages: `HYPATIA_SHOTS=<dir> cargo test -p hypatia shots -- --ignored` (writes `.bmp`).

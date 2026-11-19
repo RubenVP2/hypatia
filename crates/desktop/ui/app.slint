@@ -8,6 +8,8 @@ import {
     PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, ChoiceRow, Card, Divider,
     SightingRow, PitRow,
 } from "parts.slint";
+import { StatsPage, StatsBridge } from "stats.slint";
+import { HelperView, DraftHelperPanel } from "helper.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
 import "fonts/Overpass-ExtraBold.ttf";
@@ -15,7 +17,7 @@ import "fonts/BarlowCondensed-Bold.ttf";
 import "fonts/BarlowCondensed-ExtraBold.ttf";
 import "fonts/OverpassMono.ttf";
 
-export { Theme, ClientArt }
+export { Theme, ClientArt, StatsBridge }
 
 // Which companion screen the client's gameflow phase maps to. Set from Rust.
 export enum Screen {
@@ -56,6 +58,7 @@ export struct PerfSettings {
     eco-mode: bool,
     pause-when-minimized: bool,
     reduce-motion: bool,
+    online-stats: bool,
 }
 
 // Live self-footprint metrics sampled only while the Performance sheet is open.
@@ -97,6 +100,8 @@ export struct ChampSelectView {
     their-ban-list: [BanEntry],
     anonymized: bool,
     splash-icon: image,
+    // Champ-select helper (helper.slint): build, lane matchup, comps, tips.
+    helper: HelperView,
 }
 
 export struct LiveView {
@@ -453,6 +458,7 @@ component ChampSelectScreen inherits Flickable {
     in property <int> clock-seconds: -1;
     in property <int> clock-total: 0;
     in property <bool> compact: false;
+    callback open-link(string);
     content-height: body.preferred-height;
 
     HeroSplash {
@@ -510,6 +516,12 @@ component ChampSelectScreen inherits Flickable {
                     }
                 }
                 for ally in root.cs.allies: RosterRow { ally: ally; }
+                if root.cs.helper.shown: DraftHelperPanel {
+                    h: root.cs.helper;
+                    // Side by side needs ~600px beside the 340px map column; stack below that.
+                    narrow: root.width < 1000px;
+                    open-link(url) => { root.open-link(url); }
+                }
             }
 
             // Right: Rift map, enemy picks, and visual bans
@@ -618,6 +630,11 @@ component ChampSelectScreen inherits Flickable {
             spacing: Space.md;
             SectionLabel { text: @tr("ALLIES DRAFT"); }
             for ally in root.cs.allies: RosterRow { ally: ally; }
+            if root.cs.helper.shown: DraftHelperPanel {
+                h: root.cs.helper;
+                narrow: true;
+                open-link(url) => { root.open-link(url); }
+            }
 
             Card {
                 height: 240px;
@@ -2297,6 +2314,9 @@ export component MainWindow inherits Window {
     callback clear-ram-cache();
     callback clear-disk-cache();
     callback performance-panel-changed(bool);
+    // Champion Stats page in the companion stage (`stats.slint`).
+    in-out property <bool> stats-open: false;
+    callback open-stats();
 
     callback toggle-remote-panel();
     callback rotate-remote-token();
@@ -2313,6 +2333,8 @@ export component MainWindow inherits Window {
     callback clear-telemetry-events();
     callback execute-get-call(int, string);
     callback set-endpoint-filter(string);
+    // Opens a stats provider's attribution page in the browser.
+    callback open-link(string);
 
     // PhaseLine stop for the current screen: 0 lobby .. 4 results, -1 before the lobby.
     pure function current-stop() -> int {
@@ -2400,12 +2422,26 @@ export component MainWindow inherits Window {
                 RailNavItem {
                     label: @tr("Companion");
                     icon-path: "M 3 12 L 12 3 L 21 12 M 5 10 V 20 H 19 V 10";
-                    active: (!root.telemetry-enabled || root.telemetry-split) && !root.remote-panel-open;
+                    active: (!root.telemetry-enabled || root.telemetry-split) && !root.remote-panel-open && !root.stats-open;
+                    clicked => {
+                        root.remote-panel-open = false;
+                        root.stats-open = false;
+                        if (root.telemetry-enabled && !root.telemetry-split) {
+                            root.telemetry-split = true;
+                        }
+                    }
+                }
+
+                RailNavItem {
+                    label: @tr("Stats");
+                    icon-path: "M 4 20 V 10 M 10 20 V 4 M 16 20 V 13 M 22 20 H 2";
+                    active: root.stats-open && (!root.telemetry-enabled || root.telemetry-split) && !root.remote-panel-open;
                     clicked => {
                         root.remote-panel-open = false;
                         if (root.telemetry-enabled && !root.telemetry-split) {
                             root.telemetry-split = true;
                         }
+                        root.open-stats();
                     }
                 }
 
@@ -2664,7 +2700,12 @@ export component MainWindow inherits Window {
                         min-width: 340px;
                         property <bool> is-compact: self.width < 680px;
 
-                        if root.view != Screen.champ-select && root.view != Screen.in-game && root.view != Screen.results: WaitScreen {
+                        if root.stats-open: StatsPage {
+                            width: 100%;
+                            height: 100%;
+                            compact: stage.is-compact;
+                        }
+                        if !root.stats-open && root.view != Screen.champ-select && root.view != Screen.in-game && root.view != Screen.results: WaitScreen {
                             width: 100%;
                             height: 100%;
                             wait: root.wait;
@@ -2682,22 +2723,23 @@ export component MainWindow inherits Window {
                             toggle-remote-panel => { root.toggle-remote-panel(); }
                             toggle-demo => { root.toggle-demo(); }
                         }
-                        if root.view == Screen.champ-select: ChampSelectScreen {
+                        if !root.stats-open && root.view == Screen.champ-select: ChampSelectScreen {
                             width: 100%;
                             height: 100%;
                             cs: root.champ;
                             clock-seconds: root.clock-seconds;
                             clock-total: root.clock-total;
                             compact: stage.is-compact;
+                            open-link(url) => { root.open-link(url); }
                         }
-                        if root.view == Screen.in-game: LiveScreen {
+                        if !root.stats-open && root.view == Screen.in-game: LiveScreen {
                             width: 100%;
                             height: 100%;
                             live: root.live;
                             clock-seconds: root.clock-seconds;
                             compact: stage.is-compact;
                         }
-                        if root.view == Screen.results: EndScreen {
+                        if !root.stats-open && root.view == Screen.results: EndScreen {
                             width: 100%;
                             height: 100%;
                             end: root.end;
@@ -3319,6 +3361,12 @@ export component MainWindow inherits Window {
                                         detail: @tr("Starts the local pairing server. Off: no port is opened on your network.");
                                         checked: root.perf.mobile-remote;
                                         toggled => { root.toggle-setting("mobile_remote"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Online stats");
+                                        detail: @tr("Global builds, tier lists and matchups from MetaBot.GG. Sends only champion, role, queue and patch, never who you are.");
+                                        checked: root.perf.online-stats;
+                                        toggled => { root.toggle-setting("online_stats"); }
                                     }
 
                                     Divider { }

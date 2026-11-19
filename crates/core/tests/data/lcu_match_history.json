@@ -1,0 +1,49 @@
+{
+  "accountId": 0,
+  "platformId": "EUW1",
+  "games": {
+    "gameBeginDate": "",
+    "gameCount": 3,
+    "gameEndDate": "",
+    "gameIndexBegin": 0,
+    "gameIndexEnd": 20,
+    "games": [
+      {
+        "gameId": 7000000003, "gameCreation": 1795400000000, "gameDuration": 1800, "gameMode": "CLASSIC", "gameType": "MATCHED_GAME", "mapId": 11, "queueId": 420,
+        "participantIdentities": [{"participantId": 3, "player": {"puuid": "", "gameName": "", "tagLine": ""}}],
+        "participants": [{
+          "participantId": 3, "championId": 103, "spell1Id": 4, "spell2Id": 14, "teamId": 100,
+          "stats": {"win": true, "kills": 9, "deaths": 3, "assists": 7, "totalDamageDealtToChampions": 27000, "totalMinionsKilled": 230, "neutralMinionsKilled": 10, "goldEarned": 13500, "visionScore": 24,
+                    "item0": 3118, "item1": 4645, "item2": 3020, "item3": 3089, "item4": 0, "item5": 2003, "item6": 3340,
+                    "perk0": 8112, "perk1": 8139, "perk2": 8140, "perk3": 8106, "perk4": 8226, "perk5": 8210, "perkPrimaryStyle": 8100, "perkSubStyle": 8200,
+                    "statPerk0": 5008, "statPerk1": 5008, "statPerk2": 5001},
+          "timeline": {"lane": "MIDDLE", "role": "SOLO"}
+        }]
+      },
+      {
+        "gameId": 7000000002, "gameCreation": 1795300000000, "gameDuration": 1500, "gameMode": "CLASSIC", "mapId": 11, "queueId": 440,
+        "participantIdentities": [
+          {"participantId": 1, "player": {"puuid": "someone-else"}},
+          {"participantId": 4, "player": {"puuid": "self-puuid"}}
+        ],
+        "participants": [
+          {"participantId": 1, "championId": 222, "spell1Id": 4, "spell2Id": 7, "stats": {"win": true, "kills": 20}, "timeline": {"lane": "BOTTOM", "role": "DUO_CARRY"}},
+          {"participantId": 4, "championId": 412, "spell1Id": 4, "spell2Id": 14,
+           "stats": {"win": false, "kills": 1, "deaths": 6, "assists": 14, "totalDamageDealtToChampions": 9000, "totalMinionsKilled": 30, "neutralMinionsKilled": 0, "goldEarned": 8000, "visionScore": 60,
+                     "item0": 3865, "item1": 3190, "item2": 3117, "item3": 0, "item4": 0, "item5": 0, "item6": 3364,
+                     "perk0": 8439, "perk1": 8463, "perk2": 8473, "perk3": 8242, "perk4": 8345, "perk5": 8347, "perkPrimaryStyle": 8400, "perkSubStyle": 8300},
+           "timeline": {"lane": "BOTTOM", "role": "DUO_SUPPORT"}}
+        ]
+      },
+      {
+        "gameId": 7000000001, "gameCreation": 1795200000000, "gameDuration": 1200000, "gameMode": "ARAM", "mapId": 12, "queueId": 450,
+        "participants": [{
+          "participantId": 7, "championId": 99, "spell1Id": 4, "spell2Id": 32,
+          "stats": {"win": true, "kills": 12, "deaths": 8, "assists": 30, "totalDamageDealtToChampions": 40000, "totalMinionsKilled": 40, "goldEarned": 15000, "visionScore": 0,
+                    "item0": 6655, "item1": 0, "perk0": 0},
+          "timeline": {"lane": "NONE", "role": "NONE"}
+        }]
+      }
+    ]
+  }
+}

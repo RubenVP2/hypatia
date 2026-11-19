@@ -1,0 +1,28 @@
+[
+  {
+    "isDefault": false,
+    "isRecommendationOverride": false,
+    "keystone": {"id": 8112, "name": "Electrocute", "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Domination/Electrocute/Electrocute.png"},
+    "perks": [
+      {"id": 8112, "name": "Electrocute"}, {"id": 8139, "name": "Taste of Blood"}, {"id": 8140, "name": "Grisly Mementos"},
+      {"id": 8106, "name": "Ultimate Hunter"}, {"id": 8226, "name": "Manaflow Band"}, {"id": 8210, "name": "Transcendence"},
+      {"id": 5008, "name": "Adaptive Force"}, {"id": 5008, "name": "Adaptive Force"}, {"id": 5001, "name": "Health Scaling"}
+    ],
+    "position": "MIDDLE",
+    "primaryPerkStyleId": 8100,
+    "secondaryPerkStyleId": 8200,
+    "recommendationChampionId": 103,
+    "recommendationId": "103-MIDDLE-0",
+    "summonerSpellIds": [4, 14]
+  },
+  {
+    "isDefault": true,
+    "keystone": {"id": 8229},
+    "perks": [8229, 8226, 8210, 8237, 8139, 8106, 5008, 5008, 5001],
+    "position": "MIDDLE",
+    "primaryPerkStyleId": 8200,
+    "secondaryPerkStyleId": 8100,
+    "summonerSpellIds": [4, 12]
+  },
+  {"isDefault": true, "perks": [], "primaryPerkStyleId": 0, "secondaryPerkStyleId": 0, "summonerSpellIds": [4, 14]}
+]

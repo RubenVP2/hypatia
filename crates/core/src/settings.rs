@@ -434,6 +434,10 @@ pub struct Settings {
     pub light_theme: bool,
     /// Turn every UI animation off, on top of the OS reduced-motion preference.
     pub reduce_motion: bool,
+    /// Fetch global Champion Stats (builds, tier list, matchups) from the online provider.
+    /// Off by default; off, the provider performs no I/O at all. Requests never carry identity.
+    /// A privacy choice, not a performance one: profiles keep it as the user set it.
+    pub online_stats: bool,
 }
 
 impl Default for Settings {
@@ -477,6 +481,7 @@ impl Settings {
                 endpoint_catalog: false,
                 eco_mode: true,
                 pause_when_minimized: true,
+                online_stats: false,
                 light_theme: false,
                 reduce_motion: true,
             },
@@ -497,6 +502,7 @@ impl Settings {
                 endpoint_catalog: true,
                 eco_mode: true,
                 pause_when_minimized: true,
+                online_stats: false,
                 light_theme: false,
                 reduce_motion: false,
             },
@@ -517,6 +523,7 @@ impl Settings {
                 endpoint_catalog: true,
                 eco_mode: false,
                 pause_when_minimized: false,
+                online_stats: false,
                 light_theme: false,
                 reduce_motion: false,
             },
@@ -629,8 +636,10 @@ impl Settings {
             return false;
         }
         let light = self.light_theme;
+        let online_stats = self.online_stats;
         *self = Self::for_profile(profile);
         self.light_theme = light;
+        self.online_stats = online_stats;
         true
     }
 
@@ -652,6 +661,7 @@ impl Settings {
     fn matches_preset(&self, preset: PerformanceProfile) -> bool {
         let mut p = Self::for_profile(preset);
         p.light_theme = self.light_theme;
+        p.online_stats = self.online_stats;
         p.profile = self.profile;
         *self == p
     }
@@ -735,6 +745,7 @@ impl Settings {
             "splash_backdrops" => &mut self.splash_backdrops,
             "demo_prefetch" => &mut self.demo_prefetch,
             "pause_when_minimized" => &mut self.pause_when_minimized,
+            "online_stats" => &mut self.online_stats,
             _ => return false,
         };
         *field = !*field;
@@ -762,6 +773,7 @@ pub struct Flags {
     endpoint_catalog: AtomicBool,
     eco_mode: AtomicBool,
     pause_when_minimized: AtomicBool,
+    online_stats: AtomicBool,
     telemetry: AtomicBool,
 }
 
@@ -813,6 +825,7 @@ impl Flags {
         self.eco_mode.store(s.eco_mode, Ordering::Relaxed);
         self.pause_when_minimized
             .store(s.pause_when_minimized, Ordering::Relaxed);
+        self.online_stats.store(s.online_stats, Ordering::Relaxed);
     }
 
     pub fn set_telemetry(&self, on: bool) {
@@ -873,6 +886,12 @@ impl Flags {
 
     pub fn pause_when_minimized(&self) -> bool {
         self.pause_when_minimized.load(Ordering::Relaxed)
+    }
+
+    /// Online Champion Stats are allowed. Off, the online provider returns
+    /// `StatsUnavailable::OnlineDisabled` before any network or disk access.
+    pub fn online_stats(&self) -> bool {
+        self.online_stats.load(Ordering::Relaxed)
     }
 
     /// Telemetry Lab is open: record the full event history and the complete WAMP stream.
@@ -1070,6 +1089,27 @@ mod tests {
         assert!(!flags.system_footprint() && !flags.endpoint_catalog() && !flags.replay_api());
         flags.set_telemetry(true);
         assert!(flags.system_footprint() && flags.endpoint_catalog() && flags.replay_api());
+    }
+
+    #[test]
+    fn online_stats_is_off_by_default_and_mirrored_by_flags() {
+        let defaults = Settings::default();
+        assert!(!defaults.online_stats, "Online stats must stay opt-in");
+        let flags = Flags::new(&defaults);
+        assert!(!flags.online_stats());
+
+        let mut on = defaults;
+        assert!(on.toggle("online_stats"));
+        flags.apply(&on);
+        assert!(flags.online_stats());
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, br#"{"live_game": true}"#).unwrap();
+        assert!(
+            !Settings::load_from(&path).online_stats,
+            "older files keep it off"
+        );
     }
 
     #[test]

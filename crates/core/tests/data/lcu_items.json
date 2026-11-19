@@ -1,0 +1,142 @@
+[
+  {
+    "id": 0,
+    "name": "",
+    "description": "",
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/gp_ui_placeholder.png",
+    "categories": []
+  },
+  {
+    "id": 1056,
+    "name": "Doran's Ring",
+    "description": "<mainText><stats>18 Ability Power<br>90 Health</stats></mainText>",
+    "active": false,
+    "inStore": true,
+    "from": [],
+    "to": [],
+    "categories": [
+      "Health",
+      "SpellDamage",
+      "Lane"
+    ],
+    "price": 400,
+    "priceTotal": 400,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/1056_Mage_T1_DoransRing.png"
+  },
+  {
+    "id": 3020,
+    "name": "Sorcerer's Shoes",
+    "description": "<mainText><stats>12 Magic Penetration<br>45 Move Speed</stats></mainText>",
+    "active": false,
+    "inStore": true,
+    "from": [
+      1001
+    ],
+    "to": [],
+    "categories": [
+      "Boots",
+      "MagicPenetration"
+    ],
+    "price": 750,
+    "priceTotal": 1100,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3020_Mage_T2_SorcsShoes.png"
+  },
+  {
+    "id": 3089,
+    "name": "Rabadon's Deathcap",
+    "description": "<mainText><stats><attention>120</attention> Ability Power</stats><br><br><passive>Magical Opus:</passive> Increases your total Ability Power by 30%.</mainText>",
+    "active": false,
+    "inStore": true,
+    "from": [
+      1058,
+      1026
+    ],
+    "to": [],
+    "categories": [
+      "SpellDamage"
+    ],
+    "price": 1100,
+    "priceTotal": 3600,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3089_Mage_T3_DeathCap.png"
+  },
+  {
+    "id": 223089,
+    "name": "Rabadon's Deathcap",
+    "description": "",
+    "active": false,
+    "inStore": false,
+    "from": [],
+    "to": [],
+    "categories": [
+      "SpellDamage"
+    ],
+    "price": 3600,
+    "priceTotal": 3600,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3089_Mage_T3_DeathCap.png"
+  },
+  {
+    "id": 3157,
+    "name": "Zhonya's Hourglass",
+    "description": "<mainText><stats>105 Ability Power<br>50 Armor</stats></mainText>",
+    "active": true,
+    "inStore": true,
+    "from": [],
+    "to": [],
+    "categories": [
+      "Active",
+      "Armor",
+      "SpellDamage"
+    ],
+    "price": 900,
+    "priceTotal": 3250,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3157_Mage_T3_ZhonyasHourglass.png"
+  },
+  {
+    "id": 4645,
+    "name": "Shadowflame",
+    "description": "<mainText><stats>110 Ability Power</stats></mainText>",
+    "active": false,
+    "inStore": true,
+    "from": [],
+    "to": [],
+    "categories": [
+      "SpellDamage"
+    ],
+    "price": 1200,
+    "priceTotal": 3200,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/4645_Mage_T3_Shadowflame.png"
+  },
+  {
+    "id": 3118,
+    "name": "Malignance",
+    "description": "<mainText><stats>90 Ability Power</stats></mainText>",
+    "active": false,
+    "inStore": true,
+    "from": [],
+    "to": [],
+    "categories": [
+      "SpellDamage"
+    ],
+    "price": 850,
+    "priceTotal": 2700,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3118_Mage_T3_Malignance.png"
+  },
+  {
+    "id": 3175,
+    "name": "Spellslinger's Shoes",
+    "description": "<mainText><stats>18 Magic Penetration<br>55 Move Speed</stats></mainText>",
+    "active": false,
+    "inStore": true,
+    "from": [
+      3020
+    ],
+    "to": [],
+    "categories": [
+      "Boots",
+      "MagicPenetration"
+    ],
+    "price": 500,
+    "priceTotal": 1600,
+    "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3175_Mage_T3_SpellslingersShoes.png"
+  }
+]

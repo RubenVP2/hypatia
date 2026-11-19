@@ -1,0 +1,67 @@
+[
+  {
+    "id": 8112,
+    "name": "Electrocute",
+    "majorChangePatchVersion": "",
+    "tooltip": "",
+    "shortDesc": "Hitting a champion with 3 <b>separate</b> attacks or abilities within 3s deals bonus <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'>adaptive damage</lol-uikit-tooltipped-keyword>.",
+    "longDesc": "",
+    "recommendationDescriptor": "",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Domination/Electrocute/Electrocute.png",
+    "endOfGameStatDescs": []
+  },
+  {
+    "id": 8139,
+    "name": "Taste of Blood",
+    "shortDesc": "Heal when you damage an enemy champion.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Domination/TasteOfBlood/GreenTerror_TasteOfBlood.png"
+  },
+  {
+    "id": 8140,
+    "name": "Grisly Mementos",
+    "shortDesc": "Gain Ability Haste for each takedown.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Domination/GrislyMementos/GrislyMementos.png"
+  },
+  {
+    "id": 8106,
+    "name": "Ultimate Hunter",
+    "shortDesc": "Your ultimate's cooldown is reduced.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Domination/UltimateHunter/UltimateHunter.png"
+  },
+  {
+    "id": 8226,
+    "name": "Manaflow Band",
+    "shortDesc": "Hitting champions with abilities permanently increases maximum mana.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Sorcery/ManaflowBand/ManaflowBand.png"
+  },
+  {
+    "id": 8210,
+    "name": "Transcendence",
+    "shortDesc": "Gain Ability Haste at levels 5 and 8.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Sorcery/Transcendence/Transcendence.png"
+  },
+  {
+    "id": 5008,
+    "name": "Adaptive Force",
+    "shortDesc": "+9 Adaptive Force",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/StatMods/StatModsAdaptiveForceIcon.png"
+  },
+  {
+    "id": 5001,
+    "name": "Health Scaling",
+    "shortDesc": "+10-180 Health (based on level)",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/StatMods/StatModsHealthPlusIcon.png"
+  },
+  {
+    "id": 8473,
+    "name": "Bone Plating",
+    "shortDesc": "Take less damage from the next attacks after being hit by a champion.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Resolve/BonePlating/BonePlating.png"
+  },
+  {
+    "id": 8242,
+    "name": "Unflinching",
+    "shortDesc": "Gain Tenacity and Slow Resist.",
+    "iconPath": "/lol-game-data/assets/v1/perk-images/Styles/Sorcery/Unflinching/Unflinching.png"
+  }
+]

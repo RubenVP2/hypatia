@@ -8,9 +8,11 @@ pub mod fixtures;
 pub mod lcu_actions;
 pub mod redaction;
 pub mod remote;
+pub mod remote_stats;
 pub mod riot_http;
 pub mod settings;
 pub mod signal;
+pub mod stats;
 pub mod store;
 
 use std::path::PathBuf;
@@ -18,7 +20,8 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use hypatia_shared::{
-    project_match, EventKind, Lang, MatchInputs, RemoteCommand, Snapshot, SourceId, SummarySnapshot,
+    project_match_with, EventKind, Lang, MatchInputs, RemoteCommand, Snapshot, SourceId,
+    SummarySnapshot,
 };
 use serde_json::Value;
 use tracing::info;
@@ -39,6 +42,7 @@ use crate::redaction::SecretVault;
 use crate::riot_http::ReadOnlyRiotClient;
 use crate::settings::{Flags, Settings};
 use crate::signal::ChangeSignal;
+use crate::stats::ChampionStats;
 use crate::store::EventStore;
 
 /// Inputs the Match Projection depends on; equal keys guarantee an identical projection.
@@ -47,6 +51,9 @@ struct ProjectionKey {
     state: u64,
     discovery: u64,
     champions: u64,
+    /// Champion Stats revision and Online switch, read by the champ-select helper.
+    stats: u64,
+    online_stats: bool,
     lang: Lang,
 }
 
@@ -66,6 +73,8 @@ pub struct AppState {
     pub flags: Arc<Flags>,
     /// Bumped whenever anything a view could display has changed.
     pub signal: ChangeSignal,
+    /// Champion Stats (builds, tier list, matchups, My Stats): the one entry point for views.
+    pub stats: ChampionStats,
     demo_spawned: Arc<AtomicBool>,
     lang: Arc<AtomicU8>,
     lang_path: Option<PathBuf>,
@@ -131,25 +140,36 @@ impl AppState {
         let mut store = EventStore::new(signal.clone());
         store.set_capture(false);
 
+        let riot_client = ReadOnlyRiotClient::new();
         let assets = Arc::new(GameAssetCache::new(signal.clone()));
         assets.set_max_mem_entries(if settings.game_icons {
             settings.asset_cache_budget.max_entries()
         } else {
             0
         });
+        let lang = Arc::new(AtomicU8::new(lang as u8));
+        let stats = ChampionStats::new(
+            discovery.clone(),
+            riot_client.clone(),
+            assets.clone(),
+            flags.clone(),
+            signal.clone(),
+            lang.clone(),
+        );
 
         let state = Self {
             discovery,
             vault,
             store: Arc::new(RwLock::new(store)),
             catalog: Arc::new(RwLock::new(CatalogStore::new())),
-            riot_client: ReadOnlyRiotClient::new(),
+            riot_client,
             assets,
             demo_remote: Arc::new(RwLock::new(DemoRemoteState::default())),
             flags,
             signal,
+            stats,
             demo_spawned: Arc::new(AtomicBool::new(false)),
-            lang: Arc::new(AtomicU8::new(lang as u8)),
+            lang,
             lang_path,
             projection: Arc::new(Mutex::new(None)),
         };
@@ -415,6 +435,8 @@ impl AppState {
             state: store.state_revision(),
             discovery: self.discovery.revision(),
             champions: self.assets.metadata_revision(),
+            stats: self.stats.revision(),
+            online_stats: self.flags.online_stats(),
             lang,
         };
         if let Some((cached_key, snapshot)) = cache.as_ref() {
@@ -462,7 +484,12 @@ impl AppState {
             live_events: events.as_deref(),
             end_of_game: end_of_game.as_deref(),
         };
-        let snapshot = Arc::new(project_match(&inputs, &*self.assets, lang));
+        let snapshot = Arc::new(project_match_with(
+            &inputs,
+            &*self.assets,
+            Some(&self.stats),
+            lang,
+        ));
         *cache = Some((key, Arc::clone(&snapshot)));
         snapshot
     }

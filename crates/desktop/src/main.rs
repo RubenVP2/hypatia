@@ -4,6 +4,10 @@ mod cli;
 mod companion;
 mod icons;
 mod labels;
+mod links;
+#[cfg(test)]
+mod shots;
+mod stats_view;
 mod telemetry;
 mod win_dpi;
 
@@ -28,6 +32,7 @@ use tracing::info;
 use crate::cli::Cli;
 use crate::companion::Companion;
 use crate::labels::format_bytes;
+use crate::stats_view::StatsView;
 use crate::telemetry::{apply_telemetry_to_window, TelemetryUiState};
 
 slint::include_modules!();
@@ -55,6 +60,8 @@ struct Ui {
     settings: RefCell<Settings>,
     companion: RefCell<Companion>,
     telemetry: RefCell<TelemetryUiState>,
+    /// The Stats page; reads Champion Stats only while it is open.
+    stats: RefCell<StatsView>,
     /// Refreshes the Telemetry Lab's event-rate readout; runs only while the Lab is open.
     telemetry_clock: Timer,
     /// Extrapolates the active phase clock between two LCU events; runs only while one exists.
@@ -119,6 +126,7 @@ impl Ui {
         self.deferred_refresh.set(false);
         self.companion.borrow_mut().refresh(&self.main, &self.app);
         self.refresh_telemetry();
+        self.stats.borrow_mut().refresh(&self.main, &self.app);
         let clients = self
             .remote
             .borrow()
@@ -266,6 +274,12 @@ impl Ui {
             self.last_footprint.set(ProcessFootprint::default());
             self.main.set_perf_metrics(PerfMetrics::default());
         }
+    }
+
+    /// Applies a Stats page choice, then shows its result.
+    fn update_stats(&self, change: impl FnOnce(&mut StatsView, &AppState)) {
+        change(&mut self.stats.borrow_mut(), &self.app);
+        self.stats.borrow_mut().refresh(&self.main, &self.app);
     }
 
     fn update_perf_metrics(&self, sample_process: bool) {
@@ -625,6 +639,7 @@ fn perf_settings(s: &Settings, hw: HardwareSpec, lang: Lang) -> PerfSettings {
         eco_mode: s.eco_mode,
         pause_when_minimized: s.pause_when_minimized,
         reduce_motion: s.reduce_motion,
+        online_stats: s.online_stats,
     }
 }
 
@@ -772,6 +787,9 @@ fn wire_callbacks(ui: &Rc<Ui>) {
     });
     main.on_toggle_telemetry(|| with_ui(|ui| ui.set_telemetry(!ui.main.get_telemetry_enabled())));
     main.on_toggle_demo(|| with_ui(|ui| ui.toggle_demo()));
+    main.on_open_link(|url| {
+        links::open_external(&url);
+    });
     main.on_select_demo_phase(|phase| {
         with_ui(|ui| {
             ui.set_demo_phase(&phase);
@@ -788,6 +806,14 @@ fn wire_callbacks(ui: &Rc<Ui>) {
     main.on_performance_panel_changed(|open| {
         with_ui(|ui| ui.on_performance_panel_changed(open));
     });
+
+    main.on_open_stats(|| {
+        with_ui(|ui| {
+            ui.main.set_stats_open(true);
+            ui.update_stats(|_, _| {});
+        })
+    });
+    stats_view::wire(&main.global::<StatsBridge>());
 
     main.on_toggle_remote_panel(|| with_ui(|ui| ui.toggle_remote_panel()));
     main.on_rotate_remote_token(|| with_ui(|ui| ui.rotate_remote_token()));
@@ -895,6 +921,7 @@ fn main() {
         settings: RefCell::new(settings),
         companion: RefCell::default(),
         telemetry: RefCell::default(),
+        stats: RefCell::default(),
         telemetry_clock: Timer::default(),
         phase_clock: Timer::default(),
         phase_clock_period: Cell::new(None),
@@ -916,6 +943,10 @@ fn main() {
     apply_ui_language(&ui.main, lang);
     if let Some(phase) = ui.cli.pinned_phase() {
         ui.set_demo_phase(phase);
+    }
+    if let Some(tab) = ui.cli.stats_tab() {
+        ui.main.set_stats_open(true);
+        ui.stats.borrow_mut().select_tab(tab);
     }
     if ui.cli.telemetry {
         ui.set_telemetry(true);

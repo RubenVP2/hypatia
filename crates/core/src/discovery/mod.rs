@@ -84,6 +84,28 @@ impl DiscoveryManager {
         Self::with_state(state, scanner, vault, signal, false)
     }
 
+    /// Creates a manager that has found nothing and never scans: tests that need "League is not
+    /// running" stay true even when the developer's own client is open.
+    #[cfg(test)]
+    pub(crate) fn new_offline(vault: SecretVault, signal: ChangeSignal) -> Arc<Self> {
+        let scanner = Scanner {
+            sys: None,
+            sys_init_failed: false,
+            since: HashMap::new(),
+        };
+        let state = DiscoveryState {
+            snapshot: SystemSnapshot {
+                ts: 0,
+                processes: Vec::new(),
+                sockets: Vec::new(),
+                connections: Vec::new(),
+            },
+            sources: Vec::new(),
+            lcu_args: None,
+        };
+        Self::with_state(state, scanner, vault, signal, false)
+    }
+
     /// Creates a manager pre-populated with realistic synthetic sources and processes.
     pub fn new_demo(vault: SecretVault, signal: ChangeSignal) -> Arc<Self> {
         let scanner = Scanner {

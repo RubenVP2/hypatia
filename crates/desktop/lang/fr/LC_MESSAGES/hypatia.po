@@ -1034,3 +1034,560 @@ msgstr "{0} dans {1}"
 msgctxt "PitRow"
 msgid "UP"
 msgstr "DISPO"
+
+#: ui/app.slint:2391
+msgctxt "MainWindow"
+msgid "Stats"
+msgstr "Stats"
+
+#: ui/app.slint:2985
+msgctxt "MainWindow"
+msgid "Online stats"
+msgstr "Stats en ligne"
+
+#: ui/app.slint:2986
+msgctxt "MainWindow"
+msgid ""
+"Global builds, tier lists and matchups from MetaBot.GG. Sends only champion, "
+"role, queue and patch, never who you are."
+msgstr "Builds, tier lists et matchups mondiaux depuis MetaBot.GG. N'envoie que le champion, le rôle, la file et le patch, jamais qui vous êtes."
+
+#: ui/stats.slint:252
+msgctxt "OriginChip"
+msgid "LOCAL"
+msgstr "LOCAL"
+
+#: ui/stats.slint:253
+msgctxt "OriginChip"
+msgid "RIOT CLIENT"
+msgstr "CLIENT RIOT"
+
+#: ui/stats.slint:253
+msgctxt "OriginChip"
+msgid "ONLINE"
+msgstr "EN LIGNE"
+
+#: ui/stats.slint:253
+msgctxt "OriginChip"
+msgid "DEMO"
+msgstr "DÉMO"
+
+#: ui/stats.slint:313
+msgctxt "SourceLink"
+msgid "Data: {0}"
+msgstr "Données : {0}"
+
+#: ui/stats.slint:314
+msgctxt "SourceLink"
+msgid "Open the {0} page"
+msgstr "Ouvrir la page {0}"
+
+#: ui/stats.slint:364
+msgctxt "Skeleton"
+msgid "Loading"
+msgstr "Chargement"
+
+#: ui/stats.slint:405
+msgctxt "OnlineOffCard"
+msgid "Online stats are off"
+msgstr "Les stats en ligne sont désactivées"
+
+#: ui/stats.slint:414
+msgctxt "OnlineOffCard"
+msgid ""
+"Global win rates, builds, tier lists and matchups come from MetaBot.GG. "
+"Turning this on sends only the champion, role, queue, patch and language. "
+"Never your summoner name, your account or anything from your client."
+msgstr "Les taux de victoire, builds, tier lists et matchups mondiaux viennent de MetaBot.GG. Les activer n'envoie que le champion, le rôle, la file, le patch et la langue. Jamais votre nom d'invocateur, votre compte ni quoi que ce soit de votre client."
+
+#: ui/stats.slint:420
+msgctxt "OnlineOffCard"
+msgid ""
+"Your own games and the client's recommended pages stay local either way. You "
+"can switch it off again in Performance."
+msgstr "Vos parties et les pages recommandées par le client restent locales dans tous les cas. Vous pourrez les désactiver dans Performance."
+
+#: ui/stats.slint:429
+msgctxt "OnlineOffCard"
+msgid "Turn on Online stats"
+msgstr "Activer les stats en ligne"
+
+#: ui/stats.slint:461
+msgctxt "BlockState"
+msgid "League of Legends is not running. Start the client to read this from it."
+msgstr "League of Legends n'est pas lancé. Démarrez le client pour lire ces données."
+
+#: ui/stats.slint:463
+msgctxt "BlockState"
+msgid "No data for this yet: a new champion, a rare role or too few games."
+msgstr "Pas encore de données : champion récent, rôle rare ou trop peu de parties."
+
+#: ui/stats.slint:605
+msgctxt "ChampionPicker"
+msgid "Choose a champion"
+msgstr "Choisissez un champion"
+
+#: ui/stats.slint:615
+msgctxt "ChampionPicker"
+msgid "Search by name, or pick one of your champions below."
+msgstr "Cherchez par nom, ou choisissez l'un de vos champions ci-dessous."
+
+#: ui/stats.slint:645 ui/stats.slint:656 ui/stats.slint:675 ui/stats.slint:686
+msgctxt "ChampionPicker"
+msgid "Search a champion"
+msgstr "Chercher un champion"
+
+#: ui/stats.slint:699
+msgctxt "ChampionPicker"
+msgid "Matches"
+msgstr "Résultats"
+
+#: ui/stats.slint:699
+msgctxt "ChampionPicker"
+msgid "No champion by that name."
+msgstr "Aucun champion à ce nom."
+
+#: ui/stats.slint:700
+msgctxt "ChampionPicker"
+msgid "Your most played"
+msgstr "Vos plus joués"
+
+#: ui/stats.slint:745
+msgctxt "RunePageCard"
+msgid "Most popular page"
+msgstr "Page la plus jouée"
+
+#: ui/stats.slint:746
+msgctxt "RunePageCard"
+msgid "Alternative page"
+msgstr "Page alternative"
+
+#: ui/stats.slint:746
+msgctxt "RunePageCard"
+msgid "Client's recommended page"
+msgstr "Page recommandée par le client"
+
+#: ui/stats.slint:748
+msgctxt "RunePageCard"
+msgid "Same as the client's recommended page"
+msgstr "Identique à la page recommandée par le client"
+
+#: ui/stats.slint:777
+msgctxt "RunePageCard"
+msgid "Shards"
+msgstr "Fragments"
+
+#: ui/stats.slint:791
+msgctxt "StageLabel"
+msgid "Starting"
+msgstr "Départ"
+
+#: ui/stats.slint:792
+msgctxt "StageLabel"
+msgid "Core"
+msgstr "Cœur"
+
+#: ui/stats.slint:792
+msgctxt "StageLabel"
+msgid "Boots"
+msgstr "Bottes"
+
+#: ui/stats.slint:792
+msgctxt "StageLabel"
+msgid "Situational"
+msgstr "Situationnels"
+
+#: ui/stats.slint:792
+msgctxt "StageLabel"
+msgid "Items"
+msgstr "Objets"
+
+#: ui/stats.slint:962
+msgctxt "BuildTab"
+msgid "Global build"
+msgstr "Build mondial"
+
+#: ui/stats.slint:963
+msgctxt "BuildTab"
+msgid "Win rates, item path and skill order"
+msgstr "Taux de victoire, objets et ordre des compétences"
+
+#: ui/stats.slint:976
+msgctxt "BuildTab"
+msgid "WIN RATE"
+msgstr "VICTOIRES"
+
+#: ui/stats.slint:977
+msgctxt "BuildTab"
+msgid "PICK RATE"
+msgstr "CHOIX"
+
+#: ui/stats.slint:978
+msgctxt "BuildTab"
+msgid "BAN RATE"
+msgstr "BANS"
+
+#: ui/stats.slint:979
+msgctxt "BuildTab"
+msgid "GAMES"
+msgstr "PARTIES"
+
+#: ui/stats.slint:1015
+msgctxt "BuildTab"
+msgid "Client's recommended page"
+msgstr "Page recommandée par le client"
+
+#: ui/stats.slint:1031
+msgctxt "BuildTab"
+msgid "Summoner spells"
+msgstr "Sorts d'invocateur"
+
+#: ui/stats.slint:1069
+msgctxt "BuildTab"
+msgid "Item path"
+msgstr "Objets"
+
+#: ui/stats.slint:1070
+msgctxt "BuildTab"
+msgid "Share of games and win rate for each stage"
+msgstr "Part des parties et taux de victoire à chaque étape"
+
+#: ui/stats.slint:1091
+msgctxt "BuildTab"
+msgid "Skill order"
+msgstr "Ordre des compétences"
+
+#: ui/stats.slint:1100
+msgctxt "BuildTab"
+msgid "Max first"
+msgstr "Monter d'abord"
+
+#: ui/stats.slint:1127
+msgctxt "TierBadge"
+msgid "Tier {0}"
+msgstr "Rang {0}"
+
+#: ui/stats.slint:1160
+msgctxt "TierRowView"
+msgid "{0}, {1}, open its build"
+msgstr "{0}, {1}, ouvrir son build"
+
+#: ui/stats.slint:1218
+msgctxt "TierTab"
+msgid "Ranked Solo/Duo"
+msgstr "Classée Solo/Duo"
+
+#: ui/stats.slint:1228
+msgctxt "TierTab"
+msgid "Arena"
+msgstr "Arène"
+
+#: ui/stats.slint:1237
+msgctxt "TierTab"
+msgid "All roles"
+msgstr "Tous les rôles"
+
+#: ui/stats.slint:1255
+msgctxt "TierTab"
+msgid "Tier list"
+msgstr "Tier list"
+
+#: ui/stats.slint:1256
+msgctxt "TierTab"
+msgid "Patch {0} · click a champion to open its build"
+msgstr "Patch {0} · cliquez sur un champion pour ouvrir son build"
+
+#: ui/stats.slint:1267
+msgctxt "TierTab"
+msgid "No champion listed for this role."
+msgstr "Aucun champion classé pour ce rôle."
+
+#: ui/stats.slint:1279
+msgctxt "TierTab"
+msgid "TIER"
+msgstr "RANG"
+
+#: ui/stats.slint:1280
+msgctxt "TierTab"
+msgid "CHAMPION"
+msgstr "CHAMPION"
+
+#: ui/stats.slint:1282
+msgctxt "TierTab"
+msgid "WIN"
+msgstr "VICT."
+
+#: ui/stats.slint:1283
+msgctxt "TierTab"
+msgid "PICK"
+msgstr "CHOIX"
+
+#: ui/stats.slint:1284
+msgctxt "TierTab"
+msgid "BAN"
+msgstr "BAN"
+
+#: ui/stats.slint:1285
+msgctxt "TierTab"
+msgid "GAMES"
+msgstr "PARTIES"
+
+#: ui/stats.slint:1385
+msgctxt "MatchupColumn"
+msgid "None in this sample."
+msgstr "Aucun dans cet échantillon."
+
+#: ui/stats.slint:1407
+msgctxt "MatchupsTab"
+msgid "Matchups"
+msgstr "Matchups"
+
+#: ui/stats.slint:1419 ui/stats.slint:1433
+msgctxt "MatchupsTab"
+msgid "Hardest matchups"
+msgstr "Matchups les plus durs"
+
+#: ui/stats.slint:1420 ui/stats.slint:1434
+msgctxt "MatchupsTab"
+msgid "Lowest win rate for {0}"
+msgstr "Plus faible taux de victoire de {0}"
+
+#: ui/stats.slint:1425 ui/stats.slint:1438
+msgctxt "MatchupsTab"
+msgid "Easiest matchups"
+msgstr "Matchups les plus faciles"
+
+#: ui/stats.slint:1426 ui/stats.slint:1439
+msgctxt "MatchupsTab"
+msgid "Highest win rate for {0}"
+msgstr "Meilleur taux de victoire de {0}"
+
+#: ui/stats.slint:1454
+msgctxt "ResultChip"
+msgid "WIN"
+msgstr "VICT."
+
+#: ui/stats.slint:1454
+msgctxt "ResultChip"
+msgid "LOSS"
+msgstr "DÉF."
+
+#: ui/stats.slint:1467
+msgctxt "GameRowView"
+msgid "WIN"
+msgstr "VICT."
+
+#: ui/stats.slint:1467
+msgctxt "GameRowView"
+msgid "LOSS"
+msgstr "DÉF."
+
+#: ui/stats.slint:1535
+msgctxt "ChampionSummaryRow"
+msgid "{0}, open its build"
+msgstr "{0}, ouvrir son build"
+
+#: ui/stats.slint:1608
+msgctxt "MyStatsTab"
+msgid "Your last games"
+msgstr "Vos dernières parties"
+
+#: ui/stats.slint:1609
+msgctxt "MyStatsTab"
+msgid "Read from your client's match history. It never leaves this machine."
+msgstr "Lu dans l'historique de votre client. Il ne quitte jamais cette machine."
+
+#: ui/stats.slint:1615
+msgctxt "MyStatsTab"
+msgid "Reload history"
+msgstr "Recharger l'historique"
+
+#: ui/stats.slint:1626
+msgctxt "MyStatsTab"
+msgid "GAMES"
+msgstr "PARTIES"
+
+#: ui/stats.slint:1627
+msgctxt "MyStatsTab"
+msgid "WIN RATE"
+msgstr "VICTOIRES"
+
+#: ui/stats.slint:1628 ui/stats.slint:1653 ui/stats.slint:1690
+msgctxt "MyStatsTab"
+msgid "KDA"
+msgstr "KDA"
+
+#: ui/stats.slint:1629 ui/stats.slint:1655 ui/stats.slint:1691
+msgctxt "MyStatsTab"
+msgid "CS/MIN"
+msgstr "CS/MIN"
+
+#: ui/stats.slint:1630 ui/stats.slint:1654 ui/stats.slint:1692
+msgctxt "MyStatsTab"
+msgid "DPM"
+msgstr "DPM"
+
+#: ui/stats.slint:1640
+msgctxt "MyStatsTab"
+msgid "By champion"
+msgstr "Par champion"
+
+#: ui/stats.slint:1641
+msgctxt "MyStatsTab"
+msgid "Most used runes and items on each. Click one to open its build."
+msgstr "Runes et objets les plus utilisés sur chacun. Cliquez pour ouvrir son build."
+
+#: ui/stats.slint:1651 ui/stats.slint:1688
+msgctxt "MyStatsTab"
+msgid "CHAMPION"
+msgstr "CHAMPION"
+
+#: ui/stats.slint:1652
+msgctxt "MyStatsTab"
+msgid "WIN"
+msgstr "VICT."
+
+#: ui/stats.slint:1656
+msgctxt "MyStatsTab"
+msgid "RUNES & ITEMS"
+msgstr "RUNES & OBJETS"
+
+#: ui/stats.slint:1672
+msgctxt "MyStatsTab"
+msgid "Recent games"
+msgstr "Parties récentes"
+
+#: ui/stats.slint:1677
+msgctxt "MyStatsTab"
+msgid "No games in your recent history yet."
+msgstr "Aucune partie dans votre historique récent."
+
+#: ui/stats.slint:1686
+msgctxt "MyStatsTab"
+msgid "RESULT"
+msgstr "ISSUE"
+
+#: ui/stats.slint:1693
+msgctxt "MyStatsTab"
+msgid "TIME"
+msgstr "DURÉE"
+
+#: ui/stats.slint:1740
+msgctxt "StatsPage"
+msgid "CHAMPION STATS"
+msgstr "STATS DES CHAMPIONS"
+
+#: ui/stats.slint:1749
+msgctxt "StatsPage"
+msgid "Your client and your games, plus global numbers from MetaBot.GG."
+msgstr "Votre client et vos parties, plus les chiffres mondiaux de MetaBot.GG."
+
+#: ui/stats.slint:1750
+msgctxt "StatsPage"
+msgid "From your client and your own games. Online stats are off."
+msgstr "Depuis votre client et vos propres parties. Les stats en ligne sont désactivées."
+
+#: ui/stats.slint:1758
+msgctxt "StatsPage"
+msgid "Open on dpm.lol"
+msgstr "Ouvrir sur dpm.lol"
+
+#: ui/stats.slint:1759
+msgctxt "StatsPage"
+msgid "Open this page on dpm.lol in your browser"
+msgstr "Ouvrir cette page sur dpm.lol dans votre navigateur"
+
+#: ui/stats.slint:1768
+msgctxt "StatsPage"
+msgid "Champion Build"
+msgstr "Build du champion"
+
+#: ui/stats.slint:1773
+msgctxt "StatsPage"
+msgid "Tier List"
+msgstr "Tier list"
+
+#: ui/stats.slint:1778
+msgctxt "StatsPage"
+msgid "Matchups"
+msgstr "Matchups"
+
+#: ui/stats.slint:1783
+msgctxt "StatsPage"
+msgid "My Stats"
+msgstr "Mes stats"
+
+#: ui/helper.slint:91
+msgctxt "OriginChip"
+msgid "Source: {0}"
+msgstr "Source : {0}"
+
+#: ui/helper.slint:152
+msgctxt "DamageBar"
+msgid "{0}: {1}% physical, {2}% magic, {3}% true damage"
+msgstr "{0} : {1} % physiques, {2} % magiques, {3} % bruts"
+
+#: ui/helper.slint:153
+msgctxt "DamageBar"
+msgid "{0}: no champion yet"
+msgstr "{0} : aucun champion pour l'instant"
+
+#: ui/helper.slint:166
+msgctxt "DamageBar"
+msgid "{0}% AD · {1}% AP"
+msgstr "{0} % AD · {1} % AP"
+
+#: ui/helper.slint:263
+msgctxt "BuildBlock"
+msgid "Runes"
+msgstr "Runes"
+
+#: ui/helper.slint:293 ui/helper.slint:323
+msgctxt "BuildBlock"
+msgid "{0} + {1}"
+msgstr "{0} + {1}"
+
+#: ui/helper.slint:312
+msgctxt "BuildBlock"
+msgid "Spells"
+msgstr "Sorts"
+
+#: ui/helper.slint:334
+msgctxt "BuildBlock"
+msgid "Core items"
+msgstr "Objets clés"
+
+#: ui/helper.slint:411
+msgctxt "CompBlock"
+msgid "Your team"
+msgstr "Votre équipe"
+
+#: ui/helper.slint:414
+msgctxt "CompBlock"
+msgid "Enemy team"
+msgstr "Équipe ennemie"
+
+#: ui/helper.slint:421
+msgctxt "CompBlock"
+msgid "Physical"
+msgstr "Physiques"
+
+#: ui/helper.slint:422
+msgctxt "CompBlock"
+msgid "Magic"
+msgstr "Magiques"
+
+#: ui/helper.slint:423
+msgctxt "CompBlock"
+msgid "True"
+msgstr "Bruts"
+
+#: ui/helper.slint:466
+msgctxt "DraftHelperPanel"
+msgid "YOUR BUILD"
+msgstr "VOTRE BUILD"
+
+#: ui/helper.slint:468
+msgctxt "DraftHelperPanel"
+msgid "{0} · {1}"
+msgstr "{0} · {1}"

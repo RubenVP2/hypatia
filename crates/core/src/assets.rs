@@ -74,6 +74,7 @@ pub struct GameAssetCache {
     spell_paths: RwLock<HashMap<i64, String>>,
     perk_paths: RwLock<HashMap<i64, String>>,
     style_paths: RwLock<HashMap<i64, String>>,
+    item_paths: RwLock<HashMap<i64, String>>,
     skin_paths: RwLock<HashMap<i64, String>>,
     splash_paths: RwLock<HashMap<i64, String>>,
 }
@@ -110,6 +111,7 @@ impl GameAssetCache {
             spell_paths: RwLock::new(HashMap::new()),
             perk_paths: RwLock::new(HashMap::new()),
             style_paths: RwLock::new(HashMap::new()),
+            item_paths: RwLock::new(HashMap::new()),
             skin_paths: RwLock::new(HashMap::new()),
             splash_paths: RwLock::new(HashMap::new()),
         };
@@ -577,6 +579,11 @@ impl GameAssetCache {
                     out.push(p.clone());
                 }
             }
+            "item" => {
+                if let Some(p) = self.item_paths.read().unwrap().get(&id) {
+                    out.push(p.clone());
+                }
+            }
             "style" => {
                 if let Some(p) = self.style_paths.read().unwrap().get(&id) {
                     out.push(p.clone());
@@ -649,6 +656,7 @@ impl GameAssetCache {
             "perks.json",
             "perkstyles.json",
             "skins.json",
+            "items.json",
         ] {
             let p = meta_dir.join(file_name);
             if let Ok(bytes) = std::fs::read(&p) {
@@ -657,6 +665,17 @@ impl GameAssetCache {
                 }
             }
         }
+    }
+
+    /// Ingests a metadata JSON fetched elsewhere (e.g. Champion Stats game data) and keeps it in
+    /// the disk cache so icons resolve on the next launch before the client answers.
+    pub async fn ingest_and_persist_metadata(&self, file_name: &str, json: &Value, bytes: &[u8]) {
+        self.ingest_metadata(file_name, json);
+        let meta_path = self.cache_dir.join("meta").join(file_name);
+        if let Some(parent) = meta_path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        let _ = tokio::fs::write(&meta_path, bytes).await;
     }
 
     /// Parses cached/live Riot `lol-game-data` metadata JSONs into fast in-memory lookup maps.
@@ -720,6 +739,22 @@ impl GameAssetCache {
                     return;
                 };
                 let mut map = self.spell_paths.write().unwrap();
+                for entry in arr {
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
+                    if let Some(raw_path) = entry.get("iconPath").and_then(|v| v.as_str()) {
+                        if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
+                            map.insert(id, clean);
+                        }
+                    }
+                }
+            }
+            "items.json" => {
+                let Some(arr) = json.as_array() else {
+                    return;
+                };
+                let mut map = self.item_paths.write().unwrap();
                 for entry in arr {
                     let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
                         continue;
@@ -1065,6 +1100,7 @@ fn is_valid_asset_id(category: &str, id: i64) -> bool {
         | "spell"
         | "perk"
         | "style"
+        | "item"
         | "skin"
         | "splash"
         | crate::art::BANNER_CATEGORY => id > 0,
@@ -1073,7 +1109,7 @@ fn is_valid_asset_id(category: &str, id: i64) -> bool {
     }
 }
 
-fn resolve_live_lcu_creds(discovery: &DiscoveryManager) -> Option<(u16, String)> {
+pub(crate) fn resolve_live_lcu_creds(discovery: &DiscoveryManager) -> Option<(u16, String)> {
     if discovery.is_demo_override() {
         return None;
     }
@@ -1195,6 +1231,30 @@ mod tests {
             std::env::temp_dir().join(format!("hypatia_asset_test_{}_{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn item_icons_resolve_from_items_json() {
+        let cache = GameAssetCache::with_dir(temp_cache_dir("items"));
+        assert!(cache.candidate_lcu_paths("item", 3089).is_empty());
+        cache.ingest_metadata(
+            "items.json",
+            &serde_json::json!([
+                {"id": 3089, "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3089_Mage_T3_DeathCap.png"},
+                {"id": 666, "iconPath": "https://evil.example/x.png"}
+            ]),
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("item", 3089),
+            vec![
+                "/lol-game-data/assets/ASSETS/Items/Icons2D/3089_Mage_T3_DeathCap.png".to_string()
+            ]
+        );
+        assert!(
+            cache.candidate_lcu_paths("item", 666).is_empty(),
+            "foreign paths are refused"
+        );
+        assert!(is_valid_asset_id("item", 3089) && !is_valid_asset_id("item", 0));
     }
 
     #[test]

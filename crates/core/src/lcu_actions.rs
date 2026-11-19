@@ -529,12 +529,14 @@ pub fn extract_remote_state(
     alerts: &mut AlertTracker,
 ) -> RemoteStateSnapshot {
     let summary = app_state.get_summary();
-    project_remote_state(
+    let mut snapshot = project_remote_state(
         &summary,
         app_state.is_demo_active(),
         app_state.lang(),
         alerts,
-    )
+    );
+    snapshot.stats_revision = app_state.stats.revision();
+    snapshot
 }
 
 #[cfg(test)]

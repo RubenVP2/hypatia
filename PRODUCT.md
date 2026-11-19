@@ -10,10 +10,6 @@ web
 
 Native cross-platform desktop application (Windows, macOS, Linux), no browser and no webview. Rust everywhere: the existing backend crates (lockfile discovery, Riot HTTP client, WAMP, Live Client Data on port 2999, redaction) feed a **Slint** UI. An embedded Axum server exists only to serve the opt-in Mobile Remote page on the LAN. The design language is Hypatia's own, not per-OS native conventions (Platform is recorded as `web` for that reason).
 
-Two window forms of the same app:
-- **Main window**: the full app.
-- **Mini widget**: a compact, always-on-top window for a second monitor while playing.
-
 ## Users
 
 Any League of Legends player on PC, regardless of technical knowledge. They open Hypatia at two moments:
@@ -37,7 +33,7 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 ## Operating Context
 
 - Launched alongside the Riot Client / League Client; Riot services start, stop, and change port and password on every launch, and Hypatia follows them without user action.
-- Main window during champion select; mini widget on a second monitor or a corner of the screen during the game, often in a dark room.
+- Kept open during champion select and on a second monitor during the game, often in a dark room.
 - Must behave gracefully when League is not running, when the player is idle, or between phases.
 
 ## Capabilities and Constraints

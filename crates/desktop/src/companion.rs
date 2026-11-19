@@ -18,7 +18,7 @@ use crate::icons::{AppIconLookup, DesktopAssetLoader, IconLookup};
 use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
 use crate::{
     AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine, LiveView,
-    MainWindow, MapAlly, MiniWidget, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
+    MainWindow, MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
     TowerDot, WaitView,
 };
 
@@ -727,21 +727,24 @@ pub fn build_end_view(
     };
     let minutes = (eog.game_length_sec as f64 / 60.0).max(1.0);
     let kda_ratio = (eog.kills + eog.assists) as f64 / eog.deaths.max(1) as f64;
-    let kda = tile("KDA", format_decimal(kda_ratio, lang));
-    let cs_per_min = (eog.creep_score > 0)
-        .then(|| tile("CS/MIN", format_decimal(eog.creep_score as f64 / minutes, lang)));
-    let damage = tile(lang.pick("DAMAGE", "DÉGÂTS"), format_thousands(eog.damage_to_champions, lang));
-    let mut tiles = vec![kda.clone()];
-    tiles.extend(cs_per_min.clone());
-    tiles.push(tile(lang.pick("GOLD", "OR"), format_thousands(eog.total_gold, lang)));
-    tiles.push(damage.clone());
+    let mut tiles = vec![tile("KDA", format_decimal(kda_ratio, lang))];
+    if eog.creep_score > 0 {
+        tiles.push(tile(
+            "CS/MIN",
+            format_decimal(eog.creep_score as f64 / minutes, lang),
+        ));
+    }
+    tiles.push(tile(
+        lang.pick("GOLD", "OR"),
+        format_thousands(eog.total_gold, lang),
+    ));
+    tiles.push(tile(
+        lang.pick("DAMAGE", "DÉGÂTS"),
+        format_thousands(eog.damage_to_champions, lang),
+    ));
     if eog.vision_score > 0 {
         tiles.push(tile("VISION", eog.vision_score.to_string()));
     }
-    // The mini widget keeps three: KDA, CS per minute, damage.
-    let mut mini_tiles = vec![kda];
-    mini_tiles.extend(cs_per_min);
-    mini_tiles.push(damage);
 
     let mut rows = |players: &[EndOfGamePlayer]| -> Vec<PlayerLine> {
         let mut lines: Vec<PlayerLine> = players
@@ -797,7 +800,6 @@ pub fn build_end_view(
         victory,
         splash_icon: icons.resolve_skin_art("splash", eog.skin_id, cid),
         tiles: ModelRc::new(VecModel::from(tiles)),
-        mini_tiles: ModelRc::new(VecModel::from(mini_tiles)),
         allies: ModelRc::new(VecModel::from(allies)),
         enemies: ModelRc::new(VecModel::from(enemies)),
     }
@@ -810,7 +812,6 @@ struct RenderContext {
     splash_enabled: bool,
     /// Bumped by the asset cache each time a new icon lands on disk.
     icons_revision: u64,
-    mini_open: bool,
 }
 
 /// What the companion windows currently display.
@@ -1134,7 +1135,7 @@ pub fn build_wait_view(
     (wait, party)
 }
 
-/// Keeps the companion windows in sync with the Match Projection, touching Slint only for the
+/// Keeps the companion window in sync with the Match Projection, touching Slint only for the
 /// sections whose data changed since the previous refresh.
 #[derive(Default)]
 pub struct Companion {
@@ -1145,50 +1146,20 @@ pub struct Companion {
     art_key: Option<(bool, u64)>,
     draft: DraftModels,
     live: LiveModels,
-    /// `(screen, in game)` the mini widget's height was last fitted to.
-    mini_fit: Option<(Screen, bool)>,
-}
-
-/// Mini widget height per phase, so each phase fills its window without empty space.
-fn mini_height(view: Screen, in_game: bool) -> f32 {
-    if in_game {
-        return 370.0;
-    }
-    match view {
-        Screen::ChampSelect => 460.0,
-        Screen::ReadyCheck => 320.0,
-        Screen::Results => 340.0,
-        _ => 300.0,
-    }
-}
-
-/// Resizes the mini widget to `view`'s height, keeping the width the player chose.
-fn fit_mini(mini_win: &MiniWidget, view: Screen, in_game: bool) {
-    let window = mini_win.window();
-    let width = window.size().to_logical(window.scale_factor()).width;
-    let width = if width > 0.0 { width } else { 360.0 };
-    window.set_size(slint::LogicalSize::new(width, mini_height(view, in_game)));
 }
 
 impl Companion {
-    pub fn refresh(
-        &mut self,
-        main_win: &MainWindow,
-        mini_win: &MiniWidget,
-        app_state: &AppState,
-        mini_open: bool,
-    ) {
+    pub fn refresh(&mut self, main_win: &MainWindow, app_state: &AppState) {
         let snapshot = app_state.get_summary();
         let context = RenderContext {
             lang: app_state.lang(),
             icons_enabled: app_state.flags.game_icons(),
             splash_enabled: app_state.flags.splash_backdrops(),
             icons_revision: app_state.assets.image_revision(),
-            mini_open,
         };
         let art_key = (context.splash_enabled, context.icons_revision);
         if self.art_key != Some(art_key) {
-            apply_client_art(main_win, mini_win, app_state, &mut self.loader, context.splash_enabled);
+            apply_client_art(main_win, app_state, &mut self.loader, context.splash_enabled);
             self.art_key = Some(art_key);
         }
         // A different context invalidates every section; an identical projection none.
@@ -1202,22 +1173,13 @@ impl Companion {
         }
         let view = apply_summary(
             main_win,
-            mini_win,
             app_state,
             &mut self.loader,
             &self.draft,
             &self.live,
             &snapshot,
             self.shown.as_ref(),
-            mini_open,
         );
-        let fit = (view, snapshot.live_game.is_some());
-        if !mini_open {
-            self.mini_fit = None;
-        } else if self.mini_fit != Some(fit) {
-            fit_mini(mini_win, fit.0, fit.1);
-            self.mini_fit = Some(fit);
-        }
         // Re-anchor only on a fresh reading of the same view's clock.
         let same_view = self.shown.as_ref().is_some_and(|shown| shown.view == view);
         let current = if same_view { self.clock } else { None };
@@ -1235,11 +1197,10 @@ impl Companion {
     }
 }
 
-/// Resolves the prepared Summoner's Rift artwork (fetching what is missing) into both windows.
+/// Resolves the prepared Summoner's Rift artwork (fetching what is missing) into the window.
 /// Runs only when the artwork switch or the icon cache changed, never per frame.
 fn apply_client_art(
     main_win: &MainWindow,
-    mini_win: &MiniWidget,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
     enabled: bool,
@@ -1251,34 +1212,25 @@ fn apply_client_art(
             Image::default()
         }
     };
-    let map_south = get(ArtPiece::MapSouth);
-    let map_north = get(ArtPiece::MapNorth);
-    let ready_check = get(ArtPiece::ReadyCheck);
-    let victory = get(ArtPiece::Victory);
-    let defeat = get(ArtPiece::Defeat);
-    let backdrop = get(ArtPiece::Backdrop);
-    for target in [main_win.global::<ClientArt>(), mini_win.global::<ClientArt>()] {
-        target.set_map_south(map_south.clone());
-        target.set_map_north(map_north.clone());
-        target.set_ready_check(ready_check.clone());
-        target.set_victory(victory.clone());
-        target.set_defeat(defeat.clone());
-        target.set_backdrop(backdrop.clone());
-    }
+    let target = main_win.global::<ClientArt>();
+    target.set_map_south(get(ArtPiece::MapSouth));
+    target.set_map_north(get(ArtPiece::MapNorth));
+    target.set_ready_check(get(ArtPiece::ReadyCheck));
+    target.set_victory(get(ArtPiece::Victory));
+    target.set_defeat(get(ArtPiece::Defeat));
+    target.set_backdrop(get(ArtPiece::Backdrop));
 }
 
-/// Pushes `snap` to the windows and returns the active screen. Sections equal to what
+/// Pushes `snap` to the window and returns the active screen. Sections equal to what
 /// `previous` already displays are left untouched.
 fn apply_summary(
     main_win: &MainWindow,
-    mini_win: &MiniWidget,
     app_state: &AppState,
     loader: &mut DesktopAssetLoader,
     draft: &DraftModels,
     live: &LiveModels,
     snap: &SummarySnapshot,
     previous: Option<&Shown>,
-    mini_open: bool,
 ) -> Screen {
     let lang = app_state.lang();
     let prev = previous.map(|shown| &*shown.snapshot);
@@ -1314,7 +1266,6 @@ fn apply_summary(
 
     let view = select_screen(snap);
     main_win.set_view(view);
-    mini_win.set_view(view);
 
     // Queue label in top bar
     let queue_label = snap
@@ -1339,9 +1290,6 @@ fn apply_summary(
     let waiting = !matches!(view, Screen::ChampSelect | Screen::InGame | Screen::Results);
     if waiting && wait_changed {
         let (wait, party) = build_wait_view(snap, view, &mut icons, lang);
-        if mini_open {
-            mini_win.set_wait(wait.clone());
-        }
         main_win.set_wait(wait);
         main_win.set_party(ModelRc::new(VecModel::from(party)));
     }
@@ -1349,10 +1297,6 @@ fn apply_summary(
     if let Some(ref cs) = snap.champ_select {
         if prev.is_none_or(|p| p.champ_select.as_ref() != Some(cs)) {
             let champ = build_champ_select_view(cs, &mut icons, draft, lang);
-            // The mini widget only receives data while it is on screen.
-            if mini_open {
-                mini_win.set_champ(champ.clone());
-            }
             main_win.set_champ(champ);
         }
     }
@@ -1360,22 +1304,13 @@ fn apply_summary(
     if let Some(ref lg) = snap.live_game {
         if prev.is_none_or(|p| p.live_game.as_ref() != Some(lg) || p.board != snap.board) {
             let lv = build_live_view(lg, snap.board.as_ref(), &mut icons, live, lang);
-            // The mini widget only receives data while it is on screen.
-            if mini_open {
-                mini_win.set_live(lv.clone());
-            }
             main_win.set_live(lv);
         }
     }
-    mini_win.set_in_game(snap.live_game.is_some());
 
     if let Some(ref eog) = snap.end_of_game {
         if prev.is_none_or(|p| p.end_of_game.as_ref() != Some(eog)) {
             let end = build_end_view(eog, &mut icons, lang);
-            // The mini widget only receives data while it is on screen.
-            if mini_open {
-                mini_win.set_end(end.clone());
-            }
             main_win.set_end(end);
         }
     }

@@ -1822,7 +1822,7 @@ export component ObjectiveRow inherits HorizontalLayout {
 export component BanChip inherits Rectangle {
     in property <BanEntry> ban;
     in property <bool> mine: true;
-    // Portrait and strike only, for the mini widget.
+    // Portrait and strike only, when shown compactly.
     in property <bool> compact: false;
     height: 26px;
     width: row.preferred-width;

@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_scan_processes_does_not_panic() {
-        let mut sys = System::new();
+        let mut sys = System::new().expect("sysinfo System::new");
         let (procs, _lcu_args) = scan_processes(&mut sys, true);
         // On machine with running Riot processes, procs should contain them
         for proc in procs {

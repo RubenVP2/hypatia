@@ -293,11 +293,15 @@ impl HardwareSpec {
 
     /// Probes local physical memory and logical CPU count once using lightweight `sysinfo` queries.
     pub fn detect() -> Self {
-        let mut sys = System::new_with_specifics(
+        let total_ram_bytes = match System::new_with_specifics(
             RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()),
-        );
-        sys.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
-        let total_ram_bytes = sys.total_memory();
+        ) {
+            Ok(sys) => sys.total_memory(),
+            Err(err) => {
+                tracing::warn!("Failed to probe system memory via sysinfo: {err}");
+                0
+            }
+        };
         let cpu_threads = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4);
@@ -335,7 +339,7 @@ pub struct ProcessFootprint {
 
 /// On-demand process sampler for Hypatia itself; allocated only while the Performance sheet is open.
 pub struct ProcessMonitor {
-    sys: System,
+    sys: Option<System>,
     pid: Pid,
     cpu_divisor: f32,
     samples: u32,
@@ -347,8 +351,15 @@ impl ProcessMonitor {
         let cpu_divisor = std::thread::available_parallelism()
             .map(|n| n.get().max(1) as f32)
             .unwrap_or(1.0);
+        let sys = match System::new() {
+            Ok(sys) => Some(sys),
+            Err(err) => {
+                tracing::warn!("Failed to initialize sysinfo process monitor: {err}");
+                None
+            }
+        };
         Self {
-            sys: System::new(),
+            sys,
             pid,
             cpu_divisor,
             samples: 0,
@@ -357,13 +368,16 @@ impl ProcessMonitor {
 
     /// Samples RSS memory and delta CPU usage for the current process only.
     pub fn sample(&mut self) -> ProcessFootprint {
-        self.sys.refresh_processes_specifics(
+        let Some(sys) = self.sys.as_mut() else {
+            return ProcessFootprint::default();
+        };
+        sys.refresh_processes_specifics(
             ProcessesToUpdate::Some(&[self.pid]),
             false,
             ProcessRefreshKind::nothing().with_memory().with_cpu(),
         );
         self.samples = self.samples.saturating_add(1);
-        let Some(proc) = self.sys.process(self.pid) else {
+        let Some(proc) = sys.process(self.pid) else {
             return ProcessFootprint::default();
         };
         let cpu_percent = (proc.cpu_usage() / self.cpu_divisor).clamp(0.0, 100.0);
@@ -1034,6 +1048,9 @@ mod tests {
 
     #[test]
     fn process_monitor_reads_current_process_footprint() {
+        let hw = HardwareSpec::detect();
+        assert!(hw.cpu_threads >= 1);
+
         let mut monitor = ProcessMonitor::new();
         let first = monitor.sample();
         assert!(first.memory_bytes > 0);

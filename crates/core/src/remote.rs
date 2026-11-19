@@ -14,7 +14,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use hypatia_shared::{RemoteCommand, SourceId};
 use qrcode::QrCode;
-use rand::Rng;
+use rand::RngExt;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::{broadcast, watch};

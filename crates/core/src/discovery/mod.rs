@@ -33,8 +33,24 @@ pub struct DiscoveryState {
 
 /// Reusable OS handles and bookkeeping carried from one scan to the next.
 struct Scanner {
-    sys: System,
+    sys: Option<System>,
+    sys_init_failed: bool,
     since: HashMap<SourceId, i64>,
+}
+
+impl Scanner {
+    fn ensure_sys(&mut self) -> Option<&mut System> {
+        if self.sys.is_none() && !self.sys_init_failed {
+            match System::new() {
+                Ok(sys) => self.sys = Some(sys),
+                Err(err) => {
+                    tracing::warn!("Failed to initialize sysinfo process scanner: {err}");
+                    self.sys_init_failed = true;
+                }
+            }
+        }
+        self.sys.as_mut()
+    }
 }
 
 /// Follows Riot processes, lockfiles and (optionally) their sockets, publishing a new
@@ -59,17 +75,20 @@ impl DiscoveryManager {
     /// Creates a manager and performs an initial (lightweight) scan.
     pub fn new(vault: SecretVault, signal: ChangeSignal) -> Arc<Self> {
         let mut scanner = Scanner {
-            sys: System::new(),
+            sys: None,
+            sys_init_failed: false,
             since: HashMap::new(),
         };
-        let state = Self::scan_cycle(&mut scanner.sys, &vault, &mut scanner.since, false);
+        scanner.ensure_sys();
+        let state = Self::scan_cycle_opt(scanner.sys.as_mut(), &vault, &mut scanner.since, false);
         Self::with_state(state, scanner, vault, signal, false)
     }
 
     /// Creates a manager pre-populated with realistic synthetic sources and processes.
     pub fn new_demo(vault: SecretVault, signal: ChangeSignal) -> Arc<Self> {
         let scanner = Scanner {
-            sys: System::new(),
+            sys: None,
+            sys_init_failed: false,
             since: HashMap::new(),
         };
         let state = Self::build_demo_state(&vault);
@@ -290,8 +309,9 @@ impl DiscoveryManager {
     fn rescan(&self, detailed: bool) -> bool {
         let fresh = {
             let mut scanner = self.scanner.lock().unwrap();
-            let Scanner { sys, since } = &mut *scanner;
-            Self::scan_cycle(sys, &self.vault, since, detailed)
+            scanner.ensure_sys();
+            let Scanner { sys, since, .. } = &mut *scanner;
+            Self::scan_cycle_opt(sys.as_mut(), &self.vault, since, detailed)
         };
         let active = !fresh.snapshot.processes.is_empty();
         let changed = {
@@ -377,10 +397,22 @@ impl DiscoveryManager {
         since_map: &mut HashMap<SourceId, i64>,
         detailed: bool,
     ) -> DiscoveryState {
+        Self::scan_cycle_opt(Some(sys), vault, since_map, detailed)
+    }
+
+    fn scan_cycle_opt(
+        sys: Option<&mut System>,
+        vault: &SecretVault,
+        since_map: &mut HashMap<SourceId, i64>,
+        detailed: bool,
+    ) -> DiscoveryState {
         let now = epoch();
         let now_ms = now.as_millis() as i64;
 
-        let (processes, lcu_args) = process::scan_processes(sys, detailed);
+        let (processes, lcu_args) = match sys {
+            Some(sys) => process::scan_processes(sys, detailed),
+            None => (Vec::new(), None),
+        };
         let (sockets, connections) = if detailed {
             let riot_pids: HashSet<u32> = processes.iter().map(|p| p.pid).collect();
             ports::collect_sockets_for_pids(&riot_pids)

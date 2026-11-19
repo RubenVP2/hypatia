@@ -1,4 +1,4 @@
-name: Release Binaries
+name: Release Windows Binary
 
 on:
   push:
@@ -7,141 +7,272 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag (e.g. v0.1.0). If empty, extracted from Cargo.toml'
+        description: 'Release tag (e.g. v0.5.0). Defaults to v<Cargo.toml version>.'
         required: false
         default: ''
       draft:
-        description: 'Create as draft'
+        description: 'Keep GitHub Release as a draft'
         type: boolean
         default: false
       prerelease:
-        description: 'Mark as pre-release'
+        description: 'Mark GitHub Release as a pre-release'
         type: boolean
         default: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  prepare-release:
-    name: Prepare GitHub Release
+  verify:
+    name: Verify Release & Checks
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release_info.outputs.tag }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Determine Release Tag
+      - name: Resolve and validate release tag against workspace versions
         id: release_info
         shell: bash
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAG="${{ github.ref_name }}"
-          elif [[ -n "${{ github.event.inputs.tag_name }}" ]]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          else
-            VERSION=$(grep '^version =' crates/desktop/Cargo.toml | head -1 | awk -F'"' '{print $2}')
-            TAG="v${VERSION}"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Release tag: $TAG"
-
-      - name: Create GitHub Release if not exists
-        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release_info.outputs.tag }}
-          DRAFT: ${{ github.event.inputs.draft || false }}
-          PRERELEASE: ${{ github.event.inputs.prerelease || false }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag_name }}
         run: |
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            echo "Release $TAG already exists."
-          else
-            EXTRA_ARGS=""
-            if [[ "$DRAFT" == "true" ]]; then
-              EXTRA_ARGS="$EXTRA_ARGS --draft"
-            fi
-            if [[ "$PRERELEASE" == "true" ]]; then
-              EXTRA_ARGS="$EXTRA_ARGS --prerelease"
-            fi
-            gh release create "$TAG" --title "Hypatia $TAG" --generate-notes $EXTRA_ARGS
-            echo "Created release $TAG."
-          fi
+          TAG=$(python3 - <<'PY'
+          import os, re, sys, tomllib
 
-  build-and-upload:
-    name: Build & Upload (${{ matrix.target }})
-    needs: prepare-release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bin_name: hypatia.exe
-            asset_name: hypatia-windows-x86_64.zip
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            bin_name: hypatia
-            asset_name: hypatia-linux-x86_64.tar.gz
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            bin_name: hypatia
-            asset_name: hypatia-macos-arm64.tar.gz
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            bin_name: hypatia
-            asset_name: hypatia-macos-x86_64.tar.gz
+          manifests = [
+              "crates/shared/Cargo.toml",
+              "crates/core/Cargo.toml",
+              "crates/desktop/Cargo.toml",
+          ]
+          versions = {}
+          for path in manifests:
+              with open(path, "rb") as f:
+                  versions[path] = tomllib.load(f)["package"]["version"]
+
+          unique = set(versions.values())
+          if len(unique) != 1:
+              sys.stderr.write(f"Workspace crate versions mismatch: {versions}\n")
+              sys.exit(1)
+
+          crate_ver = next(iter(unique))
+          if os.environ.get("GITHUB_REF_TYPE") == "tag":
+              tag = os.environ["GITHUB_REF_NAME"]
+          elif os.environ.get("INPUT_TAG"):
+              tag = os.environ["INPUT_TAG"].strip()
+          else:
+              tag = f"v{crate_ver}"
+
+          pattern = rf"^v{re.escape(crate_ver)}(-[0-9A-Za-z.-]+)?$"
+          if not re.match(pattern, tag):
+              sys.stderr.write(
+                  f"Release tag '{tag}' does not match Cargo.toml version '{crate_ver}'\n"
+              )
+              sys.exit(1)
+
+          print(tag)
+          PY
+          )
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Validated release tag: $TAG"
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Install cargo-deny and cargo-audit
+        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: cargo-deny,cargo-audit
+
+      - name: Check dependencies (advisories, licenses, bans, sources)
+        run: cargo deny --locked check
+
+      - name: Audit Cargo.lock for RustSec vulnerabilities
+        run: cargo audit
+
+      - name: Install gettext tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gettext
+
+      - name: Read Slint version from Cargo.lock
+        id: slint_ver
+        run: |
+          version=$(python3 -c 'import tomllib; print(next(p["version"] for p in tomllib.load(open("Cargo.lock", "rb"))["package"] if p["name"] == "slint"))')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache slint-tr-extractor
+        id: slint_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/slint-tr-extractor
+          key: ${{ runner.os }}-slint-tr-extractor-${{ steps.slint_ver.outputs.version }}
+
+      - name: Install slint-tr-extractor
+        if: steps.slint_cache.outputs.cache-hit != 'true'
+        env:
+          SLINT_VERSION: ${{ steps.slint_ver.outputs.version }}
+        run: cargo install --locked slint-tr-extractor --version "$SLINT_VERSION"
+
+      - name: Verify Slint i18n template and French catalog
+        working-directory: crates/desktop
+        run: |
+          export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+          slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint -o "$RUNNER_TEMP/hypatia.pot"
+          msgcmp --use-untranslated lang/hypatia.pot "$RUNNER_TEMP/hypatia.pot"
+          msgcmp --use-untranslated "$RUNNER_TEMP/hypatia.pot" lang/hypatia.pot
+          msgfmt -c -o /dev/null lang/fr/LC_MESSAGES/hypatia.po
+          msgcmp lang/fr/LC_MESSAGES/hypatia.po lang/hypatia.pot
+          msgcmp --use-untranslated lang/hypatia.pot lang/fr/LC_MESSAGES/hypatia.po
+          test -z "$(msgattrib --untranslated lang/fr/LC_MESSAGES/hypatia.po)"
+          test -z "$(msgattrib --fuzzy lang/fr/LC_MESSAGES/hypatia.po)"
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          shared-key: ubuntu-core
+
+      - name: Run Clippy on shared and core crates
+        run: cargo clippy -p hypatia-shared -p hypatia-core --all-targets --locked -- -D warnings
+
+      - name: Run shared and core tests
+        run: cargo test -p hypatia-shared -p hypatia-core --locked
+
+  build-windows:
+    name: Build Windows (x86_64-pc-windows-msvc)
+    needs: verify
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libfontconfig1-dev libxkbcommon-dev libgl1-mesa-dev libwayland-dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
-          targets: ${{ matrix.target }}
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+          components: clippy
 
-      - name: Build native desktop binary
-        run: cargo build --release --target ${{ matrix.target }} -p hypatia
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          shared-key: windows
 
-      - name: Package Windows binary (zip)
-        if: runner.os == 'Windows'
+      - name: Run Clippy across workspace
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --workspace --locked
+
+      - name: Build Windows release binary
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc -p hypatia
+
+      - name: Package Windows binary and SHA-256 checksum
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path staging
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" staging/
+          $assetName = "hypatia-windows-x86_64.zip"
+          $binPath = "target/x86_64-pc-windows-msvc/release/hypatia.exe"
+          if (-not (Test-Path $binPath) -or (Get-Item $binPath).Length -le 0) {
+            throw "Release binary missing or empty at $binPath"
+          }
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue staging, dist
+          New-Item -ItemType Directory -Force -Path staging, dist | Out-Null
+          Copy-Item $binPath staging/
           Copy-Item README.md staging/
-          Compress-Archive -Path staging/* -DestinationPath "${{ matrix.asset_name }}"
-          Get-FileHash -Path "${{ matrix.asset_name }}" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | Out-File -Encoding utf8 "${{ matrix.asset_name }}.sha256"
+          Copy-Item crates/desktop/ui/fonts/OFL.txt staging/FONT-LICENSE-OFL.txt
+          Compress-Archive -Path staging/* -DestinationPath "dist/$assetName" -Force
+          $hash = (Get-FileHash -Path "dist/$assetName" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksumPath = Join-Path (Resolve-Path dist) "$assetName.sha256"
+          [System.IO.File]::WriteAllText($checksumPath, "$hash  $assetName`n", [System.Text.UTF8Encoding]::new($false))
 
-      - name: Package Unix binary (tar.gz)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          mkdir -p staging
-          cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" staging/
-          cp README.md staging/
-          cd staging
-          tar -czvf "../${{ matrix.asset_name }}" *
-          cd ..
-          if command -v sha256sum > /dev/null 2>&1; then
-            sha256sum "${{ matrix.asset_name }}" > "${{ matrix.asset_name }}.sha256"
-          else
-            shasum -a 256 "${{ matrix.asset_name }}" > "${{ matrix.asset_name }}.sha256"
-          fi
+      - name: Upload staged release archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hypatia-windows-x86_64-release
+          path: |
+            dist/hypatia-windows-x86_64.zip
+            dist/hypatia-windows-x86_64.zip.sha256
+          retention-days: 1
+          if-no-files-found: error
 
-      - name: Upload binaries to GitHub Release
+  publish-release:
+    name: Publish GitHub Release
+    needs: [verify, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download staged release archive
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hypatia-windows-x86_64-release
+          path: dist
+
+      - name: Verify archive SHA-256 checksum
+        working-directory: dist
+        run: sha256sum -c hypatia-windows-x86_64.zip.sha256
+
+      - name: Attest build provenance (public repositories)
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/hypatia-windows-x86_64.zip
+
+      - name: Publish GitHub Release atomically
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          COMMIT_SHA: ${{ github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          INPUT_DRAFT: ${{ inputs.draft }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          gh release upload "$TAG" "${{ matrix.asset_name }}" "${{ matrix.asset_name }}.sha256" --clobber
+          EXTRA_FLAGS=()
+          if [[ "$INPUT_PRERELEASE" == "true" || "$TAG" == *-* ]]; then
+            EXTRA_FLAGS+=(--prerelease)
+          fi
+          if [[ "$REF_TYPE" != "tag" ]]; then
+            EXTRA_FLAGS+=(--target "$COMMIT_SHA")
+          fi
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "Hypatia $TAG" \
+              --generate-notes \
+              --draft \
+              "${EXTRA_FLAGS[@]}"
+          fi
+
+          gh release upload "$TAG" \
+            dist/hypatia-windows-x86_64.zip \
+            dist/hypatia-windows-x86_64.zip.sha256 \
+            --clobber
+
+          if [[ "$INPUT_DRAFT" != "true" ]]; then
+            gh release edit "$TAG" --draft=false
+          fi
+
+          {
+            echo "### Release $TAG"
+            echo ""
+            echo "- Asset: \`hypatia-windows-x86_64.zip\`"
+            echo "- SHA-256: \`$(cat dist/hypatia-windows-x86_64.zip.sha256)\`"
+          } >> "$GITHUB_STEP_SUMMARY"

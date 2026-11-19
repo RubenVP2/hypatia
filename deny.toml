@@ -1,0 +1,55 @@
+# Policy for dependencies, advisories, licenses, and crate sources checked in CI (`cargo deny --locked check`).
+
+[graph]
+# League of Legends runs on Windows (the shipped desktop binary target), while
+# Ubuntu runs fast OS-agnostic checks and unit tests for `hypatia-shared` and `hypatia-core`.
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+]
+
+[output]
+feature-depth = 1
+
+[advisories]
+# Transitive Slint/system crates (`ttf-parser`, `paste`, `pin-utils`, `chrono`,
+# `zbus` on Linux) carry upstream unmaintained notices outside our control.
+# Vulnerabilities always deny; unsound advisories deny on workspace crates.
+unmaintained = "workspace"
+unsound = "workspace"
+yanked = "warn"
+
+[licenses]
+# Note: Slint is triple-licensed (`GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR
+# LicenseRef-Slint-Software-3.0`); allowing only `LicenseRef-Slint-Royalty-free-2.0`
+# ensures no GPL-only dependency is accepted without explicit review.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "0BSD",
+    "Unlicense",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "LicenseRef-Slint-Royalty-free-2.0",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+# Workspace crates have `publish = false` and are ignored by license checks.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

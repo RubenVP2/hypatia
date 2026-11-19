@@ -132,13 +132,20 @@ impl AppState {
         let mut store = EventStore::new(signal.clone());
         store.set_capture(false);
 
+        let assets = Arc::new(GameAssetCache::new(signal.clone()));
+        assets.set_max_mem_entries(if settings.game_icons {
+            settings.asset_cache_budget.max_entries()
+        } else {
+            0
+        });
+
         let state = Self {
             discovery,
             vault,
             store: Arc::new(RwLock::new(store)),
             catalog: Arc::new(RwLock::new(CatalogStore::new())),
             riot_client: ReadOnlyRiotClient::new(),
-            assets: Arc::new(GameAssetCache::new(signal.clone())),
+            assets,
             demo_remote: Arc::new(RwLock::new(DemoRemoteState::default())),
             flags,
             signal,
@@ -314,11 +321,35 @@ impl AppState {
         Ok(())
     }
 
-    /// Applies user settings to every running background task.
+    /// Applies user settings to every running background task and memory cache budget.
     pub fn apply_settings(&self, settings: &Settings) {
         self.flags.apply(settings);
+        if !settings.game_icons {
+            self.assets.set_max_mem_entries(0);
+        } else {
+            self.assets
+                .set_max_mem_entries(settings.asset_cache_budget.max_entries());
+            if !settings.splash_backdrops {
+                self.assets.evict_categories(&[
+                    "splash",
+                    crate::art::CATEGORY,
+                    crate::art::BANNER_CATEGORY,
+                ]);
+            }
+        }
         self.discovery.wake();
         self.signal.bump();
+    }
+
+    /// Drops cached encoded asset blobs from core memory while keeping disk files intact.
+    pub fn clear_asset_memory_cache(&self) {
+        self.assets.clear_memory_cache();
+    }
+
+    /// Removes cached image files from disk (`assets-cache/<category>`) and clears memory blobs
+    /// while preserving LCU metadata JSONs.
+    pub fn clear_asset_disk_cache(&self) {
+        self.assets.clear_disk_cache();
     }
 
     /// Opens or closes the Telemetry Lab: toggles full event capture, the complete WAMP

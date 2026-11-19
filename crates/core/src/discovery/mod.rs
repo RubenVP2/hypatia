@@ -23,11 +23,6 @@ use crate::redaction::SecretVault;
 use crate::settings::Flags;
 use crate::signal::ChangeSignal;
 
-/// Scan cadence while a Riot process is running.
-const ACTIVE_INTERVAL: Duration = Duration::from_millis(1000);
-/// Scan cadence while nothing Riot-related runs (startup detection latency).
-const IDLE_INTERVAL: Duration = Duration::from_millis(2500);
-
 /// Latest discovery result.
 #[derive(Debug, Clone)]
 pub struct DiscoveryState {
@@ -343,7 +338,7 @@ impl DiscoveryManager {
             .name("hypatia-discovery".into())
             .spawn(move || {
                 info!("Discovery loop started");
-                let mut interval = ACTIVE_INTERVAL;
+                let mut interval = flags.discovery_rate().active_interval();
                 loop {
                     std::thread::park_timeout(interval);
                     let Some(manager) = weak.upgrade() else {
@@ -352,10 +347,12 @@ impl DiscoveryManager {
                     // Synthetic demo state is static: nothing to scan while it is active.
                     let active = !manager.is_demo_override()
                         && manager.rescan(flags.system_footprint());
-                    interval = if active { ACTIVE_INTERVAL } else { IDLE_INTERVAL };
-                    if flags.eco_mode() {
-                        interval *= 2;
-                    }
+                    let rate = flags.discovery_rate();
+                    interval = if active {
+                        rate.active_interval()
+                    } else {
+                        rate.idle_interval()
+                    };
                 }
             });
         match spawned {

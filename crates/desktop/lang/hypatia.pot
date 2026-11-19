@@ -445,16 +445,6 @@ msgctxt "MainWindow"
 msgid "Mobile Remote"
 msgstr ""
 
-#: ui/app.slint:2410
-msgctxt "MainWindow"
-msgid "OPEN"
-msgstr ""
-
-#: ui/app.slint:2418
-msgctxt "MainWindow"
-msgid "ECO"
-msgstr ""
-
 #: ui/app.slint:2430
 msgctxt "MainWindow"
 msgid "Demo Mode"
@@ -609,128 +599,294 @@ msgctxt "MainWindow"
 msgid "Stop server"
 msgstr ""
 
-#: ui/app.slint:2919
+#: ui/app.slint:2953
 msgctxt "MainWindow"
 msgid "PERFORMANCE & FEATURES"
 msgstr ""
 
-#: ui/app.slint:2926
+#: ui/app.slint:2960
 msgctxt "MainWindow"
-msgid "Switch off what you do not need: a disabled feature costs nothing."
+msgid "Adapt Hypatia to your PC: pick a preset or fine-tune what runs in the background."
 msgstr ""
 
-#: ui/app.slint:2940
+#: ui/app.slint:2990
 msgctxt "MainWindow"
-msgid "COMPANION"
+msgid "THIS APP RIGHT NOW"
 msgstr ""
 
-#: ui/app.slint:2943
+#: ui/app.slint:3030
 msgctxt "MainWindow"
-msgid "Live game board"
+msgid "MEMORY"
 msgstr ""
 
-#: ui/app.slint:2932
+#: ui/app.slint:3049
 msgctxt "MainWindow"
-msgid "Polls the game once per second while you play (score, towers, objectives)."
+msgid "CPU"
 msgstr ""
 
-#: ui/app.slint:2949
+#: ui/app.slint:3080
+msgctxt "MainWindow"
+msgid "Disk: {0}"
+msgstr ""
+
+#: ui/app.slint:3088
+msgctxt "MainWindow"
+msgid "ASSET CACHE"
+msgstr ""
+
+#: ui/app.slint:3127
+msgctxt "MainWindow"
+msgid "Clear RAM cache"
+msgstr ""
+
+#: ui/app.slint:3131
+msgctxt "MainWindow"
+msgid "Clear disk cache"
+msgstr ""
+
+#: ui/app.slint:3143
+msgctxt "MainWindow"
+msgid "PERFORMANCE PROFILE"
+msgstr ""
+
+#: ui/app.slint:3149
+msgctxt "MainWindow"
+msgid "Auto"
+msgstr ""
+
+#: ui/app.slint:3154
+msgctxt "MainWindow"
+msgid "Ultra-light"
+msgstr ""
+
+#: ui/app.slint:3159
+msgctxt "MainWindow"
+msgid "Eco"
+msgstr ""
+
+#: ui/app.slint:3164
+msgctxt "MainWindow"
+msgid "Balanced"
+msgstr ""
+
+#: ui/app.slint:3177
+msgctxt "MainWindow"
+msgid "Custom"
+msgstr ""
+
+#: ui/app.slint:3188
+msgctxt "MainWindow"
+msgid "Recommended for this PC: {0}"
+msgstr ""
+
+#: ui/app.slint:3211
+msgctxt "MainWindow"
+msgid "ADVANCED CONTROLS"
+msgstr ""
+
+#: ui/app.slint:3213
+msgctxt "MainWindow"
+msgid ""
+"Adjust individual polling rates, image memory limits, sleep behavior, and "
+"background connections."
+msgstr ""
+
+#: ui/app.slint:3222
+msgctxt "MainWindow"
+msgid "Hide"
+msgstr ""
+
+#: ui/app.slint:3222
+msgctxt "MainWindow"
+msgid "Show"
+msgstr ""
+
+#: ui/app.slint:3233
+msgctxt "MainWindow"
+msgid "POLLING & SLEEP"
+msgstr ""
+
+#: ui/app.slint:3236
+msgctxt "MainWindow"
+msgid "Live game polling"
+msgstr ""
+
+#: ui/app.slint:3237
+msgctxt "MainWindow"
+msgid "How often Live Client Data (:2999) refreshes while a match is running."
+msgstr ""
+
+#: ui/app.slint:3244
+msgctxt "MainWindow"
+msgid "Riot client detection"
+msgstr ""
+
+#: ui/app.slint:3245
+msgctxt "MainWindow"
+msgid "How often Hypatia scans for League / Riot processes and lockfiles."
+msgstr ""
+
+#: ui/app.slint:3246
+msgctxt "MainWindow"
+msgid "Normal"
+msgstr ""
+
+#: ui/app.slint:3246
+msgctxt "MainWindow"
+msgid "Slow"
+msgstr ""
+
+#: ui/app.slint:3251
+msgctxt "MainWindow"
+msgid "Interface & clock ticks"
+msgstr ""
+
+#: ui/app.slint:3252
+msgctxt "MainWindow"
+msgid "How often timers and UI updates refresh (250 ms smooth or 1 s low CPU)."
+msgstr ""
+
+#: ui/app.slint:3258
+msgctxt "MainWindow"
+msgid "Sleep when minimized"
+msgstr ""
+
+#: ui/app.slint:3259
+msgctxt "MainWindow"
+msgid ""
+"Pauses interface rebuilds and slows clock timers while the main window is "
+"minimized."
+msgstr ""
+
+#: ui/app.slint:3277
+msgctxt "MainWindow"
+msgid "VISUALS & ASSET CACHE"
+msgstr ""
+
+#: ui/app.slint:3280
 msgctxt "MainWindow"
 msgid "Game icons"
 msgstr ""
 
-#: ui/app.slint:2950
+#: ui/app.slint:3281
 msgctxt "MainWindow"
 msgid ""
 "Fetches and shows champion portraits, spells and profile icons. Otherwise: "
 "initials."
 msgstr ""
 
-#: ui/app.slint:2955
+#: ui/app.slint:3286
 msgctxt "MainWindow"
 msgid "Client artwork"
 msgstr ""
 
-#: ui/app.slint:2956
+#: ui/app.slint:3287
 msgctxt "MainWindow"
 msgid ""
 "Shows cached champion splash art and Summoner's Rift artwork from the League "
 "client behind headers and the map."
 msgstr ""
 
-#: ui/app.slint:2961
+#: ui/app.slint:3293
 msgctxt "MainWindow"
-msgid "Riot Client connection"
+msgid "Image memory budget"
 msgstr ""
 
-#: ui/app.slint:2962
+#: ui/app.slint:3294
 msgctxt "MainWindow"
-msgid "Keeps a second WebSocket open to the Riot Client (chat presence)."
+msgid "Maximum decoded textures and cached blobs kept in RAM (16, 64, or 256)."
 msgstr ""
 
-#: ui/app.slint:2967
-msgctxt "MainWindow"
-msgid "Mobile Remote at launch"
-msgstr ""
-
-#: ui/app.slint:2968
-msgctxt "MainWindow"
-msgid "Starts the local pairing server. Off: no port is opened on your network."
-msgstr ""
-
-#: ui/app.slint:2973
-msgctxt "MainWindow"
-msgid "Eco mode"
-msgstr ""
-
-#: ui/app.slint:2974
-msgctxt "MainWindow"
-msgid "Halves refresh rates (interface, detection, live game)."
-msgstr ""
-
-#: ui/app.slint:2979
+#: ui/app.slint:3301
 msgctxt "MainWindow"
 msgid "Reduce motion"
 msgstr ""
 
-#: ui/app.slint:2980
+#: ui/app.slint:3302
 msgctxt "MainWindow"
 msgid ""
 "Turns every animation off. The Windows animation setting is honoured either "
 "way."
 msgstr ""
 
-#: ui/app.slint:2987
+#: ui/app.slint:3307
+msgctxt "MainWindow"
+msgid "Preload showcase art on connect"
+msgstr ""
+
+#: ui/app.slint:3308
+msgctxt "MainWindow"
+msgid ""
+"Pre-caches ~36 sample icons and splashes when League connects for instant "
+"previews."
+msgstr ""
+
+#: ui/app.slint:3315
+msgctxt "MainWindow"
+msgid "CONNECTIONS"
+msgstr ""
+
+#: ui/app.slint:3318
+msgctxt "MainWindow"
+msgid "Live game board"
+msgstr ""
+
+#: ui/app.slint:3319
+msgctxt "MainWindow"
+msgid "Reads live scoreboard, towers, and objectives while you play."
+msgstr ""
+
+#: ui/app.slint:3324
+msgctxt "MainWindow"
+msgid "Riot Client connection"
+msgstr ""
+
+#: ui/app.slint:3325
+msgctxt "MainWindow"
+msgid "Keeps a second WebSocket open to the Riot Client (chat presence)."
+msgstr ""
+
+#: ui/app.slint:3318
+msgctxt "MainWindow"
+msgid "Mobile Remote at launch"
+msgstr ""
+
+#: ui/app.slint:3319
+msgctxt "MainWindow"
+msgid "Starts the local pairing server. Off: no port is opened on your network."
+msgstr ""
+
+#: ui/app.slint:3326
 msgctxt "MainWindow"
 msgid "OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)"
 msgstr ""
 
-#: ui/app.slint:2991
+#: ui/app.slint:3330
 msgctxt "MainWindow"
 msgid "System footprint"
 msgstr ""
 
-#: ui/app.slint:2992
+#: ui/app.slint:3331
 msgctxt "MainWindow"
 msgid "Samples Riot process CPU / RAM and lists their ports and connections."
 msgstr ""
 
-#: ui/app.slint:2997
+#: ui/app.slint:3336
 msgctxt "MainWindow"
 msgid "Endpoint catalog"
 msgstr ""
 
-#: ui/app.slint:2998
+#: ui/app.slint:3337
 msgctxt "MainWindow"
 msgid "Imports the clients' Swagger / help listing (several thousand entries)."
 msgstr ""
 
-#: ui/app.slint:3003
+#: ui/app.slint:3342
 msgctxt "MainWindow"
 msgid "Replay API probe"
 msgstr ""
 
-#: ui/app.slint:3004
+#: ui/app.slint:3343
 msgctxt "MainWindow"
 msgid "Queries /replay/game every 5 seconds during a game."
 msgstr ""

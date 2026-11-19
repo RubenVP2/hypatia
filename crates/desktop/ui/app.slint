@@ -5,7 +5,7 @@ import {
     TelemetrySourceItem, TelemetryEventItem, TelemetryEndpointItem, TelemetryProcessItem,
     TelemetrySocketItem, TelemetryView,
     Roundel, ChampPlate, GameIconBadge, RankedCrest, SplashBackdrop, HeroSplash, EnemySlot, ReadyMedallion, ResultCrest, SectionLabel, Plate, Specimen, ClockReadout, Action, RailNavItem, RailSourceRow,
-    PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, Card, Divider,
+    PhaseLine, LineMap, ClientArt, FeedRow, ObjectiveRow, BanChip, PlayerRow, SettingRow, ChoiceRow, Card, Divider,
     SightingRow, PitRow,
 } from "parts.slint";
 import "fonts/Overpass-Regular.ttf";
@@ -31,18 +31,41 @@ export enum Screen {
     results,
 }
 
-// Mirrors `hypatia_core::settings::Settings`: one switch per background activity.
+// Mirrors `hypatia_core::settings::Settings` plus hardware recommendation.
 export struct PerfSettings {
+    profile: string,
+    profile-label: string,
+    profile-badge: string,
+    profile-summary: string,
+    hardware-summary: string,
+    recommended-profile: string,
+    recommended-label: string,
+    live-poll-idx: int,
+    discovery-rate-idx: int,
+    clock-rate-idx: int,
+    cache-budget-idx: int,
     live-game: bool,
     riot-client: bool,
     replay-api: bool,
     game-icons: bool,
     splash-backdrops: bool,
+    demo-prefetch: bool,
     mobile-remote: bool,
     system-footprint: bool,
     endpoint-catalog: bool,
     eco-mode: bool,
+    pause-when-minimized: bool,
     reduce-motion: bool,
+}
+
+// Live self-footprint metrics sampled only while the Performance sheet is open.
+export struct PerfMetrics {
+    ram-text: string,
+    cpu-text: string,
+    cache-ram-text: string,
+    cache-disk-text: string,
+    cadence-text: string,
+    status-note: string,
 }
 
 export struct WaitView {
@@ -2263,8 +2286,17 @@ export component MainWindow inherits Window {
     in property <TelemetryView> telemetry;
 
     in property <PerfSettings> perf;
+    in property <PerfMetrics> perf-metrics;
     in-out property <bool> settings-open: false;
+    in-out property <bool> settings-advanced-open: false;
+    changed settings-open => { root.performance-panel-changed(self.settings-open); }
     callback toggle-setting(string);
+    callback select-perf-profile(string);
+    callback apply-recommended-profile();
+    callback set-perf-choice(string, int);
+    callback clear-ram-cache();
+    callback clear-disk-cache();
+    callback performance-panel-changed(bool);
 
     callback toggle-remote-panel();
     callback rotate-remote-token();
@@ -2403,7 +2435,7 @@ export component MainWindow inherits Window {
                     label: "Performance";
                     icon-path: "M 4 6 H 20 M 4 12 H 20 M 4 18 H 20 M 8 4 V 8 M 16 10 V 14 M 10 16 V 20";
                     active: root.settings-open;
-                    badge: root.perf.eco-mode ? @tr("ECO") : "";
+                    badge: root.perf.profile-badge;
                     clicked => {
                         root.remote-panel-open = false;
                         root.settings-open = !root.settings-open;
@@ -2853,7 +2885,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Performance & Features sheet: every background activity has its own switch.
+                // Performance & Features sheet: live footprint monitor, simplified presets, and advanced controls.
                 if root.settings-open: Rectangle {
                     width: 100%;
                     height: 100%;
@@ -2878,7 +2910,7 @@ export component MainWindow inherits Window {
                     Rectangle {
                         x: 24px;
                         y: max(12px, (parent.height - self.height) / 2);
-                        width: min(600px, parent.width - 48px);
+                        width: min(640px, parent.width - 48px);
                         height: min(settings-col.preferred-height, parent.height - 24px);
                         background: Theme.panel;
                         border-radius: Theme.radius;
@@ -2892,10 +2924,12 @@ export component MainWindow inherits Window {
                         Flickable {
                             width: 100%;
                             height: 100%;
+                            content-height: settings-col.preferred-height;
 
                             settings-col := VerticalLayout {
+                                width: parent.width;
                                 padding: Space.xl;
-                                spacing: Space.sm;
+                                spacing: Space.md;
 
                                 HorizontalLayout {
                                     spacing: Space.md;
@@ -2911,7 +2945,7 @@ export component MainWindow inherits Window {
                                             font-weight: 800;
                                         }
                                         Text {
-                                            text: @tr("Switch off what you do not need: a disabled feature costs nothing.");
+                                            text: @tr("Adapt Hypatia to your PC: pick a preset or fine-tune what runs in the background.");
                                             color: Theme.muted;
                                             font-size: Type.small;
                                             font-weight: 600;
@@ -2925,73 +2959,391 @@ export component MainWindow inherits Window {
                                 }
 
                                 Divider { }
-                                SectionLabel { text: @tr("COMPANION"); }
 
-                                SettingRow {
-                                    title: @tr("Live game board");
-                                    detail: @tr("Polls the game once per second while you play (score, towers, objectives).");
-                                    checked: root.perf.live-game;
-                                    toggled => { root.toggle-setting("live_game"); }
+                                // Live self-footprint readout (sampled only while this sheet is open).
+                                Rectangle {
+                                    background: Theme.ground;
+                                    border-radius: Theme.radius;
+                                    border-width: 1px;
+                                    border-color: Theme.rule;
+
+                                    VerticalLayout {
+                                        padding: Space.md;
+                                        spacing: Space.sm;
+
+                                        HorizontalLayout {
+                                            alignment: stretch;
+                                            spacing: Space.sm;
+                                            SectionLabel {
+                                                text: @tr("THIS APP RIGHT NOW");
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                            }
+                                            Text {
+                                                text: root.perf.hardware-summary;
+                                                color: Theme.muted;
+                                                font-family: Type.mono-family;
+                                                font-size: Type.label;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: right;
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: Space.sm;
+                                            alignment: stretch;
+
+                                            // Memory tile
+                                            Rectangle {
+                                                horizontal-stretch: 1;
+                                                height: 70px;
+                                                background: Theme.panel;
+                                                border-radius: Theme.radius-sm;
+                                                border-width: 1px;
+                                                border-color: Theme.rule;
+                                                VerticalLayout {
+                                                    padding: Space.sm;
+                                                    alignment: center;
+                                                    spacing: Space.xxs;
+                                                    Text {
+                                                        text: root.perf-metrics.ram-text;
+                                                        color: Theme.text;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.name;
+                                                        font-weight: 800;
+                                                        overflow: elide;
+                                                    }
+                                                    Text {
+                                                        text: @tr("MEMORY");
+                                                        color: Theme.muted;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.label;
+                                                        font-weight: 700;
+                                                        letter-spacing: 0.8px;
+                                                    }
+                                                }
+                                            }
+
+                                            // CPU tile
+                                            Rectangle {
+                                                horizontal-stretch: 1;
+                                                height: 70px;
+                                                background: Theme.panel;
+                                                border-radius: Theme.radius-sm;
+                                                border-width: 1px;
+                                                border-color: Theme.rule;
+                                                VerticalLayout {
+                                                    padding: Space.sm;
+                                                    alignment: center;
+                                                    spacing: Space.xxs;
+                                                    Text {
+                                                        text: root.perf-metrics.cpu-text;
+                                                        color: Theme.text;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.name;
+                                                        font-weight: 800;
+                                                        overflow: elide;
+                                                    }
+                                                    Text {
+                                                        text: @tr("CPU");
+                                                        color: Theme.muted;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.label;
+                                                        font-weight: 700;
+                                                        letter-spacing: 0.8px;
+                                                    }
+                                                }
+                                            }
+
+                                            // Asset cache tile (RAM + disk)
+                                            Rectangle {
+                                                horizontal-stretch: 1;
+                                                height: 70px;
+                                                background: Theme.panel;
+                                                border-radius: Theme.radius-sm;
+                                                border-width: 1px;
+                                                border-color: Theme.rule;
+                                                VerticalLayout {
+                                                    padding: Space.sm;
+                                                    alignment: center;
+                                                    spacing: 1px;
+                                                    Text {
+                                                        text: root.perf-metrics.cache-ram-text;
+                                                        color: Theme.text;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.small + 2px;
+                                                        font-weight: 800;
+                                                        overflow: elide;
+                                                    }
+                                                    Text {
+                                                        text: @tr("Disk: {0}", root.perf-metrics.cache-disk-text);
+                                                        color: Theme.muted;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.label;
+                                                        font-weight: 600;
+                                                        overflow: elide;
+                                                    }
+                                                    Text {
+                                                        text: @tr("ASSET CACHE");
+                                                        color: Theme.muted;
+                                                        font-family: Type.mono-family;
+                                                        font-size: Type.label;
+                                                        font-weight: 700;
+                                                        letter-spacing: 0.8px;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: Space.sm;
+                                            alignment: stretch;
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                alignment: center;
+                                                spacing: Space.xxs;
+                                                Text {
+                                                    text: root.perf-metrics.cadence-text;
+                                                    color: Theme.muted;
+                                                    font-family: Type.mono-family;
+                                                    font-size: Type.label;
+                                                    font-weight: 600;
+                                                    wrap: word-wrap;
+                                                }
+                                                if root.perf-metrics.status-note != "": Text {
+                                                    text: root.perf-metrics.status-note;
+                                                    color: Theme.text;
+                                                    font-size: Type.label;
+                                                    font-weight: 600;
+                                                    wrap: word-wrap;
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                alignment: center;
+                                                HorizontalLayout {
+                                                    spacing: Space.xs;
+                                                    Action {
+                                                        text: @tr("Clear RAM cache");
+                                                        clicked => { root.clear-ram-cache(); }
+                                                    }
+                                                    Action {
+                                                        text: @tr("Clear disk cache");
+                                                        clicked => { root.clear-disk-cache(); }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                                SettingRow {
-                                    title: @tr("Game icons");
-                                    detail: @tr("Fetches and shows champion portraits, spells and profile icons. Otherwise: initials.");
-                                    checked: root.perf.game-icons;
-                                    toggled => { root.toggle-setting("game_icons"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Client artwork");
-                                    detail: @tr("Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map.");
-                                    checked: root.perf.splash-backdrops;
-                                    toggled => { root.toggle-setting("splash_backdrops"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Riot Client connection");
-                                    detail: @tr("Keeps a second WebSocket open to the Riot Client (chat presence).");
-                                    checked: root.perf.riot-client;
-                                    toggled => { root.toggle-setting("riot_client"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Mobile Remote at launch");
-                                    detail: @tr("Starts the local pairing server. Off: no port is opened on your network.");
-                                    checked: root.perf.mobile-remote;
-                                    toggled => { root.toggle-setting("mobile_remote"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Eco mode");
-                                    detail: @tr("Halves refresh rates (interface, detection, live game).");
-                                    checked: root.perf.eco-mode;
-                                    toggled => { root.toggle-setting("eco_mode"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Reduce motion");
-                                    detail: @tr("Turns every animation off. The Windows animation setting is honoured either way.");
-                                    checked: root.perf.reduce-motion;
-                                    toggled => { root.toggle-setting("reduce_motion"); }
+
+                                // Simplified Mode
+                                VerticalLayout {
+                                    spacing: Space.xs;
+                                    SectionLabel { text: @tr("PERFORMANCE PROFILE"); }
+
+                                    HorizontalLayout {
+                                        spacing: Space.xs;
+                                        alignment: start;
+                                        Action {
+                                            text: @tr("Auto");
+                                            enabled: root.perf.profile != root.perf.recommended-profile;
+                                            clicked => { root.apply-recommended-profile(); }
+                                        }
+                                        Action {
+                                            text: @tr("Ultra-light");
+                                            selected: root.perf.profile == "ultra_light";
+                                            clicked => { root.select-perf-profile("ultra_light"); }
+                                        }
+                                        Action {
+                                            text: @tr("Eco");
+                                            selected: root.perf.profile == "eco";
+                                            clicked => { root.select-perf-profile("eco"); }
+                                        }
+                                        Action {
+                                            text: @tr("Balanced");
+                                            selected: root.perf.profile == "balanced";
+                                            clicked => { root.select-perf-profile("balanced"); }
+                                        }
+                                        if root.perf.profile == "custom": Rectangle {
+                                            y: (parent.height - self.height) / 2;
+                                            height: 30px;
+                                            width: custom-lbl.preferred-width + 18px;
+                                            border-radius: Theme.radius-sm;
+                                            background: Theme.panel-raised;
+                                            border-width: 1px;
+                                            border-color: Theme.text;
+                                            custom-lbl := Text {
+                                                text: @tr("Custom");
+                                                color: Theme.text;
+                                                font-size: Type.small;
+                                                font-weight: 800;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: @tr("Recommended for this PC: {0}", root.perf.recommended-label);
+                                        color: Theme.text;
+                                        font-size: Type.small;
+                                        font-weight: 700;
+                                    }
+                                    Text {
+                                        text: root.perf.profile-summary;
+                                        color: Theme.muted;
+                                        font-size: Type.small;
+                                        wrap: word-wrap;
+                                    }
                                 }
 
                                 Divider { }
-                                SectionLabel {
-                                    text: @tr("OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)");
+
+                                // Advanced disclosure toggle
+                                HorizontalLayout {
+                                    spacing: Space.md;
+                                    alignment: stretch;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        alignment: center;
+                                        spacing: Space.xxs;
+                                        SectionLabel { text: @tr("ADVANCED CONTROLS"); }
+                                        Text {
+                                            text: @tr("Adjust individual polling rates, image memory limits, sleep behavior, and background connections.");
+                                            color: Theme.muted;
+                                            font-size: Type.small;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Action {
+                                            text: root.settings-advanced-open ? @tr("Hide") : @tr("Show");
+                                            selected: root.settings-advanced-open;
+                                            clicked => { root.settings-advanced-open = !root.settings-advanced-open; }
+                                        }
+                                    }
                                 }
 
-                                SettingRow {
-                                    title: @tr("System footprint");
-                                    detail: @tr("Samples Riot process CPU / RAM and lists their ports and connections.");
-                                    checked: root.perf.system-footprint;
-                                    toggled => { root.toggle-setting("system_footprint"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Endpoint catalog");
-                                    detail: @tr("Imports the clients' Swagger / help listing (several thousand entries).");
-                                    checked: root.perf.endpoint-catalog;
-                                    toggled => { root.toggle-setting("endpoint_catalog"); }
-                                }
-                                SettingRow {
-                                    title: @tr("Replay API probe");
-                                    detail: @tr("Queries /replay/game every 5 seconds during a game.");
-                                    checked: root.perf.replay-api;
-                                    toggled => { root.toggle-setting("replay_api"); }
+                                if root.settings-advanced-open: VerticalLayout {
+                                    spacing: Space.xs;
+
+                                    Divider { }
+                                    SectionLabel { text: @tr("POLLING & SLEEP"); }
+
+                                    ChoiceRow {
+                                        title: @tr("Live game polling");
+                                        detail: @tr("How often Live Client Data (:2999) refreshes while a match is running.");
+                                        options: ["1 s", "2 s", "4 s"];
+                                        current: root.perf.live-poll-idx;
+                                        enabled: root.perf.live-game;
+                                        chosen(idx) => { root.set-perf-choice("live_poll_rate", idx); }
+                                    }
+                                    ChoiceRow {
+                                        title: @tr("Riot client detection");
+                                        detail: @tr("How often Hypatia scans for League / Riot processes and lockfiles.");
+                                        options: [@tr("Normal"), @tr("Eco"), @tr("Slow")];
+                                        current: root.perf.discovery-rate-idx;
+                                        chosen(idx) => { root.set-perf-choice("discovery_rate", idx); }
+                                    }
+                                    ChoiceRow {
+                                        title: @tr("Interface & clock ticks");
+                                        detail: @tr("How often timers and UI updates refresh (250 ms smooth or 1 s low CPU).");
+                                        options: ["250 ms", "1 s"];
+                                        current: root.perf.clock-rate-idx;
+                                        chosen(idx) => { root.set-perf-choice("clock_rate", idx); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Sleep when minimized");
+                                        detail: @tr("Pauses interface rebuilds and slows clock timers while the main window is minimized.");
+                                        checked: root.perf.pause-when-minimized;
+                                        toggled => { root.toggle-setting("pause_when_minimized"); }
+                                    }
+
+                                    Divider { }
+                                    SectionLabel { text: @tr("VISUALS & ASSET CACHE"); }
+
+                                    SettingRow {
+                                        title: @tr("Game icons");
+                                        detail: @tr("Fetches and shows champion portraits, spells and profile icons. Otherwise: initials.");
+                                        checked: root.perf.game-icons;
+                                        toggled => { root.toggle-setting("game_icons"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Client artwork");
+                                        detail: @tr("Shows cached champion splash art and Summoner's Rift artwork from the League client behind headers and the map.");
+                                        checked: root.perf.splash-backdrops;
+                                        enabled: root.perf.game-icons;
+                                        toggled => { root.toggle-setting("splash_backdrops"); }
+                                    }
+                                    ChoiceRow {
+                                        title: @tr("Image memory budget");
+                                        detail: @tr("Maximum decoded textures and cached blobs kept in RAM (16, 64, or 256).");
+                                        options: ["16", "64", "256"];
+                                        current: root.perf.cache-budget-idx;
+                                        enabled: root.perf.game-icons;
+                                        chosen(idx) => { root.set-perf-choice("asset_cache_budget", idx); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Reduce motion");
+                                        detail: @tr("Turns every animation off. The Windows animation setting is honoured either way.");
+                                        checked: root.perf.reduce-motion;
+                                        toggled => { root.toggle-setting("reduce_motion"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Preload showcase art on connect");
+                                        detail: @tr("Pre-caches ~36 sample icons and splashes when League connects for instant previews.");
+                                        checked: root.perf.demo-prefetch;
+                                        enabled: root.perf.game-icons;
+                                        toggled => { root.toggle-setting("demo_prefetch"); }
+                                    }
+
+                                    Divider { }
+                                    SectionLabel { text: @tr("CONNECTIONS"); }
+
+                                    SettingRow {
+                                        title: @tr("Live game board");
+                                        detail: @tr("Reads live scoreboard, towers, and objectives while you play.");
+                                        checked: root.perf.live-game;
+                                        toggled => { root.toggle-setting("live_game"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Riot Client connection");
+                                        detail: @tr("Keeps a second WebSocket open to the Riot Client (chat presence).");
+                                        checked: root.perf.riot-client;
+                                        toggled => { root.toggle-setting("riot_client"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Mobile Remote at launch");
+                                        detail: @tr("Starts the local pairing server. Off: no port is opened on your network.");
+                                        checked: root.perf.mobile-remote;
+                                        toggled => { root.toggle-setting("mobile_remote"); }
+                                    }
+
+                                    Divider { }
+                                    SectionLabel {
+                                        text: @tr("OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)");
+                                    }
+
+                                    SettingRow {
+                                        title: @tr("System footprint");
+                                        detail: @tr("Samples Riot process CPU / RAM and lists their ports and connections.");
+                                        checked: root.perf.system-footprint;
+                                        toggled => { root.toggle-setting("system_footprint"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Endpoint catalog");
+                                        detail: @tr("Imports the clients' Swagger / help listing (several thousand entries).");
+                                        checked: root.perf.endpoint-catalog;
+                                        toggled => { root.toggle-setting("endpoint_catalog"); }
+                                    }
+                                    SettingRow {
+                                        title: @tr("Replay API probe");
+                                        detail: @tr("Queries /replay/game every 5 seconds during a game.");
+                                        checked: root.perf.replay-api;
+                                        toggled => { root.toggle-setting("replay_api"); }
+                                    }
                                 }
                             }
                         }

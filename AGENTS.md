@@ -33,5 +33,5 @@ Player-facing copy says **Observatory** (FR *Observatoire*). Code and older text
 
 ## Done
 
-- `cargo test --workspace` passes. CI runs it on Windows and Ubuntu, then `cargo build --release -p hypatia`.
+- `cargo test --workspace` passes. On pull requests, CI runs lint only; on `main`, CI runs tests on Windows and Ubuntu, then `cargo build --release -p hypatia`.
 - UI changes are seen running: `cargo run -p hypatia -- --demo`, with `--phase <lobby|queue|ready|champ-select|live|end>` to pin a phase and `--remote` for the phone view.

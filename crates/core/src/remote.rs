@@ -935,4 +935,185 @@ mod tests {
         assert!(!REMOTE_UI_HTML.contains("http://"));
         assert!(REMOTE_UI_HTML.contains("/assets/"));
     }
+
+    fn find_matching_brace(src: &str, open_idx: usize) -> usize {
+        let bytes = src.as_bytes();
+        let mut i = open_idx;
+        let mut depth = 0usize;
+        let mut tmpl_expr_depths: Vec<usize> = Vec::new();
+        while i < bytes.len() {
+            match bytes[i] {
+                b'"' | b'\'' => {
+                    let quote = bytes[i];
+                    i += 1;
+                    while i < bytes.len() {
+                        if bytes[i] == b'\\' {
+                            i += 2;
+                            continue;
+                        }
+                        if bytes[i] == quote {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                b'`' => {
+                    i += 1;
+                    while i < bytes.len() {
+                        if bytes[i] == b'\\' {
+                            i += 2;
+                            continue;
+                        }
+                        if bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                            tmpl_expr_depths.push(depth);
+                            depth += 1;
+                            i += 2;
+                            break;
+                        }
+                        if bytes[i] == b'`' {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                    i += 2;
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                    i += 2;
+                    while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                        i += 1;
+                    }
+                    i += 2;
+                }
+                b'{' => {
+                    depth += 1;
+                    i += 1;
+                }
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return i;
+                    }
+                    if tmpl_expr_depths.last().copied() == Some(depth) {
+                        tmpl_expr_depths.pop();
+                        i += 1;
+                        while i < bytes.len() {
+                            if bytes[i] == b'\\' {
+                                i += 2;
+                                continue;
+                            }
+                            if bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                                tmpl_expr_depths.push(depth);
+                                depth += 1;
+                                i += 2;
+                                break;
+                            }
+                            if bytes[i] == b'`' {
+                                i += 1;
+                                break;
+                            }
+                            i += 1;
+                        }
+                        continue;
+                    }
+                    i += 1;
+                }
+                _ => i += 1,
+            }
+        }
+        panic!("unterminated brace starting at byte {open_idx}");
+    }
+
+    fn extract_js_object_keys(block: &str) -> std::collections::BTreeSet<String> {
+        let mut keys = std::collections::BTreeSet::new();
+        for raw_line in block.lines() {
+            let trimmed = raw_line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+            if let Some((lhs, _)) = trimmed.split_once(':') {
+                let key = lhs.trim();
+                if !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                    assert!(
+                        keys.insert(key.to_string()),
+                        "duplicate key '{key}' in I18N locale object"
+                    );
+                }
+            }
+        }
+        keys
+    }
+
+    #[test]
+    fn test_remote_ui_html_i18n_en_fr_parity() {
+        let marker = "const I18N = {";
+        let i18n_open = REMOTE_UI_HTML
+            .find(marker)
+            .expect("I18N object missing in remote_ui.html")
+            + marker.len()
+            - 1;
+        let i18n_close = find_matching_brace(REMOTE_UI_HTML, i18n_open);
+        let i18n_body = &REMOTE_UI_HTML[i18n_open..=i18n_close];
+
+        let extract_locale = |label: &str| {
+            let pat = format!("{label}: {{");
+            let rel = i18n_body
+                .find(&pat)
+                .unwrap_or_else(|| panic!("missing '{pat}' inside I18N"));
+            let open = rel + pat.len() - 1;
+            let close = find_matching_brace(i18n_body, open);
+            extract_js_object_keys(&i18n_body[open + 1..close])
+        };
+
+        let en_keys = extract_locale("en");
+        let fr_keys = extract_locale("fr");
+        assert!(!en_keys.is_empty(), "I18N.en should not be empty");
+
+        let only_en: Vec<_> = en_keys.difference(&fr_keys).collect();
+        let only_fr: Vec<_> = fr_keys.difference(&en_keys).collect();
+        assert!(
+            only_en.is_empty() && only_fr.is_empty(),
+            "I18N EN/FR mismatch: missing in FR={only_en:?}, missing in EN={only_fr:?}"
+        );
+
+        let script = REMOTE_UI_HTML
+            .split("<script>")
+            .nth(1)
+            .expect("<script> block missing in remote_ui.html");
+        let bytes = script.as_bytes();
+        let mut i = 0;
+        while i + 3 < bytes.len() {
+            let prev_ok = i == 0
+                || !(bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'_'
+                    || bytes[i - 1] == b'.'
+                    || bytes[i - 1] == b'$');
+            if prev_ok && bytes[i] == b't' && bytes[i + 1] == b'(' {
+                let mut j = i + 2;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j < bytes.len() && (bytes[j] == b'"' || bytes[j] == b'\'') {
+                    let q = bytes[j];
+                    j += 1;
+                    let start = j;
+                    while j < bytes.len() && bytes[j] != q {
+                        j += 1;
+                    }
+                    let key = &script[start..j];
+                    assert!(
+                        en_keys.contains(key),
+                        "t(\"{key}\") in remote_ui.html has no entry in I18N"
+                    );
+                }
+            }
+            i += 1;
+        }
+    }
 }

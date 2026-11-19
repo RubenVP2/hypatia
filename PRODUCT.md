@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Native cross-platform desktop application (Windows, macOS, Linux), no browser and no webview. Rust everywhere: the existing backend crates (lockfile discovery, Riot HTTP client, WAMP, Live Client Data on port 2999, redaction) feed a **Slint** UI. An embedded Axum server exists only to serve the opt-in Mobile Remote page on the LAN. The design language is Hypatia's own, not per-OS native conventions (Platform is recorded as `web` for that reason).
+Native Windows desktop application targeting League of Legends on PC (portable Rust + Slint allows local development and `--demo` runs on macOS/Linux), no browser and no webview. Rust everywhere: the existing backend crates (lockfile discovery, Riot HTTP client, WAMP, Live Client Data on port 2999, redaction) feed a **Slint** UI. An embedded Axum server exists only to serve the opt-in Mobile Remote page on the LAN. The design language is Hypatia's own, not per-OS native conventions (Platform is recorded as `web` for that reason).
 
 ## Users
 

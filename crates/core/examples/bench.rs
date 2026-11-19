@@ -77,7 +77,9 @@ fn allgamedata(tick: u64) -> Value {
         .into_iter()
         .map(|k| (k, json!({"abilityLevel": 3, "displayName": "Orb of Deception", "id": "AhriQ", "rawDescription": "GeneratedTip_Spell_AhriQ_Description", "rawDisplayName": "GeneratedTip_Spell_AhriQ_DisplayName"})))
         .collect();
-    let stats: HashMap<String, f64> = (0..48).map(|i| (format!("championStat{i}"), i as f64 * 1.37 + tick as f64)).collect();
+    let stats: HashMap<String, f64> = (0..48)
+        .map(|i| (format!("championStat{i}"), i as f64 * 1.37 + tick as f64))
+        .collect();
     json!({
         "activePlayer": {
             "abilities": abilities, "championStats": stats, "currentGold": 1234.5 + tick as f64, "level": 9,
@@ -131,7 +133,9 @@ fn report(name: &str, value: f64, unit: &str) {
 fn bench_ingest(app: &AppState, label: &str, gen_cost: std::time::Duration) {
     let telemetry = app.flags.telemetry();
     let rss_before = rss_mb();
-    let lcu_uris: Vec<String> = (0..40).map(|i| format!("/lol-bench/v1/resource-{i}")).collect();
+    let lcu_uris: Vec<String> = (0..40)
+        .map(|i| format!("/lol-bench/v1/resource-{i}"))
+        .collect();
     let t = Instant::now();
     for tick in 0..TICKS {
         {
@@ -164,8 +168,18 @@ fn bench_ingest(app: &AppState, label: &str, gen_cost: std::time::Duration) {
         // The endpoint catalog only records traffic while the Telemetry Lab is open.
         if telemetry {
             let mut cat = app.catalog.write().unwrap();
-            cat.record_observed(SourceId::LiveGame, "GET", "/liveclientdata/allgamedata", 45_000);
-            cat.record_observed(SourceId::LeagueClient, "GET", "/lol-champ-select/v1/session", 4_000);
+            cat.record_observed(
+                SourceId::LiveGame,
+                "GET",
+                "/liveclientdata/allgamedata",
+                45_000,
+            );
+            cat.record_observed(
+                SourceId::LeagueClient,
+                "GET",
+                "/lol-champ-select/v1/session",
+                4_000,
+            );
         }
     }
     let ingest = t.elapsed().saturating_sub(gen_cost);
@@ -211,7 +225,11 @@ fn main() {
     for _ in 0..UI_TICKS {
         std::hint::black_box(app.get_summary());
     }
-    report("get_summary[unchanged]", t.elapsed().as_secs_f64() * 1e6 / UI_TICKS as f64, "us");
+    report(
+        "get_summary[unchanged]",
+        t.elapsed().as_secs_f64() * 1e6 / UI_TICKS as f64,
+        "us",
+    );
 
     // Alternating the language invalidates the projection, forcing a full recomputation.
     let t = Instant::now();
@@ -219,13 +237,21 @@ fn main() {
         app.set_lang(if i % 2 == 0 { Lang::Fr } else { Lang::En });
         std::hint::black_box(app.get_summary());
     }
-    report("get_summary[changed]", t.elapsed().as_secs_f64() * 1e6 / UI_TICKS as f64, "us");
+    report(
+        "get_summary[changed]",
+        t.elapsed().as_secs_f64() * 1e6 / UI_TICKS as f64,
+        "us",
+    );
 
     let t = Instant::now();
     for _ in 0..UI_TICKS {
         std::hint::black_box(app.get_snapshot());
     }
-    report("get_snapshot", t.elapsed().as_secs_f64() * 1e6 / UI_TICKS as f64, "us");
+    report(
+        "get_snapshot",
+        t.elapsed().as_secs_f64() * 1e6 / UI_TICKS as f64,
+        "us",
+    );
 
     // --- 3. Endpoint catalog with a realistic 3000-entry swagger import ------------------------
     let mut catalog = CatalogStore::new();
@@ -251,7 +277,11 @@ fn main() {
         let uri = format!("/lol-namespace-{}/v1/resource-{n}", n % 60);
         catalog.record_observed(SourceId::LeagueClient, "GET", &uri, 512);
     }
-    report("catalog_record_observed", t.elapsed().as_secs_f64() * 1e6 / OBS as f64, "us");
+    report(
+        "catalog_record_observed",
+        t.elapsed().as_secs_f64() * 1e6 / OBS as f64,
+        "us",
+    );
 
     // --- 4. Discovery scan (real OS process table, machine dependent) -------------------------
     let vault = SecretVault::new();
@@ -262,7 +292,9 @@ fn main() {
         const SCANS: u32 = 15;
         let t = Instant::now();
         for _ in 0..SCANS {
-            std::hint::black_box(DiscoveryManager::scan_cycle(&mut sys, &vault, &mut since, detailed));
+            std::hint::black_box(DiscoveryManager::scan_cycle(
+                &mut sys, &vault, &mut since, detailed,
+            ));
         }
         report(
             &format!("discovery_scan[{label}]"),

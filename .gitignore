@@ -1,6 +1,4 @@
 /target
-crates/web/dist/
-**/.trunk-lock
 .impeccable/hook.cache.json
 .impeccable/mocks/
 

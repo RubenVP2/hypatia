@@ -349,7 +349,10 @@ pub fn project_telemetry_endpoints(
     let shown = items.len();
     let summary = if matching_total > shown {
         if lang.is_fr() {
-            format!("Affichage de {shown} sur {matching_total} ({} au total)", all.len())
+            format!(
+                "Affichage de {shown} sur {matching_total} ({} au total)",
+                all.len()
+            )
         } else {
             format!("Showing {shown} of {matching_total} ({} total)", all.len())
         }
@@ -477,7 +480,8 @@ pub fn apply_telemetry_to_window(
     let sources = project_telemetry_sources(&snap, lang);
 
     let events_sig = (latest_id, total_len, src_filter, kind_filter, lang);
-    if (!paused && ui_state.last_events_sig != Some(events_sig)) || ui_state.models.events.row_count() == 0
+    if (!paused && ui_state.last_events_sig != Some(events_sig))
+        || ui_state.models.events.row_count() == 0
     {
         let filtered = project_telemetry_events(&snap.recent_events, src_filter, kind_filter, lang);
         if ui_state.selected_event_id.is_none() {
@@ -572,7 +576,10 @@ pub fn apply_telemetry_to_window(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hypatia_shared::{EndpointInfo, EndpointOrigin, EventMeta, ListenSocket, ProcessInfo, RemoteConn, Snapshot, SystemSnapshot};
+    use hypatia_shared::{
+        EndpointInfo, EndpointOrigin, EventMeta, ListenSocket, ProcessInfo, RemoteConn, Snapshot,
+        SystemSnapshot,
+    };
     use serde_json::json;
 
     #[test]
@@ -676,14 +683,8 @@ mod tests {
             payload: std::sync::Arc::new(json!({"a": 2})),
             previous_payload: Some(std::sync::Arc::new(json!({"a": 1}))),
         };
-        let (title, _meta, has_sec, body) = project_telemetry_inspector(
-            Some(&stored),
-            1,
-            false,
-            1,
-            Lang::En,
-            |v| v.clone(),
-        );
+        let (title, _meta, has_sec, body) =
+            project_telemetry_inspector(Some(&stored), 1, false, 1, Lang::En, |v| v.clone());
         assert!(!has_sec);
         assert!(title.contains("/lol-lobby/v2/lobby"));
         assert!(body.contains("-   \"a\": 1"));

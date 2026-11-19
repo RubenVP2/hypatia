@@ -27,9 +27,14 @@ mod tests {
         let json = serde_json::to_string(&secret).expect("serialize secret");
         assert_eq!(json, r#"{"id":42,"len":128,"hint":"token"}"#);
 
-        let redacted = RedactedSecret { secret: secret.clone() };
+        let redacted = RedactedSecret {
+            secret: secret.clone(),
+        };
         let red_json = serde_json::to_string(&redacted).expect("serialize redacted");
-        assert_eq!(red_json, r#"{"$secret":{"id":42,"len":128,"hint":"token"}}"#);
+        assert_eq!(
+            red_json,
+            r#"{"$secret":{"id":42,"len":128,"hint":"token"}}"#
+        );
 
         let back: RedactedSecret = serde_json::from_str(&red_json).expect("deserialize redacted");
         assert_eq!(back.secret, secret);

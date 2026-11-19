@@ -132,7 +132,10 @@ mod tests {
         // Must start with '/'
         assert!(client.get(1234, None, "swagger/v3").await.is_err());
         assert!(client.get(1234, None, "").await.is_err());
-        assert!(client.get_bytes(1234, None, "lol-game-data/assets").await.is_err());
+        assert!(client
+            .get_bytes(1234, None, "lol-game-data/assets")
+            .await
+            .is_err());
 
         // Must not contain '://'
         assert!(client
@@ -145,10 +148,7 @@ mod tests {
             .is_err());
 
         // Must not contain '..'
-        assert!(client
-            .get(1234, None, "/../../etc/passwd")
-            .await
-            .is_err());
+        assert!(client.get(1234, None, "/../../etc/passwd").await.is_err());
         assert!(client
             .get_bytes(1234, None, "/lol-game-data/../secret")
             .await

@@ -20,15 +20,12 @@ use serde_json::json;
 use tokio::sync::{broadcast, watch};
 use tracing::{info, warn};
 
-use crate::lcu_actions::{
-    extract_remote_state, AlertTracker, LcuActionClient, RemoteActionError,
-};
+use crate::lcu_actions::{extract_remote_state, AlertTracker, LcuActionClient, RemoteActionError};
 use crate::AppState;
 
 const REMOTE_UI_HTML: &str = include_str!("remote_ui.html");
 
-const FONT_OVERPASS_REGULAR: &[u8] =
-    include_bytes!("../../desktop/ui/fonts/Overpass-Regular.ttf");
+const FONT_OVERPASS_REGULAR: &[u8] = include_bytes!("../../desktop/ui/fonts/Overpass-Regular.ttf");
 const FONT_OVERPASS_SEMIBOLD: &[u8] =
     include_bytes!("../../desktop/ui/fonts/Overpass-SemiBold.ttf");
 const FONT_OVERPASS_EXTRABOLD: &[u8] =
@@ -109,7 +106,11 @@ pub fn render_qr_code(url: &str, token: &str) -> Result<QrCodeVisual> {
             } else {
                 false
             };
-            let (r, g, b) = if is_dark { (20, 22, 27) } else { (243, 241, 234) };
+            let (r, g, b) = if is_dark {
+                (20, 22, 27)
+            } else {
+                (243, 241, 234)
+            };
             for dy in 0..scale {
                 for dx in 0..scale {
                     let px = mx * scale + dx;
@@ -134,7 +135,12 @@ pub fn render_qr_code(url: &str, token: &str) -> Result<QrCodeVisual> {
             } else {
                 false
             };
-            let bot = if y + 1 < total && x >= quiet && x < quiet + n && (y + 1) >= quiet && (y + 1) < quiet + n {
+            let bot = if y + 1 < total
+                && x >= quiet
+                && x < quiet + n
+                && (y + 1) >= quiet
+                && (y + 1) < quiet + n
+            {
                 modules[(y + 1 - quiet) * n + (x - quiet)] == qrcode::Color::Dark
             } else {
                 false
@@ -263,10 +269,7 @@ fn check_token(headers: &HeaderMap, query_token: Option<&str>, expected: &str) -
             return true;
         }
     }
-    if let Some(ht) = headers
-        .get("x-hypatia-token")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(ht) = headers.get("x-hypatia-token").and_then(|v| v.to_str().ok()) {
         if ht.trim() == expected {
             return true;
         }
@@ -289,11 +292,9 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], preferred_port));
     let listener = match tokio::net::TcpListener::bind(bind_addr).await {
         Ok(l) => l,
-        Err(_) => {
-            tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
-                .await
-                .context("Failed to bind Mobile Remote listener")?
-        }
+        Err(_) => tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
+            .await
+            .context("Failed to bind Mobile Remote listener")?,
     };
     let actual_port = listener.local_addr()?.port();
     let token = Arc::new(RwLock::new(generate_pairing_token()));
@@ -366,7 +367,10 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         .with_state(router_state);
 
     tokio::spawn(async move {
-        info!("Mobile Remote listening on http://{}:{}", lan_ip, actual_port);
+        info!(
+            "Mobile Remote listening on http://{}:{}",
+            lan_ip, actual_port
+        );
         let _ = axum::serve(listener, router)
             .with_graceful_shutdown(async move {
                 let _ = shutdown_rx.changed().await;
@@ -868,7 +872,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_remote_assets_require_auth_and_serve_cached_bitmaps() {
-        let dir = std::env::temp_dir().join(format!("hypatia_remote_assets_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("hypatia_remote_assets_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("champion")).unwrap();
         let fake_png = b"\x89PNG\r\n\x1a\nTESTCHAMP".to_vec();
@@ -883,7 +888,10 @@ mod tests {
 
         // Missing auth -> 401
         let no_auth = client
-            .get(format!("http://127.0.0.1:{}/assets/champion/103.png", handle.port))
+            .get(format!(
+                "http://127.0.0.1:{}/assets/champion/103.png",
+                handle.port
+            ))
             .send()
             .await
             .unwrap();
@@ -899,7 +907,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(hit.status(), StatusCode::OK);
-        assert_eq!(hit.headers().get(reqwest::header::CONTENT_TYPE).unwrap(), "image/png");
+        assert_eq!(
+            hit.headers().get(reqwest::header::CONTENT_TYPE).unwrap(),
+            "image/png"
+        );
         assert_eq!(hit.bytes().await.unwrap().as_ref(), fake_png.as_slice());
 
         // Authorized request for unknown/uncached champion -> 404
@@ -923,5 +934,186 @@ mod tests {
         assert!(!REMOTE_UI_HTML.contains("https://"));
         assert!(!REMOTE_UI_HTML.contains("http://"));
         assert!(REMOTE_UI_HTML.contains("/assets/"));
+    }
+
+    fn find_matching_brace(src: &str, open_idx: usize) -> usize {
+        let bytes = src.as_bytes();
+        let mut i = open_idx;
+        let mut depth = 0usize;
+        let mut tmpl_expr_depths: Vec<usize> = Vec::new();
+        while i < bytes.len() {
+            match bytes[i] {
+                b'"' | b'\'' => {
+                    let quote = bytes[i];
+                    i += 1;
+                    while i < bytes.len() {
+                        if bytes[i] == b'\\' {
+                            i += 2;
+                            continue;
+                        }
+                        if bytes[i] == quote {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                b'`' => {
+                    i += 1;
+                    while i < bytes.len() {
+                        if bytes[i] == b'\\' {
+                            i += 2;
+                            continue;
+                        }
+                        if bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                            tmpl_expr_depths.push(depth);
+                            depth += 1;
+                            i += 2;
+                            break;
+                        }
+                        if bytes[i] == b'`' {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                    i += 2;
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                    i += 2;
+                    while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                        i += 1;
+                    }
+                    i += 2;
+                }
+                b'{' => {
+                    depth += 1;
+                    i += 1;
+                }
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return i;
+                    }
+                    if tmpl_expr_depths.last().copied() == Some(depth) {
+                        tmpl_expr_depths.pop();
+                        i += 1;
+                        while i < bytes.len() {
+                            if bytes[i] == b'\\' {
+                                i += 2;
+                                continue;
+                            }
+                            if bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                                tmpl_expr_depths.push(depth);
+                                depth += 1;
+                                i += 2;
+                                break;
+                            }
+                            if bytes[i] == b'`' {
+                                i += 1;
+                                break;
+                            }
+                            i += 1;
+                        }
+                        continue;
+                    }
+                    i += 1;
+                }
+                _ => i += 1,
+            }
+        }
+        panic!("unterminated brace starting at byte {open_idx}");
+    }
+
+    fn extract_js_object_keys(block: &str) -> std::collections::BTreeSet<String> {
+        let mut keys = std::collections::BTreeSet::new();
+        for raw_line in block.lines() {
+            let trimmed = raw_line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+            if let Some((lhs, _)) = trimmed.split_once(':') {
+                let key = lhs.trim();
+                if !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                    assert!(
+                        keys.insert(key.to_string()),
+                        "duplicate key '{key}' in I18N locale object"
+                    );
+                }
+            }
+        }
+        keys
+    }
+
+    #[test]
+    fn test_remote_ui_html_i18n_en_fr_parity() {
+        let marker = "const I18N = {";
+        let i18n_open = REMOTE_UI_HTML
+            .find(marker)
+            .expect("I18N object missing in remote_ui.html")
+            + marker.len()
+            - 1;
+        let i18n_close = find_matching_brace(REMOTE_UI_HTML, i18n_open);
+        let i18n_body = &REMOTE_UI_HTML[i18n_open..=i18n_close];
+
+        let extract_locale = |label: &str| {
+            let pat = format!("{label}: {{");
+            let rel = i18n_body
+                .find(&pat)
+                .unwrap_or_else(|| panic!("missing '{pat}' inside I18N"));
+            let open = rel + pat.len() - 1;
+            let close = find_matching_brace(i18n_body, open);
+            extract_js_object_keys(&i18n_body[open + 1..close])
+        };
+
+        let en_keys = extract_locale("en");
+        let fr_keys = extract_locale("fr");
+        assert!(!en_keys.is_empty(), "I18N.en should not be empty");
+
+        let only_en: Vec<_> = en_keys.difference(&fr_keys).collect();
+        let only_fr: Vec<_> = fr_keys.difference(&en_keys).collect();
+        assert!(
+            only_en.is_empty() && only_fr.is_empty(),
+            "I18N EN/FR mismatch: missing in FR={only_en:?}, missing in EN={only_fr:?}"
+        );
+
+        let script = REMOTE_UI_HTML
+            .split("<script>")
+            .nth(1)
+            .expect("<script> block missing in remote_ui.html");
+        let bytes = script.as_bytes();
+        let mut i = 0;
+        while i + 3 < bytes.len() {
+            let prev_ok = i == 0
+                || !(bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'_'
+                    || bytes[i - 1] == b'.'
+                    || bytes[i - 1] == b'$');
+            if prev_ok && bytes[i] == b't' && bytes[i + 1] == b'(' {
+                let mut j = i + 2;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j < bytes.len() && (bytes[j] == b'"' || bytes[j] == b'\'') {
+                    let q = bytes[j];
+                    j += 1;
+                    let start = j;
+                    while j < bytes.len() && bytes[j] != q {
+                        j += 1;
+                    }
+                    let key = &script[start..j];
+                    assert!(
+                        en_keys.contains(key),
+                        "t(\"{key}\") in remote_ui.html has no entry in I18N"
+                    );
+                }
+            }
+            i += 1;
+        }
     }
 }

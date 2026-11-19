@@ -1,7 +1,7 @@
+use crate::secret::SecretRef;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
-use crate::secret::SecretRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SourceId {
@@ -105,7 +105,10 @@ mod tests {
         assert_eq!(SourceId::System.to_string(), "System");
 
         assert_eq!("lcu".parse::<SourceId>().unwrap(), SourceId::LeagueClient);
-        assert_eq!("RiotClient".parse::<SourceId>().unwrap(), SourceId::RiotClient);
+        assert_eq!(
+            "RiotClient".parse::<SourceId>().unwrap(),
+            SourceId::RiotClient
+        );
         assert_eq!("game".parse::<SourceId>().unwrap(), SourceId::LiveGame);
         assert_eq!("system".parse::<SourceId>().unwrap(), SourceId::System);
         assert!("invalid".parse::<SourceId>().is_err());

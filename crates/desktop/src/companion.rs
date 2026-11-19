@@ -8,17 +8,19 @@ use std::time::Instant;
 use hypatia_core::art::{self, ClientArt as ArtPiece};
 use hypatia_core::AppState;
 use hypatia_shared::{
-    spell_name_from_id_localized, ChampSelectSummary, EndOfGamePlayer, EndOfGameSummary, Lane, Lang, LiveBoard,
-    LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId, SourceStatus, SummarySnapshot,
-    SummonerSummary,
+    spell_name_from_id_localized, ChampSelectSummary, EndOfGamePlayer, EndOfGameSummary, Lane,
+    Lang, LiveBoard, LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId,
+    SourceStatus, SummarySnapshot, SummonerSummary,
 };
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::icons::{AppIconLookup, DesktopAssetLoader, IconLookup};
-use crate::labels::{champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label};
+use crate::labels::{
+    champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label,
+};
 use crate::{
-    AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine, LiveView,
-    MainWindow, MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
+    AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine,
+    LiveView, MainWindow, MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
     TowerDot, WaitView,
 };
 
@@ -72,11 +74,7 @@ fn summarize_pits(board: &LiveBoard) -> PitSummary {
     out
 }
 
-fn build_ban_entries(
-    names: &[String],
-    ids: &[i64],
-    icons: &mut impl IconLookup,
-) -> Vec<BanEntry> {
+fn build_ban_entries(names: &[String], ids: &[i64], icons: &mut impl IconLookup) -> Vec<BanEntry> {
     names
         .iter()
         .enumerate()
@@ -133,13 +131,35 @@ fn tower_coordinates(order_side: bool, lane: Lane, tier: u8) -> (f32, f32) {
 /// inhibitor tower and the nexus, pits in their river alcoves (as drawn by `LineMap`).
 fn place_coordinates(place: MapPlace) -> (f32, f32) {
     match place {
-        MapPlace::Turret { order_side, lane, tier } => tower_coordinates(order_side, lane, tier),
-        MapPlace::Inhibitor { order_side: true, lane: Lane::Top } => (40.0, 308.0),
-        MapPlace::Inhibitor { order_side: true, lane: Lane::Mid } => (68.0, 320.0),
-        MapPlace::Inhibitor { order_side: true, lane: _ } => (72.0, 348.0),
-        MapPlace::Inhibitor { order_side: false, lane: Lane::Top } => (326.0, 42.0),
-        MapPlace::Inhibitor { order_side: false, lane: Lane::Mid } => (330.0, 70.0),
-        MapPlace::Inhibitor { order_side: false, lane: _ } => (358.0, 76.0),
+        MapPlace::Turret {
+            order_side,
+            lane,
+            tier,
+        } => tower_coordinates(order_side, lane, tier),
+        MapPlace::Inhibitor {
+            order_side: true,
+            lane: Lane::Top,
+        } => (40.0, 308.0),
+        MapPlace::Inhibitor {
+            order_side: true,
+            lane: Lane::Mid,
+        } => (68.0, 320.0),
+        MapPlace::Inhibitor {
+            order_side: true,
+            lane: _,
+        } => (72.0, 348.0),
+        MapPlace::Inhibitor {
+            order_side: false,
+            lane: Lane::Top,
+        } => (326.0, 42.0),
+        MapPlace::Inhibitor {
+            order_side: false,
+            lane: Lane::Mid,
+        } => (330.0, 70.0),
+        MapPlace::Inhibitor {
+            order_side: false,
+            lane: _,
+        } => (358.0, 76.0),
         MapPlace::DragonPit => (266.0, 276.0),
         MapPlace::BaronPit => (132.0, 116.0),
     }
@@ -148,7 +168,13 @@ fn place_coordinates(place: MapPlace) -> (f32, f32) {
 /// Where the k-th enemy sharing a place sits around it, so portraits never stack and the
 /// tower or pit under them stays visible. Sides first: a pit's countdown and drake count sit
 /// above and below it.
-const SIGHTING_FAN: [(f32, f32); 5] = [(30.0, 0.0), (-30.0, 0.0), (30.0, -30.0), (-30.0, -30.0), (0.0, -34.0)];
+const SIGHTING_FAN: [(f32, f32); 5] = [
+    (30.0, 0.0),
+    (-30.0, 0.0),
+    (30.0, -30.0),
+    (-30.0, -30.0),
+    (0.0, -34.0),
+];
 
 /// "Dragon pit", "Your mid outer tower", "Their bot inhibitor", from the player's side.
 fn place_label(place: MapPlace, my_team_is_order: bool, lang: Lang) -> String {
@@ -161,7 +187,11 @@ fn place_label(place: MapPlace, my_team_is_order: bool, lang: Lang) -> String {
     match place {
         MapPlace::DragonPit => lang.pick("Dragon pit", "Antre du dragon").to_string(),
         MapPlace::BaronPit => lang.pick("Baron pit", "Antre du Baron").to_string(),
-        MapPlace::Turret { order_side, lane: l, tier } => {
+        MapPlace::Turret {
+            order_side,
+            lane: l,
+            tier,
+        } => {
             let ours = order_side == my_team_is_order;
             let (tier_en, tier_fr) = match tier {
                 1 => ("outer", "extérieure"),
@@ -169,17 +199,38 @@ fn place_label(place: MapPlace, my_team_is_order: bool, lang: Lang) -> String {
                 _ => ("inhibitor", "inhibitrice"),
             };
             if lang.is_fr() {
-                format!("{} tourelle {} {}", if ours { "Votre" } else { "Leur" }, tier_fr, lane(l))
+                format!(
+                    "{} tourelle {} {}",
+                    if ours { "Votre" } else { "Leur" },
+                    tier_fr,
+                    lane(l)
+                )
             } else {
-                format!("{} {} {} tower", if ours { "Your" } else { "Their" }, lane(l), tier_en)
+                format!(
+                    "{} {} {} tower",
+                    if ours { "Your" } else { "Their" },
+                    lane(l),
+                    tier_en
+                )
             }
         }
-        MapPlace::Inhibitor { order_side, lane: l } => {
+        MapPlace::Inhibitor {
+            order_side,
+            lane: l,
+        } => {
             let ours = order_side == my_team_is_order;
             if lang.is_fr() {
-                format!("{} inhibiteur {}", if ours { "Votre" } else { "Leur" }, lane(l))
+                format!(
+                    "{} inhibiteur {}",
+                    if ours { "Votre" } else { "Leur" },
+                    lane(l)
+                )
             } else {
-                format!("{} {} inhibitor", if ours { "Your" } else { "Their" }, lane(l))
+                format!(
+                    "{} {} inhibitor",
+                    if ours { "Your" } else { "Their" },
+                    lane(l)
+                )
             }
         }
     }
@@ -211,7 +262,10 @@ fn build_sightings(
         .iter()
         .filter(|p| (p.team == "ORDER") != board.my_team_is_order)
         .map(|p| {
-            let seen = board.sightings.iter().find(|s| s.champion == p.champion_name);
+            let seen = board
+                .sightings
+                .iter()
+                .find(|s| s.champion == p.champion_name);
             let (x, y) = match seen {
                 Some(s) => {
                     let (x, y) = place_coordinates(s.place);
@@ -235,7 +289,11 @@ fn build_sightings(
                     Some(s) => place_label(s.place, board.my_team_is_order, lang),
                     None => lang.pick("Not seen yet", "Pas encore repéré").to_string(),
                 }),
-                age: SharedString::from(if seen.is_some() { age_label(age, lang) } else { String::new() }),
+                age: SharedString::from(if seen.is_some() {
+                    age_label(age, lang)
+                } else {
+                    String::new()
+                }),
                 stale: age > SIGHTING_STALE_SEC,
                 dead: p.is_dead,
             }
@@ -389,11 +447,17 @@ pub fn build_champ_select_view(
             let is_ban = cs.acting_type.as_deref() == Some("ban");
             acting_label = Some(if ally.is_self {
                 if is_ban {
-                    lang.pick("Your turn — ban a champion", "Votre tour — bannissez un champion")
-                        .to_string()
+                    lang.pick(
+                        "Your turn — ban a champion",
+                        "Votre tour — bannissez un champion",
+                    )
+                    .to_string()
                 } else {
-                    lang.pick("Your turn — pick your champion", "Votre tour — choisissez votre champion")
-                        .to_string()
+                    lang.pick(
+                        "Your turn — pick your champion",
+                        "Votre tour — choisissez votre champion",
+                    )
+                    .to_string()
                 }
             } else if lang.is_fr() {
                 let verb = if is_ban {
@@ -425,7 +489,11 @@ pub fn build_champ_select_view(
         };
 
         let banner = if has_champ {
-            icons.resolve_skin_art(art::BANNER_CATEGORY, ally.selected_skin_id, ally.champion_id)
+            icons.resolve_skin_art(
+                art::BANNER_CATEGORY,
+                ally.selected_skin_id,
+                ally.champion_id,
+            )
         } else {
             Image::default()
         };
@@ -520,8 +588,7 @@ pub fn build_champ_select_view(
     };
 
     let my_ban_list = build_ban_entries(&cs.my_team_bans, &cs.my_team_ban_ids, icons);
-    let their_ban_list =
-        build_ban_entries(&cs.their_team_bans, &cs.their_team_ban_ids, icons);
+    let their_ban_list = build_ban_entries(&cs.their_team_bans, &cs.their_team_ban_ids, icons);
     let (splash_skin, splash_champ) = self_splash.or(fallback_splash).unwrap_or((0, 0));
 
     ChampSelectView {
@@ -726,7 +793,11 @@ pub fn build_live_view(
 /// One decimal, with the language's decimal separator (`11.5` / `11,5`).
 fn format_decimal(value: f64, lang: Lang) -> String {
     let text = format!("{value:.1}");
-    if lang.is_fr() { text.replace('.', ",") } else { text }
+    if lang.is_fr() {
+        text.replace('.', ",")
+    } else {
+        text
+    }
 }
 
 /// Thousands grouped the language's way (`14,950` / `14 950`).
@@ -743,11 +814,7 @@ fn format_thousands(value: u32, lang: Lang) -> String {
     out
 }
 
-pub fn build_end_view(
-    eog: &EndOfGameSummary,
-    icons: &mut impl IconLookup,
-    lang: Lang,
-) -> EndView {
+pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang: Lang) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
     let cid = eog.champion_id;
     let tile = |label: &str, value: String| StatLine {
@@ -863,11 +930,21 @@ pub struct PhaseClock {
 
 impl PhaseClock {
     pub fn down_at(anchor: Instant, base_sec: f64, total_sec: i32) -> Self {
-        Self { anchor, base_sec, counts_down: true, total_sec }
+        Self {
+            anchor,
+            base_sec,
+            counts_down: true,
+            total_sec,
+        }
     }
 
     pub fn up_at(anchor: Instant, base_sec: f64) -> Self {
-        Self { anchor, base_sec, counts_down: false, total_sec: 0 }
+        Self {
+            anchor,
+            base_sec,
+            counts_down: false,
+            total_sec: 0,
+        }
     }
 
     /// Whole seconds to display right now: rounded up while counting down (a countdown shows
@@ -940,7 +1017,11 @@ pub fn phase_clock_at(snap: &SummarySnapshot, view: Screen, now: Instant) -> Opt
             .and_then(|m| m.ready_check_timer_sec)
             .map(|left| PhaseClock::down_at(now, f64::from(left), 10.max(left))),
         Screen::ChampSelect => snap.champ_select.as_ref().map(|cs| {
-            let total = if cs.total_time_sec > 0 { cs.total_time_sec } else { cs.time_left_sec };
+            let total = if cs.total_time_sec > 0 {
+                cs.total_time_sec
+            } else {
+                cs.time_left_sec
+            };
             PhaseClock::down_at(now, cs.time_left_sec as f64, total as i32)
         }),
         Screen::InGame => snap
@@ -985,7 +1066,11 @@ pub fn build_wait_view(
         .unwrap_or_else(|| lang.pick("Unranked", "Non classé").to_string());
 
     // The player's answer to the ready check: 0 pending, 1 accepted, 2 declined.
-    let ready_state = match snap.matchmaking.as_ref().and_then(|m| m.player_response.as_deref()) {
+    let ready_state = match snap
+        .matchmaking
+        .as_ref()
+        .and_then(|m| m.player_response.as_deref())
+    {
         _ if view != Screen::ReadyCheck => 0,
         Some("Accepted") => 1,
         Some("Declined") => 2,
@@ -1233,7 +1318,12 @@ impl Companion {
 
         let art_key = (context.splash_enabled, context.icons_revision);
         if self.art_key != Some(art_key) {
-            apply_client_art(main_win, app_state, &mut self.loader, context.splash_enabled);
+            apply_client_art(
+                main_win,
+                app_state,
+                &mut self.loader,
+                context.splash_enabled,
+            );
             self.art_key = Some(art_key);
         }
 
@@ -1382,7 +1472,9 @@ fn apply_summary(
     // Populate Lobby / Queue / Idle wait view
     let wait_changed = previous.is_none_or(|shown| shown.view != view)
         || prev.is_none_or(|p| {
-            p.summoner != snap.summoner || p.lobby != snap.lobby || p.matchmaking != snap.matchmaking
+            p.summoner != snap.summoner
+                || p.lobby != snap.lobby
+                || p.matchmaking != snap.matchmaking
         });
     let waiting = !matches!(view, Screen::ChampSelect | Screen::InGame | Screen::Results);
     if waiting && wait_changed {
@@ -1434,10 +1526,18 @@ mod tests {
         let first = PhaseClock::down_at(Instant::now(), 30.0, 30);
         let later = Instant::now() + std::time::Duration::from_secs(5);
         // An unrelated event rebuilds the snapshot with the same 30 s reading: keep counting.
-        let kept = PhaseClock::follow(Some(first), Some(PhaseClock::down_at(Instant::now(), 30.0, 30))).unwrap();
+        let kept = PhaseClock::follow(
+            Some(first),
+            Some(PhaseClock::down_at(Instant::now(), 30.0, 30)),
+        )
+        .unwrap();
         assert_eq!(kept.seconds_now(later), first.seconds_now(later));
         // A new reading from the client re-anchors.
-        let fresh = PhaseClock::follow(Some(first), Some(PhaseClock::down_at(Instant::now(), 29.0, 30))).unwrap();
+        let fresh = PhaseClock::follow(
+            Some(first),
+            Some(PhaseClock::down_at(Instant::now(), 29.0, 30)),
+        )
+        .unwrap();
         assert_eq!(fresh.base_sec, 29.0);
         assert!(PhaseClock::follow(Some(first), None).is_none());
         assert!(PhaseClock::follow(None, Some(first)).is_some());
@@ -1456,8 +1556,14 @@ mod tests {
     fn bot_and_support_map_labels_stay_separated() {
         let (bx, by, b_pos) = map_coord_for_lane(3);
         let (sx, sy, s_pos) = map_coord_for_lane(4);
-        assert_ne!(b_pos, s_pos, "Bot and Support labels must use opposite sides of track");
-        assert!((sx - bx).abs() >= 120.0, "Bot and Support nodes must have horizontal spacing");
+        assert_ne!(
+            b_pos, s_pos,
+            "Bot and Support labels must use opposite sides of track"
+        );
+        assert!(
+            (sx - bx).abs() >= 120.0,
+            "Bot and Support nodes must have horizontal spacing"
+        );
         assert!((by - sy).abs() < 1.0);
     }
 
@@ -1481,15 +1587,25 @@ mod tests {
             for lane in [Lane::Top, Lane::Mid, Lane::Bot] {
                 places.push(MapPlace::Inhibitor { order_side, lane });
                 for tier in 1..=3 {
-                    places.push(MapPlace::Turret { order_side, lane, tier });
+                    places.push(MapPlace::Turret {
+                        order_side,
+                        lane,
+                        tier,
+                    });
                 }
             }
         }
         for place in places {
             let (x, y) = place_coordinates(place);
             for (dx, dy) in SIGHTING_FAN {
-                assert!((0.0..=400.0).contains(&(x + dx)), "{place:?} x out of canvas");
-                assert!((0.0..=400.0).contains(&(y + dy)), "{place:?} y out of canvas");
+                assert!(
+                    (0.0..=400.0).contains(&(x + dx)),
+                    "{place:?} x out of canvas"
+                );
+                assert!(
+                    (0.0..=400.0).contains(&(y + dy)),
+                    "{place:?} y out of canvas"
+                );
             }
         }
     }
@@ -1554,15 +1670,29 @@ mod tests {
         assert_eq!(rows[1].place, "Not seen yet");
         assert_eq!(rows[2].age, "5 min ago");
         assert!(!rows[0].stale && rows[2].stale);
-        assert_ne!((rows[0].x, rows[0].y), (rows[2].x, rows[2].y), "shared place fans out");
+        assert_ne!(
+            (rows[0].x, rows[0].y),
+            (rows[2].x, rows[2].y),
+            "shared place fans out"
+        );
     }
 
     #[test]
     fn names_places_from_the_players_side() {
-        let tower = MapPlace::Turret { order_side: false, lane: Lane::Mid, tier: 2 };
+        let tower = MapPlace::Turret {
+            order_side: false,
+            lane: Lane::Mid,
+            tier: 2,
+        };
         assert_eq!(place_label(tower, true, Lang::En), "Their mid inner tower");
-        assert_eq!(place_label(tower, false, Lang::Fr), "Votre tourelle intérieure mid");
-        let inhib = MapPlace::Inhibitor { order_side: true, lane: Lane::Bot };
+        assert_eq!(
+            place_label(tower, false, Lang::Fr),
+            "Votre tourelle intérieure mid"
+        );
+        let inhib = MapPlace::Inhibitor {
+            order_side: true,
+            lane: Lane::Bot,
+        };
         assert_eq!(place_label(inhib, true, Lang::En), "Your bot inhibitor");
         assert_eq!(age_label(150.0, Lang::Fr), "il y a 2 min");
     }
@@ -1687,11 +1817,17 @@ mod tests {
         let down_clock = phase_clock_at(&snap, Screen::ChampSelect, anchor).unwrap();
         assert!(down_clock.counts_down());
         assert_eq!(down_clock.total_sec, 30);
-        assert_eq!(down_clock.seconds_now(anchor + Duration::from_millis(500)), 29);
+        assert_eq!(
+            down_clock.seconds_now(anchor + Duration::from_millis(500)),
+            29
+        );
 
         let up_clock = phase_clock_at(&snap, Screen::InGame, anchor).unwrap();
         assert!(!up_clock.counts_down());
-        assert_eq!(up_clock.seconds_now(anchor + Duration::from_millis(900)), 613);
+        assert_eq!(
+            up_clock.seconds_now(anchor + Duration::from_millis(900)),
+            613
+        );
 
         let (wait, party) = build_wait_view(&snap, Screen::Lobby, &mut icons, Lang::Fr);
         assert!(wait.title.contains("Classée Solo/Duo"));

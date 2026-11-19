@@ -209,7 +209,9 @@ mod tests {
         // A square champion tile still yields a strip.
         let tile = png_bytes(DynamicImage::ImageRgb8(RgbImage::new(380, 380)));
         assert!(prepare_banner(&tile).is_some());
-        assert!(prepare_banner(&png_bytes(DynamicImage::ImageRgb8(RgbImage::new(20, 20)))).is_none());
+        assert!(
+            prepare_banner(&png_bytes(DynamicImage::ImageRgb8(RgbImage::new(20, 20)))).is_none()
+        );
     }
 
     #[test]

@@ -130,7 +130,9 @@ impl DiscoveryManager {
             ProcessInfo {
                 pid: 19100,
                 name: "LeagueCrashHandler64.exe".to_string(),
-                exe: Some("C:\\Riot Games\\League of Legends\\LeagueCrashHandler64.exe".to_string()),
+                exe: Some(
+                    "C:\\Riot Games\\League of Legends\\LeagueCrashHandler64.exe".to_string(),
+                ),
                 started: now_sec - 60,
                 cpu: 0.0,
                 mem_bytes: 14_000_000,
@@ -139,7 +141,9 @@ impl DiscoveryManager {
             ProcessInfo {
                 pid: 21004,
                 name: "League of Legends.exe".to_string(),
-                exe: Some("C:\\Riot Games\\League of Legends\\Game\\League of Legends.exe".to_string()),
+                exe: Some(
+                    "C:\\Riot Games\\League of Legends\\Game\\League of Legends.exe".to_string(),
+                ),
                 started: now_sec - 30,
                 cpu: 4.8,
                 mem_bytes: 1_850_000_000,
@@ -246,7 +250,9 @@ impl DiscoveryManager {
         let lcu_args = Some(LeagueClientArgs {
             app_port: Some(58921),
             remoting_auth_token: Some("demo-league-client-token-abc123".to_string()),
-            install_directory: Some(std::path::PathBuf::from("C:\\Riot Games\\League of Legends")),
+            install_directory: Some(std::path::PathBuf::from(
+                "C:\\Riot Games\\League of Legends",
+            )),
             riotclient_app_port: Some(54012),
             riotclient_auth_token: Some("demo-riot-client-token-xyz789".to_string()),
             app_pid: Some(18452),
@@ -345,8 +351,8 @@ impl DiscoveryManager {
                         break;
                     };
                     // Synthetic demo state is static: nothing to scan while it is active.
-                    let active = !manager.is_demo_override()
-                        && manager.rescan(flags.system_footprint());
+                    let active =
+                        !manager.is_demo_override() && manager.rescan(flags.system_footprint());
                     let rate = flags.discovery_rate();
                     interval = if active {
                         rate.active_interval()
@@ -394,10 +400,7 @@ impl DiscoveryManager {
             let endpoint = endpoint.filter(|_| live);
             SourceState {
                 id,
-                pid: endpoint
-                    .as_ref()
-                    .map(|e| e.pid)
-                    .or(proc.map(|p| p.pid)),
+                pid: endpoint.as_ref().map(|e| e.pid).or(proc.map(|p| p.pid)),
                 port: endpoint.as_ref().map(|e| e.port),
                 protocol: endpoint.as_ref().map(|e| e.protocol.clone()),
                 since,

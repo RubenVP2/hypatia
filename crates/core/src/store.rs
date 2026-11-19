@@ -440,7 +440,10 @@ mod tests {
         insert(&mut store, uri, second.clone());
         let stored2 = store.get_event(2).expect("event 2 should exist");
         assert_eq!(*stored2.payload, second);
-        assert!(Arc::ptr_eq(stored2.previous_payload.as_ref().unwrap(), &stored1.payload));
+        assert!(Arc::ptr_eq(
+            stored2.previous_payload.as_ref().unwrap(),
+            &stored1.payload
+        ));
 
         let state = store.get_state(SourceId::LeagueClient, uri).unwrap();
         assert_eq!(state.count, 2);
@@ -471,7 +474,11 @@ mod tests {
         insert(&mut store, GAMEFLOW_PHASE_URI, json!("Lobby"));
         assert_eq!(store.phase().unwrap().phase, "Lobby");
 
-        insert(&mut store, GAMEFLOW_PHASE_URI, json!({ "phase": "ChampSelect" }));
+        insert(
+            &mut store,
+            GAMEFLOW_PHASE_URI,
+            json!({ "phase": "ChampSelect" }),
+        );
         assert_eq!(store.phase().unwrap().phase, "ChampSelect");
     }
 
@@ -489,7 +496,11 @@ mod tests {
 
         let mut store = EventStore::with_limits(1000, 100, ChangeSignal::new());
         for i in 0..20 {
-            insert(&mut store, "/big", json!({ "blob": "x".repeat(40), "i": i }));
+            insert(
+                &mut store,
+                "/big",
+                json!({ "blob": "x".repeat(40), "i": i }),
+            );
         }
         assert!(store.len() <= 2, "byte budget must evict old payloads");
         assert_eq!(store.latest_event_id(), 20);
@@ -498,13 +509,19 @@ mod tests {
     #[test]
     fn reset_state_forgets_payloads_and_phase() {
         let mut store = EventStore::default();
-        insert(&mut store, "/lol-summoner/v1/current-summoner", json!({ "name": "Demo" }));
+        insert(
+            &mut store,
+            "/lol-summoner/v1/current-summoner",
+            json!({ "name": "Demo" }),
+        );
         insert(&mut store, GAMEFLOW_PHASE_URI, json!("InProgress"));
         let before = store.state_revision();
 
         store.reset_state();
 
-        assert!(store.current(SourceId::LeagueClient, "/lol-summoner/v1/current-summoner").is_none());
+        assert!(store
+            .current(SourceId::LeagueClient, "/lol-summoner/v1/current-summoner")
+            .is_none());
         assert!(store.phase().is_none());
         assert!(store.is_empty());
         assert!(store.state_revision() > before);
@@ -519,21 +536,37 @@ mod tests {
         store.set_capture(false);
 
         assert!(store.is_empty());
-        assert!(store.get_state(SourceId::LeagueClient, "/lol-chat/v1/conversations").is_none());
-        assert!(store.current(SourceId::LeagueClient, "/lol-lobby/v2/lobby").is_some());
+        assert!(store
+            .get_state(SourceId::LeagueClient, "/lol-chat/v1/conversations")
+            .is_none());
+        assert!(store
+            .current(SourceId::LeagueClient, "/lol-lobby/v2/lobby")
+            .is_some());
         assert!(!store.wants(SourceId::LeagueClient, "/lol-chat/v1/me"));
         assert!(store.wants(SourceId::LeagueClient, "/lol-lobby/v2/lobby"));
 
         // Irrelevant traffic is counted but neither stored nor signalled.
         let (rev, state_rev) = (signal.revision(), store.state_revision());
-        insert(&mut store, "/lol-chat/v1/me", json!({ "availability": "chat" }));
+        insert(
+            &mut store,
+            "/lol-chat/v1/me",
+            json!({ "availability": "chat" }),
+        );
         assert_eq!(store.source_stats(SourceId::LeagueClient).0, 3);
-        assert!(store.get_state(SourceId::LeagueClient, "/lol-chat/v1/me").is_none());
-        assert_eq!((signal.revision(), store.state_revision()), (rev, state_rev));
+        assert!(store
+            .get_state(SourceId::LeagueClient, "/lol-chat/v1/me")
+            .is_none());
+        assert_eq!(
+            (signal.revision(), store.state_revision()),
+            (rev, state_rev)
+        );
 
         // Re-sending an identical projected payload is not a change either.
         insert(&mut store, "/lol-lobby/v2/lobby", json!({ "partyId": "a" }));
-        assert_eq!((signal.revision(), store.state_revision()), (rev, state_rev));
+        assert_eq!(
+            (signal.revision(), store.state_revision()),
+            (rev, state_rev)
+        );
 
         insert(&mut store, "/lol-lobby/v2/lobby", json!({ "partyId": "b" }));
         assert_eq!(store.state_revision(), state_rev + 1);

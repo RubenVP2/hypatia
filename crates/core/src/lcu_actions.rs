@@ -93,7 +93,11 @@ pub fn resolve_lcu_command_localized(
             champion_id,
         } => {
             if *action_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid action_id", "action_id invalide"), action_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid action_id", "action_id invalide"),
+                    action_id
+                );
             }
             if *champion_id <= 0 {
                 bail!(
@@ -110,7 +114,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::LockAction { action_id } => {
             if *action_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid action_id", "action_id invalide"), action_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid action_id", "action_id invalide"),
+                    action_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -142,7 +150,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::SetSkin { skin_id } => {
             if *skin_id <= 0 {
-                bail!("{}: {}", lang.pick("Invalid skin_id", "skin_id invalide"), skin_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid skin_id", "skin_id invalide"),
+                    skin_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::PATCH,
@@ -229,7 +241,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::RequestPositionSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid swap_id", "swap_id invalide"),
+                    swap_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -239,7 +255,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::RespondPositionSwap { swap_id, accept } => {
             if *swap_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid swap_id", "swap_id invalide"),
+                    swap_id
+                );
             }
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
@@ -250,7 +270,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::CancelPositionSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid swap_id", "swap_id invalide"),
+                    swap_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -260,7 +284,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::RequestPickOrderSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid swap_id", "swap_id invalide"),
+                    swap_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -270,7 +298,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::RespondPickOrderSwap { swap_id, accept } => {
             if *swap_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid swap_id", "swap_id invalide"),
+                    swap_id
+                );
             }
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
@@ -281,7 +313,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::CancelPickOrderSwap { swap_id } => {
             if *swap_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid swap_id", "swap_id invalide"), swap_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid swap_id", "swap_id invalide"),
+                    swap_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -291,7 +327,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::RequestChampionTrade { trade_id } => {
             if *trade_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid trade_id", "trade_id invalide"), trade_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid trade_id", "trade_id invalide"),
+                    trade_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -301,7 +341,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::RespondChampionTrade { trade_id, accept } => {
             if *trade_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid trade_id", "trade_id invalide"), trade_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid trade_id", "trade_id invalide"),
+                    trade_id
+                );
             }
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
@@ -312,7 +356,11 @@ pub fn resolve_lcu_command_localized(
         }
         RemoteCommand::CancelChampionTrade { trade_id } => {
             if *trade_id < 0 {
-                bail!("{}: {}", lang.pick("Invalid trade_id", "trade_id invalide"), trade_id);
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid trade_id", "trade_id invalide"),
+                    trade_id
+                );
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
@@ -448,9 +496,10 @@ pub fn affected_lcu_uris(cmd: &RemoteCommand) -> &'static [&'static str] {
         RemoteCommand::StartMatchmaking | RemoteCommand::StopMatchmaking => {
             &["/lol-matchmaking/v1/search", "/lol-lobby/v2/lobby"]
         }
-        RemoteCommand::AcceptReadyCheck | RemoteCommand::DeclineReadyCheck => {
-            &["/lol-matchmaking/v1/ready-check", "/lol-matchmaking/v1/search"]
-        }
+        RemoteCommand::AcceptReadyCheck | RemoteCommand::DeclineReadyCheck => &[
+            "/lol-matchmaking/v1/ready-check",
+            "/lol-matchmaking/v1/search",
+        ],
         RemoteCommand::HoverChampion { .. }
         | RemoteCommand::SetSummonerSpells { .. }
         | RemoteCommand::RequestPositionSwap { .. }
@@ -480,7 +529,12 @@ pub fn extract_remote_state(
     alerts: &mut AlertTracker,
 ) -> RemoteStateSnapshot {
     let summary = app_state.get_summary();
-    project_remote_state(&summary, app_state.is_demo_active(), app_state.lang(), alerts)
+    project_remote_state(
+        &summary,
+        app_state.is_demo_active(),
+        app_state.lang(),
+        alerts,
+    )
 }
 
 #[cfg(test)]
@@ -490,9 +544,8 @@ mod tests {
 
     #[test]
     fn test_resolve_allowlist_valid_commands() {
-        let calls =
-            resolve_lcu_command_localized(&RemoteCommand::AcceptReadyCheck, None, Lang::En)
-                .unwrap();
+        let calls = resolve_lcu_command_localized(&RemoteCommand::AcceptReadyCheck, None, Lang::En)
+            .unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].method, Method::POST);
         assert_eq!(calls[0].path, "/lol-matchmaking/v1/ready-check/accept");
@@ -588,7 +641,10 @@ mod tests {
         let en = extract_remote_state(&app, &mut alerts);
         assert_eq!(en.lang, Lang::En);
         assert_eq!(en.lobby.as_ref().unwrap().queue_name, "Ranked Solo/Duo");
-        assert_eq!(en.champ_select.as_ref().unwrap().available_spells[0].name, "Flash");
+        assert_eq!(
+            en.champ_select.as_ref().unwrap().available_spells[0].name,
+            "Flash"
+        );
         assert_eq!(alerts.last_kind.as_deref(), Some("your_ban"));
 
         // Incoming swap in ChampSelect triggers alert with caller's true local position
@@ -626,7 +682,9 @@ mod tests {
             );
         }
         let live_remote = extract_remote_state(&app, &mut alerts);
-        let lg = live_remote.live_game.expect("expected live game projection");
+        let lg = live_remote
+            .live_game
+            .expect("expected live game projection");
         assert!(lg.allies.iter().any(|p| p.lane == "JGL"));
         assert!(lg.allies.iter().any(|p| p.lane == "MID"));
 
@@ -636,7 +694,10 @@ mod tests {
         let fr = extract_remote_state(&app, &mut alerts);
         assert_eq!(fr.lang, Lang::Fr);
         assert_eq!(fr.lobby.as_ref().unwrap().queue_name, "Classée Solo/Duo");
-        assert_eq!(fr.champ_select.as_ref().unwrap().available_spells[0].name, "Saut éclair");
+        assert_eq!(
+            fr.champ_select.as_ref().unwrap().available_spells[0].name,
+            "Saut éclair"
+        );
         assert_eq!(
             fr.champ_select.as_ref().unwrap().rune_pages[0].name,
             "Mid Burst (Électrocution)"
@@ -718,7 +779,10 @@ mod tests {
             let unavail = app
                 .execute_remote_command(&client, &RemoteCommand::AcceptReadyCheck)
                 .await;
-            assert!(matches!(unavail, Err(RemoteActionError::ClientUnavailable(_))));
+            assert!(matches!(
+                unavail,
+                Err(RemoteActionError::ClientUnavailable(_))
+            ));
         }
     }
 }

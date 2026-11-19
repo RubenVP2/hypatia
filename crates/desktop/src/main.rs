@@ -20,7 +20,9 @@ use hypatia_core::settings::{
 use hypatia_core::AppState;
 use hypatia_shared::{Lang, SourceId};
 use serde_json::Value;
-use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode};
+use slint::{
+    ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode,
+};
 use tracing::info;
 
 use crate::cli::Cli;
@@ -418,7 +420,8 @@ impl Ui {
         let pixels =
             SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&qr.rgba, qr.width, qr.height);
         self.main.set_remote_qr(Image::from_rgba8(pixels));
-        self.main.set_remote_url(SharedString::from(qr.url.as_str()));
+        self.main
+            .set_remote_url(SharedString::from(qr.url.as_str()));
     }
 
     /// Starts the LAN server in the background so the window never waits on the network.
@@ -648,16 +651,8 @@ fn build_perf_metrics(
     } else {
         lang.pick("Sampling...", "Mesure...").to_string()
     };
-    let cache_ram_text = format!(
-        "{} · {}",
-        cache_ram.0,
-        format_bytes(cache_ram.1, lang)
-    );
-    let cache_disk_text = format!(
-        "{} · {}",
-        cache_disk.0,
-        format_bytes(cache_disk.1, lang)
-    );
+    let cache_ram_text = format!("{} · {}", cache_ram.0, format_bytes(cache_ram.1, lang));
+    let cache_disk_text = format!("{} · {}", cache_disk.0, format_bytes(cache_disk.1, lang));
 
     let live_s = s.live_poll_rate.interval().as_secs();
     let disc_s = s.discovery_rate.active_interval().as_secs();
@@ -670,9 +665,13 @@ fn build_perf_metrics(
     };
     let cadence_text = if s.live_game {
         if lang.is_fr() {
-            format!("Jeu {live_s}s · Scans {disc_s}s · UI {ui_ms}ms · Budget {budget} · {sleep_tag}")
+            format!(
+                "Jeu {live_s}s · Scans {disc_s}s · UI {ui_ms}ms · Budget {budget} · {sleep_tag}"
+            )
         } else {
-            format!("Live {live_s}s · Scan {disc_s}s · UI {ui_ms}ms · Budget {budget} · {sleep_tag}")
+            format!(
+                "Live {live_s}s · Scan {disc_s}s · UI {ui_ms}ms · Budget {budget} · {sleep_tag}"
+            )
         }
     } else if lang.is_fr() {
         format!("Jeu coupé · Scans {disc_s}s · UI {ui_ms}ms · Budget {budget} · {sleep_tag}")

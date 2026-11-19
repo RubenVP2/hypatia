@@ -5,91 +5,157 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly Monday 06:00 UTC advisory and license audit
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  lint:
-    name: Lint
-    if: github.event_name == 'pull_request'
+  quality:
+    name: Quality, Security & i18n
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gettext pkg-config libssl-dev libfontconfig1-dev libxkbcommon-dev libgl1-mesa-dev libwayland-dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
-          components: clippy
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Check Rust formatting
+        if: github.event_name != 'schedule'
+        run: cargo fmt --all -- --check
+
+      - name: Install cargo-deny and cargo-audit
+        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: cargo-deny,cargo-audit
+
+      - name: Check dependencies (advisories, licenses, bans, sources)
+        run: cargo deny --locked check
+
+      - name: Audit Cargo.lock for RustSec vulnerabilities
+        run: cargo audit
+
+      - name: Install gettext tools
+        if: github.event_name != 'schedule'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gettext
+
+      - name: Read Slint version from Cargo.lock
+        if: github.event_name != 'schedule'
+        id: slint_ver
+        run: |
+          version=$(python3 -c 'import tomllib; print(next(p["version"] for p in tomllib.load(open("Cargo.lock", "rb"))["package"] if p["name"] == "slint"))')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache slint-tr-extractor
+        if: github.event_name != 'schedule'
+        id: slint_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/slint-tr-extractor
+          key: ${{ runner.os }}-slint-tr-extractor-${{ steps.slint_ver.outputs.version }}
+
+      - name: Install slint-tr-extractor
+        if: github.event_name != 'schedule' && steps.slint_cache.outputs.cache-hit != 'true'
+        env:
+          SLINT_VERSION: ${{ steps.slint_ver.outputs.version }}
+        run: cargo install --locked slint-tr-extractor --version "$SLINT_VERSION"
+
+      - name: Verify Slint i18n template and French catalog
+        if: github.event_name != 'schedule'
+        working-directory: crates/desktop
+        run: |
+          export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+          slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint -o "$RUNNER_TEMP/hypatia.pot"
+          msgcmp --use-untranslated lang/hypatia.pot "$RUNNER_TEMP/hypatia.pot"
+          msgcmp --use-untranslated "$RUNNER_TEMP/hypatia.pot" lang/hypatia.pot
+          msgfmt -c -o /dev/null lang/fr/LC_MESSAGES/hypatia.po
+          msgcmp lang/fr/LC_MESSAGES/hypatia.po lang/hypatia.pot
+          msgcmp --use-untranslated lang/hypatia.pot lang/fr/LC_MESSAGES/hypatia.po
+          test -z "$(msgattrib --untranslated lang/fr/LC_MESSAGES/hypatia.po)"
+          test -z "$(msgattrib --fuzzy lang/fr/LC_MESSAGES/hypatia.po)"
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        if: github.event_name != 'schedule'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-lint-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-lint-cargo-
-            ${{ runner.os }}-cargo-
+          shared-key: ubuntu-core
 
-      - name: Run Clippy lint
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run Clippy on shared and core crates
+        if: github.event_name != 'schedule'
+        run: cargo clippy -p hypatia-shared -p hypatia-core --all-targets --locked -- -D warnings
 
-      - name: Check French translation catalog
-        run: |
-          msgfmt -c -o /dev/null crates/desktop/lang/fr/LC_MESSAGES/hypatia.po
-          msgcmp crates/desktop/lang/fr/LC_MESSAGES/hypatia.po crates/desktop/lang/hypatia.pot
-          test -z "$(msgattrib --untranslated crates/desktop/lang/fr/LC_MESSAGES/hypatia.po)"
+      - name: Run shared and core tests (including Mobile Remote EN/FR parity)
+        if: github.event_name != 'schedule'
+        run: cargo test -p hypatia-shared -p hypatia-core --locked
 
-  build:
-    name: Test & Build (${{ matrix.os }})
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  windows:
+    name: Windows (x86_64-pc-windows-msvc)
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libfontconfig1-dev libxkbcommon-dev libgl1-mesa-dev libwayland-dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+          components: clippy
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: windows
+
+      - name: Run Clippy across workspace
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Run workspace tests
-        run: cargo test --workspace --verbose
+        run: cargo test --workspace --locked
 
-      - name: Build desktop application (Release)
-        run: cargo build --release -p hypatia
+      - name: Build Windows desktop release binary
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc -p hypatia
+
+      - name: Verify built Windows executable
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $bin = "target/x86_64-pc-windows-msvc/release/hypatia.exe"
+          if (-not (Test-Path $bin)) {
+            throw "Release binary not found at $bin"
+          }
+          $size = (Get-Item $bin).Length
+          if ($size -le 0) {
+            throw "Release binary at $bin is empty"
+          }
+          $mb = [math]::Round($size / 1MB, 2)
+          Write-Host "Built $bin ($mb MB, $size bytes)"
+
+      - name: Upload Windows release binary artifact
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hypatia-windows-x86_64
+          path: target/x86_64-pc-windows-msvc/release/hypatia.exe
+          retention-days: 5
+          if-no-files-found: error

@@ -1,8 +1,6 @@
-use std::collections::HashSet;
 use hypatia_shared::{ListenSocket, RemoteConn};
-use netstat2::{
-    get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState,
-};
+use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState};
+use std::collections::HashSet;
 use tracing::{debug, warn};
 
 /// Collects TCP listening sockets and established remote connections for a given set of PIDs.
@@ -23,7 +21,10 @@ pub fn collect_sockets_for_pids(
     let sockets_info = match get_sockets_info(af_flags, proto_flags) {
         Ok(info) => info,
         Err(e) => {
-            warn!("Failed to query system socket information via netstat2: {:?}", e);
+            warn!(
+                "Failed to query system socket information via netstat2: {:?}",
+                e
+            );
             return (listen_sockets, remote_connections);
         }
     };

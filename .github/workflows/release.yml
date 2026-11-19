@@ -192,7 +192,7 @@ jobs:
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue staging, dist
           New-Item -ItemType Directory -Force -Path staging, dist | Out-Null
           Copy-Item $binPath staging/
-          Copy-Item README.md staging/
+          Copy-Item README.md, LICENSE-MIT, LICENSE-APACHE staging/
           Copy-Item crates/desktop/ui/fonts/OFL.txt staging/FONT-LICENSE-OFL.txt
           Compress-Archive -Path staging/* -DestinationPath "dist/$assetName" -Force
           $hash = (Get-FileHash -Path "dist/$assetName" -Algorithm SHA256).Hash.ToLowerInvariant()

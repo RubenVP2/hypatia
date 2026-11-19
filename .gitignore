@@ -1,3 +1,13 @@
 /target
 .impeccable/hook.cache.json
 .impeccable/mocks/
+
+# Never commit local captures, credentials or build outputs
+.env
+*.env
+*.har
+*.log
+lockfile
+*.exe
+*.zip
+*.tar.gz

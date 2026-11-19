@@ -21,7 +21,7 @@ anyhow = "1.0"
 axum = { version = "0.8", default-features = true, features = ["ws"] }
 qrcode = { version = "0.14", default-features = false }
 rand = "0.9"
-sysinfo = "0.33"
+sysinfo = "0.40"
 netstat2 = "0.11"
 # Already linked by Slint at runtime with these formats: preparing client artwork adds no weight.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

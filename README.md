@@ -3,7 +3,7 @@
 > **Hypatia · LoL companion — a local, read-only desktop app with an optional Observatory for what the Riot clients expose, and an opt-in Mobile Remote for one-handed control.**
 
 [![CI](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml/badge.svg)](https://github.com/RubenVP2/hypatia/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.5.0-blue.svg)](https://github.com/RubenVP2/hypatia/releases/latest)
+[![Release](https://img.shields.io/github/v/release/RubenVP2/hypatia)](https://github.com/RubenVP2/hypatia/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Slint](https://img.shields.io/badge/UI-Slint%201.18-purple.svg)](https://slint.dev)
 
@@ -136,5 +136,7 @@ bench/         # Whole-application footprint benchmark
 ---
 
 ## 📄 License & Disclaimer
+
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. Bundled fonts are under the [SIL Open Font License](crates/desktop/ui/fonts/OFL.txt).
 
 Hypatia is an independent open-source companion tool. It is **not** affiliated with, endorsed by, or sponsored by Riot Games, Inc. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.

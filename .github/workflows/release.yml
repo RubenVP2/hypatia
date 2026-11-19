@@ -118,7 +118,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path staging
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" staging/
-          Copy-Item README.md staging/
+          Copy-Item README.md, LICENSE-MIT, LICENSE-APACHE staging/
           Compress-Archive -Path staging/* -DestinationPath "${{ matrix.asset_name }}"
           Get-FileHash -Path "${{ matrix.asset_name }}" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | Out-File -Encoding utf8 "${{ matrix.asset_name }}.sha256"
 
@@ -128,7 +128,7 @@ jobs:
         run: |
           mkdir -p staging
           cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" staging/
-          cp README.md staging/
+          cp README.md LICENSE-MIT LICENSE-APACHE staging/
           cd staging
           tar -czvf "../${{ matrix.asset_name }}" *
           cd ..

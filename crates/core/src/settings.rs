@@ -987,8 +987,10 @@ mod tests {
 
     #[test]
     fn presets_preserve_theme_and_custom_tracks_divergence() {
-        let mut s = Settings::default();
-        s.light_theme = true;
+        let mut s = Settings {
+            light_theme: true,
+            ..Settings::default()
+        };
         s.apply_profile(PerformanceProfile::UltraLight);
         assert!(s.light_theme);
         assert_eq!(s.profile, PerformanceProfile::UltraLight);

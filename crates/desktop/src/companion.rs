@@ -735,7 +735,7 @@ fn format_thousands(value: u32, lang: Lang) -> String {
     let separator = if lang.is_fr() { ' ' } else { ',' };
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(separator);
         }
         out.push(c);

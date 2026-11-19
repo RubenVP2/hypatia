@@ -309,10 +309,16 @@ impl ChampionStats {
         self.inner.flags.online_stats()
     }
 
-    /// Items, runes, rune styles and summoner spells of the running client (names in its
-    /// language), for drawing names and icons. Read once per client session.
+    /// Items, runes, rune styles and summoner spells of the running client, named in Hypatia's
+    /// language (Game Text, whatever the client speaks), for drawing names and icons. Read once
+    /// per client session.
     pub fn game_data(&self) -> StatsState<Arc<GameData>> {
-        let lang = self.lang();
+        self.game_data_in(self.lang())
+    }
+
+    /// [`Self::game_data`] named in `lang`, for a view that asked for another language (the
+    /// phone).
+    pub fn game_data_in(&self, lang: Lang) -> StatsState<Arc<GameData>> {
         if self.is_demo() {
             let slot = &self.inner.demo_game_data[lang as usize];
             return StatsState::Ready(

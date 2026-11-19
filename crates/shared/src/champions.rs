@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::game_text::{game_name, game_names, GameTextKind};
 use crate::i18n::Lang;
 use crate::remote::{
     RemoteChampionOption, RemotePerkOption, RemoteRunePage, RemoteRuneTree, RemoteSkinOption,
@@ -1195,10 +1196,47 @@ pub trait ChampionLookup {
     /// Resolves a localized champion display name from ID (`Selecting...`/`Sélection...` for `<= 0`).
     fn resolve_champion_name_localized(&self, champion_id: i64, lang: Lang) -> String;
 
-    /// Returns the champion roster sorted alphabetically for pick/ban selectors.
-    fn champion_catalog(&self) -> Vec<RemoteChampionOption> {
-        BuiltinChampionCatalog.champion_catalog()
+    /// Returns the champion roster, named in `lang` and sorted alphabetically, for pick/ban
+    /// selectors.
+    fn champion_catalog(&self, lang: Lang) -> Vec<RemoteChampionOption> {
+        BuiltinChampionCatalog.champion_catalog(lang)
     }
+}
+
+/// A champion's name in `lang` from Game Text, else the built-in English name.
+pub fn builtin_champion_name(champion_id: i64, lang: Lang) -> Option<&'static str> {
+    game_name(GameTextKind::Champion, champion_id, lang).or_else(|| {
+        BUILTIN_CHAMPIONS
+            .iter()
+            .find(|c| c.id == champion_id)
+            .map(|c| c.name)
+    })
+}
+
+/// Resolves a normalized champion key from any Hypatia language's Game Text name, a built-in
+/// name, or a built-in alias.
+fn builtin_champion_id(key: &str) -> Option<i64> {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    static BY_KEY: OnceLock<HashMap<String, i64>> = OnceLock::new();
+    BY_KEY
+        .get_or_init(|| {
+            let mut map = HashMap::new();
+            for c in BUILTIN_CHAMPIONS {
+                map.insert(normalize_champion_key(c.name), c.id);
+                for alias in c.aliases {
+                    map.insert((*alias).to_string(), c.id);
+                }
+            }
+            for lang in [Lang::En, Lang::Fr] {
+                for &(id, name) in game_names(GameTextKind::Champion, lang) {
+                    map.entry(normalize_champion_key(name)).or_insert(id);
+                }
+            }
+            map
+        })
+        .get(key)
+        .copied()
 }
 
 /// Pure offline champion catalog backed by [`BUILTIN_CHAMPIONS`].
@@ -1210,32 +1248,35 @@ impl ChampionLookup for BuiltinChampionCatalog {
         if is_champion_placeholder(name) {
             return 0;
         }
-        let key = normalize_champion_key(name);
-        BUILTIN_CHAMPIONS
-            .iter()
-            .find(|c| normalize_champion_key(c.name) == key || c.aliases.contains(&key.as_str()))
-            .map(|c| c.id)
-            .unwrap_or(0)
+        builtin_champion_id(&normalize_champion_key(name)).unwrap_or(0)
     }
 
     fn resolve_champion_name_localized(&self, champion_id: i64, lang: Lang) -> String {
         if champion_id <= 0 {
             return lang.pick("Selecting...", "Sélection...").to_string();
         }
-        BUILTIN_CHAMPIONS
-            .iter()
-            .find(|c| c.id == champion_id)
-            .map(|c| c.name.to_string())
+        builtin_champion_name(champion_id, lang)
+            .map(str::to_string)
             .unwrap_or_else(|| format!("Champion #{champion_id}"))
     }
 
-    fn champion_catalog(&self) -> Vec<RemoteChampionOption> {
-        let mut out: Vec<RemoteChampionOption> = BUILTIN_CHAMPIONS
+    fn champion_catalog(&self, lang: Lang) -> Vec<RemoteChampionOption> {
+        let mut out: Vec<RemoteChampionOption> = game_names(GameTextKind::Champion, lang)
             .iter()
-            .map(|c| RemoteChampionOption {
-                id: c.id,
-                name: c.name.to_string(),
-                roles: c.roles.iter().map(|r| (*r).to_string()).collect(),
+            .map(|&(id, name)| (id, name))
+            .chain(
+                BUILTIN_CHAMPIONS
+                    .iter()
+                    .filter(|c| game_name(GameTextKind::Champion, c.id, lang).is_none())
+                    .map(|c| (c.id, c.name)),
+            )
+            .map(|(id, name)| RemoteChampionOption {
+                id,
+                name: name.to_string(),
+                roles: builtin_champion_roles(id)
+                    .iter()
+                    .map(|r| (*r).to_string())
+                    .collect(),
                 pickable: true,
                 bannable: true,
             })
@@ -1347,7 +1388,9 @@ pub fn default_summoner_spells_localized(lang: Lang) -> Vec<RemoteSpellOption> {
         .map(
             |(&(id, en_n, fr_n, en_k, fr_k, cd, en_d), &fr_d)| RemoteSpellOption {
                 id,
-                name: lang.pick(en_n, fr_n).to_string(),
+                name: game_name(GameTextKind::Spell, id, lang)
+                    .unwrap_or(lang.pick(en_n, fr_n))
+                    .to_string(),
                 key: lang.pick(en_k, fr_k).to_string(),
                 cooldown: cd.to_string(),
                 description: lang.pick(en_d, fr_d).to_string(),
@@ -1357,20 +1400,7 @@ pub fn default_summoner_spells_localized(lang: Lang) -> Vec<RemoteSpellOption> {
 }
 
 pub fn spell_name_from_id_localized(spell_id: i64, lang: Lang) -> &'static str {
-    match spell_id {
-        1 => lang.pick("Cleanse", "Purge"),
-        3 => lang.pick("Exhaust", "Fatigue"),
-        4 => lang.pick("Flash", "Saut éclair"),
-        6 => lang.pick("Ghost", "Fantôme"),
-        7 => lang.pick("Heal", "Soins"),
-        11 => lang.pick("Smite", "Châtiment"),
-        12 => lang.pick("Teleport", "Téléportation"),
-        13 => lang.pick("Clarity", "Clarté"),
-        14 => lang.pick("Ignite", "Embrasement"),
-        21 => lang.pick("Barrier", "Barrière"),
-        32 => lang.pick("Mark", "Marquage"),
-        _ => lang.pick("Spell", "Sort"),
-    }
+    game_name(GameTextKind::Spell, spell_id, lang).unwrap_or(lang.pick("Spell", "Sort"))
 }
 
 fn perk_opt(
@@ -1383,7 +1413,9 @@ fn perk_opt(
 ) -> RemotePerkOption {
     RemotePerkOption {
         id,
-        name: lang.pick(en_n, fr_n).to_string(),
+        name: game_name(GameTextKind::Perk, id, lang)
+            .unwrap_or(lang.pick(en_n, fr_n))
+            .to_string(),
         short_desc: lang.pick(en_d, fr_d).to_string(),
     }
 }
@@ -1973,36 +2005,12 @@ pub fn default_rune_trees_localized(lang: Lang) -> Vec<RemoteRuneTree> {
 }
 
 pub fn rune_style_name_localized(style_id: i64, lang: Lang) -> &'static str {
-    match style_id {
-        8000 => lang.pick("Precision", "Précision"),
-        8100 => "Domination",
-        8200 => lang.pick("Sorcery", "Sorcellerie"),
-        8300 => "Inspiration",
-        8400 => lang.pick("Resolve", "Volonté"),
-        _ => "Runes",
-    }
+    game_name(GameTextKind::PerkStyle, style_id, lang).unwrap_or("Runes")
 }
 
 pub fn keystone_name_from_id_localized(perk_id: i64, lang: Lang) -> &'static str {
-    match perk_id {
-        8005 => lang.pick("Press the Attack", "Attaque soutenue"),
-        8008 => lang.pick("Lethal Tempo", "Tempo mortel"),
-        8021 => lang.pick("Fleet Footwork", "Jeu de jambes"),
-        8010 => lang.pick("Conqueror", "Conquérant"),
-        8112 => lang.pick("Electrocute", "Électrocution"),
-        8128 => lang.pick("Dark Harvest", "Moisson noire"),
-        9923 => lang.pick("Hail of Blades", "Déluge de lames"),
-        8214 => lang.pick("Summon Aery", "Invocation d'Aery"),
-        8229 => lang.pick("Arcane Comet", "Comète arcanique"),
-        8230 => lang.pick("Phase Rush", "Rush phasique"),
-        8437 => lang.pick("Grasp of the Undying", "Poigne de l'immortel"),
-        8439 => lang.pick("Aftershock", "Après-coup"),
-        8465 => lang.pick("Guardian", "Gardien"),
-        8351 => lang.pick("Glacial Augment", "Optimisation glaciale"),
-        8360 => lang.pick("Unsealed Spellbook", "Grimoire déchaîné"),
-        8369 => lang.pick("First Strike", "Premier coup"),
-        _ => lang.pick("Custom Keystone", "Rune fondamentale"),
-    }
+    game_name(GameTextKind::Perk, perk_id, lang)
+        .unwrap_or(lang.pick("Custom Keystone", "Rune fondamentale"))
 }
 
 /// Localized built-in recommended rune pages tailored to champion & lane so one tap always works offline.

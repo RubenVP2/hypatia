@@ -5,8 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use hypatia_shared::{
-    keystone_name_from_id_localized, normalize_champion_key, rune_style_name_localized,
-    spell_name_from_id_localized, GameData, GameDataEntry, Lang,
+    game_name, game_names, normalize_champion_key, GameData, GameDataEntry, GameTextKind, Lang,
 };
 use serde_json::Value;
 
@@ -21,7 +20,8 @@ pub const SPELLS_PATH: &str = "/lol-game-data/assets/v1/summoner-spells.json";
 /// The client's display locale (`{"locale": "fr_FR", ...}`); only `locale` is read.
 pub const LOCALE_PATH: &str = "/riotclient/region-locale";
 
-/// Name → id lookups over one [`GameData`], in the client's locale.
+/// Name → id lookups over one [`GameData`]: the client's names plus every Hypatia language's
+/// Game Text names, so a name in any of them resolves.
 #[derive(Debug, Default)]
 pub struct GameDataIndex {
     perk_style: HashMap<i64, i64>,
@@ -61,22 +61,16 @@ pub struct LoadedGameData {
     pub index: Arc<GameDataIndex>,
     /// Client locale such as `fr_FR`, when the client told us.
     pub locale: Option<String>,
-    /// `data` as each Hypatia language shows it, indexed by `Lang as usize`: the client's own
-    /// names when it speaks that language, else built-in names for spells, keystones and rune
-    /// trees (items and minor runes exist only in the client's language).
+    /// `data` as each Hypatia language shows it, indexed by `Lang as usize`: Game Text names
+    /// by id, whatever language the client speaks; the client's name only for an id newer than
+    /// the tables.
     pub by_lang: [Arc<GameData>; 2],
 }
 
 impl LoadedGameData {
     fn new(data: GameData, index: GameDataIndex, locale: Option<String>) -> Self {
         let data = Arc::new(data);
-        let by_lang = [Lang::En, Lang::Fr].map(|lang| {
-            if lang.spoken_by_client(locale.as_deref()) {
-                data.clone()
-            } else {
-                Arc::new(with_builtin_names(&data, lang))
-            }
-        });
+        let by_lang = [Lang::En, Lang::Fr].map(|lang| Arc::new(with_game_text(&data, lang)));
         Self {
             data,
             index: Arc::new(index),
@@ -91,38 +85,25 @@ impl LoadedGameData {
     }
 }
 
-/// `data` with Hypatia's own names wherever it has one for that id.
-fn with_builtin_names(data: &GameData, lang: Lang) -> GameData {
-    let rename = |entries: &[GameDataEntry], name: &dyn Fn(i64) -> Option<String>| {
+/// `data` named in `lang` by Game Text wherever the tables know the id.
+fn with_game_text(data: &GameData, lang: Lang) -> GameData {
+    let rename = |entries: &[GameDataEntry], kind: GameTextKind| {
         entries
             .iter()
             .map(|e| GameDataEntry {
-                name: name(e.id).unwrap_or_else(|| e.name.clone()),
+                name: game_name(kind, e.id, lang)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| e.name.clone()),
                 ..e.clone()
             })
             .collect()
     };
-    let known = |name: &str, unknown: &str| (name != unknown).then(|| name.to_string());
     GameData {
-        perks: rename(&data.perks, &|id| {
-            known(
-                keystone_name_from_id_localized(id, lang),
-                keystone_name_from_id_localized(0, lang),
-            )
-        }),
-        perk_styles: rename(&data.perk_styles, &|id| {
-            known(
-                rune_style_name_localized(id, lang),
-                rune_style_name_localized(0, lang),
-            )
-        }),
-        spells: rename(&data.spells, &|id| {
-            known(
-                spell_name_from_id_localized(id, lang),
-                spell_name_from_id_localized(0, lang),
-            )
-        }),
-        ..data.clone()
+        items: rename(&data.items, GameTextKind::Item),
+        perks: rename(&data.perks, GameTextKind::Perk),
+        perk_styles: rename(&data.perk_styles, GameTextKind::PerkStyle),
+        spells: rename(&data.spells, GameTextKind::Spell),
+        boots: data.boots.clone(),
     }
 }
 
@@ -196,6 +177,11 @@ pub fn parse_game_data(
     index_names(&mut index.items, &items);
     index_names(&mut index.perks, &perks);
     index_names(&mut index.spells, &spells);
+    for lang in [Lang::En, Lang::Fr] {
+        index_game_text(&mut index.items, GameTextKind::Item, lang, &items);
+        index_game_text(&mut index.perks, GameTextKind::Perk, lang, &perks);
+        index_game_text(&mut index.spells, GameTextKind::Spell, lang, &spells);
+    }
 
     let mut boots: Vec<i64> = index.boots.iter().copied().collect();
     boots.sort_unstable();
@@ -298,6 +284,33 @@ fn index_names(map: &mut HashMap<String, i64>, entries: &[GameDataEntry]) {
         map.entry(key)
             .and_modify(|id| *id = (*id).min(e.id))
             .or_insert(e.id);
+    }
+}
+
+/// Adds the Game Text names of the ids the client knows; a name the client already uses keeps
+/// its id.
+fn index_game_text(
+    map: &mut HashMap<String, i64>,
+    kind: GameTextKind,
+    lang: Lang,
+    entries: &[GameDataEntry],
+) {
+    let known: HashSet<i64> = entries.iter().map(|e| e.id).collect();
+    for &(id, name) in game_names(kind, lang) {
+        if !known.contains(&id) {
+            continue;
+        }
+        let key = normalize_champion_key(name);
+        if key.is_empty() {
+            continue;
+        }
+        map.entry(key)
+            .and_modify(|existing| {
+                if !known.contains(existing) {
+                    *existing = id;
+                }
+            })
+            .or_insert(id);
     }
 }
 

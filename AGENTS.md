@@ -27,6 +27,8 @@ Strings have three homes, each with its own mechanism:
 - **Rust** (errors, labels, alerts): `lang.pick("English", "Français")`.
 - **Mobile page**: add the key under both `en` and `fr` in the `I18N` object of `remote_ui.html`, read with `t(key)`.
 
+Riot names (champions, items, runes, spells, skins) are not strings to translate: look them up by ID with `game_name` / `game_name_or` (Game Text, see CONTEXT.md), never show the client's `name` field directly, since the client may run in any language. After a patch, refresh the tables with `cargo run -p hypatia-core --example update_game_text`.
+
 ## Naming
 
 Player-facing copy says **Observatory** (FR *Observatoire*). Code and older text call the same view Telemetry / Telemetry Lab (`--telemetry`, `Flags::telemetry()`).

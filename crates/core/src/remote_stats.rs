@@ -251,7 +251,7 @@ struct Namer<'a> {
 
 impl<'a> Namer<'a> {
     fn new(app: &'a AppState, lang: Lang, with_game_data: bool) -> Self {
-        let data = with_game_data.then(|| app.stats.game_data());
+        let data = with_game_data.then(|| app.stats.game_data_in(lang));
         let names = GameDataNames::new(data.as_ref().and_then(|d| d.ready()).map(|g| g.as_ref()));
         Self { app, lang, names }
     }
@@ -406,7 +406,7 @@ pub fn champions_view(app: &AppState, params: &StatsParams) -> Vec<ChampionRef> 
     let lang = params.lang(app);
     let mut out: Vec<ChampionRef> = app
         .assets
-        .champion_catalog()
+        .champion_catalog(lang)
         .into_iter()
         .filter(|c| c.id > 0)
         .map(|c| ChampionRef {

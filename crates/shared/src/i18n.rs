@@ -18,15 +18,6 @@ impl Lang {
         }
     }
 
-    /// Whether a Riot client locale such as `fr_FR` or `ko_KR` is this language. `None` (the
-    /// client has not said) counts as yes: its names are then all there is.
-    pub fn spoken_by_client(self, locale: Option<&str>) -> bool {
-        locale.is_none_or(|l| {
-            l.get(..2)
-                .is_some_and(|code| code.eq_ignore_ascii_case(self.as_code()))
-        })
-    }
-
     /// Parses a user/locale tag such as `"fr"`, `"fr-FR"`, `"en"`, `"en_US"`.
     pub fn from_code(raw: &str) -> Option<Self> {
         let low = raw.trim().to_ascii_lowercase();
@@ -67,18 +58,6 @@ impl Lang {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn client_locale_matches_only_its_language() {
-        assert!(Lang::Fr.spoken_by_client(Some("fr_FR")));
-        assert!(!Lang::Fr.spoken_by_client(Some("ko_KR")));
-        assert!(!Lang::En.spoken_by_client(Some("ko_KR")));
-        assert!(Lang::En.spoken_by_client(Some("en_GB")));
-        assert!(
-            Lang::En.spoken_by_client(None),
-            "unknown: the client names are all there is"
-        );
-    }
 
     #[test]
     fn parses_language_codes_and_roundtrips() {

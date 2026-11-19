@@ -783,7 +783,7 @@ fn search_catalog(app: &AppState, text: &str) -> Vec<hypatia_shared::RemoteChamp
     if key.is_empty() {
         return Vec::new();
     }
-    let catalog = app.assets.champion_catalog();
+    let catalog = app.assets.champion_catalog(app.lang());
     let mut starts: Vec<_> = Vec::new();
     let mut contains: Vec<_> = Vec::new();
     for c in catalog {

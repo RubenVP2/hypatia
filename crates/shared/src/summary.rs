@@ -11,6 +11,7 @@ use crate::champions::{
 };
 use crate::draft_helper::{project_champ_select_helper, ChampSelectHelper, HelperStats};
 use crate::event::GamePhase;
+use crate::game_text::{game_name_or, GameTextKind};
 use crate::i18n::Lang;
 use crate::remote::{
     RemoteActiveAction, RemoteChampionOption, RemoteIncomingSwap, RemoteRunePage, RemoteSkinOption,
@@ -1304,7 +1305,7 @@ fn extract_champ_select_summary(
 
     let pickable_ids = parse_id_list(inputs.pickable_champion_ids);
     let bannable_ids = parse_id_list(inputs.bannable_champion_ids);
-    let mut catalog = champions.champion_catalog();
+    let mut catalog = champions.champion_catalog(lang);
     for c in &mut catalog {
         if let Some(ref pids) = pickable_ids {
             if !pids.is_empty() {
@@ -1379,7 +1380,7 @@ fn extract_available_skins(
                 .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
                 .filter_map(|s| {
                     let id = s.get("id")?.as_i64()?;
-                    let name = s.get("name")?.as_str()?.to_string();
+                    let name = game_name_or(GameTextKind::Skin, id, lang, s.get("name")?.as_str()?);
                     let tile_path = s
                         .get("tilePath")
                         .and_then(|v| v.as_str())
@@ -1598,7 +1599,13 @@ fn extract_live_game_summary(
                 skin_id,
                 riot_id: p_riot_id.to_string(),
                 champion_id,
-                champion_name: champ,
+                // The Live Client names champions in the client's language; Hypatia names them
+                // by id in its own.
+                champion_name: Some(champion_id)
+                    .filter(|&id| id > 0)
+                    .map(|id| champions.resolve_champion_name_localized(id, lang))
+                    .filter(|name| !name.starts_with("Champion #"))
+                    .unwrap_or(champ),
                 champion_alias,
                 team,
                 position,

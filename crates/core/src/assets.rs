@@ -5,9 +5,8 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use hypatia_shared::{
-    builtin_champion_roles, is_champion_placeholder, normalize_champion_key,
+    builtin_champion_name, builtin_champion_roles, is_champion_placeholder, normalize_champion_key,
     BuiltinChampionCatalog, ChampionLookup, Lang, RemoteChampionOption, SourceId,
-    BUILTIN_CHAMPIONS,
 };
 use serde_json::Value;
 use tracing::{debug, warn};
@@ -69,9 +68,6 @@ pub struct GameAssetCache {
     meta_synced_port: tokio::sync::Mutex<Option<u16>>,
     demo_warmed_port: AtomicU16,
     champ_names_by_id: RwLock<HashMap<i64, String>>,
-    /// The client's display locale (`fr_FR`, `ko_KR`…), from `/riotclient/region-locale`. Its
-    /// champion names are shown only in the Hypatia language it speaks.
-    client_locale: RwLock<Option<String>>,
     champ_ids_by_key: RwLock<HashMap<String, i64>>,
     champ_paths: RwLock<HashMap<i64, String>>,
     champ_catalog: RwLock<Vec<RemoteChampionOption>>,
@@ -109,7 +105,6 @@ impl GameAssetCache {
             meta_synced_port: tokio::sync::Mutex::new(None),
             demo_warmed_port: AtomicU16::new(0),
             champ_names_by_id: RwLock::new(HashMap::new()),
-            client_locale: RwLock::new(None),
             champ_ids_by_key: RwLock::new(HashMap::new()),
             champ_paths: RwLock::new(HashMap::new()),
             champ_catalog: RwLock::new(Vec::new()),
@@ -435,7 +430,6 @@ impl GameAssetCache {
                 "/lol-game-data/assets/v1/perkstyles.json",
             ),
             ("skins.json", "/lol-game-data/assets/v1/skins.json"),
-            ("region-locale.json", "/riotclient/region-locale"),
         ];
 
         let mut champ_summary_ok = false;
@@ -663,7 +657,6 @@ impl GameAssetCache {
             "perkstyles.json",
             "skins.json",
             "items.json",
-            "region-locale.json",
         ] {
             let p = meta_dir.join(file_name);
             if let Ok(bytes) = std::fs::read(&p) {
@@ -756,14 +749,6 @@ impl GameAssetCache {
                         }
                     }
                 }
-            }
-            "region-locale.json" => {
-                let locale = json
-                    .get("locale")
-                    .and_then(Value::as_str)
-                    .filter(|l| !l.is_empty())
-                    .map(str::to_string);
-                *self.client_locale.write().unwrap() = locale;
             }
             "items.json" => {
                 let Some(arr) = json.as_array() else {
@@ -1203,19 +1188,10 @@ impl ChampionLookup for GameAssetCache {
         if champion_id <= 0 {
             return lang.pick("Selecting...", "Sélection...").to_string();
         }
-        // A Korean client (often kept for its voices) must not put Korean names in a French
-        // Hypatia: client names win only in the language the client speaks.
-        let client_speaks = lang.spoken_by_client(self.client_locale.read().unwrap().as_deref());
-        let builtin = || {
-            BUILTIN_CHAMPIONS
-                .iter()
-                .any(|c| c.id == champion_id)
-                .then(|| BuiltinChampionCatalog.resolve_champion_name_localized(champion_id, lang))
-        };
-        if !client_speaks {
-            if let Some(name) = builtin() {
-                return name;
-            }
+        // Game Text names champions in Hypatia's language whatever the client speaks; the
+        // client's name only covers a champion newer than the tables.
+        if let Some(name) = builtin_champion_name(champion_id, lang) {
+            return name.to_string();
         }
         if let Some(name) = self.champ_names_by_id.read().unwrap().get(&champion_id) {
             return name.clone();
@@ -1223,29 +1199,20 @@ impl ChampionLookup for GameAssetCache {
         BuiltinChampionCatalog.resolve_champion_name_localized(champion_id, lang)
     }
 
-    fn champion_catalog(&self) -> Vec<RemoteChampionOption> {
+    fn champion_catalog(&self, lang: Lang) -> Vec<RemoteChampionOption> {
         let synced = self.champ_catalog.read().unwrap();
         if synced.is_empty() {
-            return BuiltinChampionCatalog.champion_catalog();
+            return BuiltinChampionCatalog.champion_catalog(lang);
         }
         let mut merged: HashMap<i64, RemoteChampionOption> = BuiltinChampionCatalog
-            .champion_catalog()
+            .champion_catalog(lang)
             .into_iter()
             .map(|c| (c.id, c))
             .collect();
-        // The catalog has no language: client names replace built-in ones only when the client
-        // speaks one of Hypatia's languages.
-        let locale = self.client_locale.read().unwrap().clone();
-        let client_names = [Lang::En, Lang::Fr]
-            .iter()
-            .any(|l| l.spoken_by_client(locale.as_deref()));
         for opt in synced.iter() {
             merged
                 .entry(opt.id)
                 .and_modify(|existing| {
-                    if client_names {
-                        existing.name = opt.name.clone();
-                    }
                     if !opt.roles.is_empty() {
                         existing.roles = opt.roles.clone();
                     }
@@ -1270,25 +1237,35 @@ mod tests {
             "champion-summary.json",
             &json!([{ "id": 103, "name": "아리", "alias": "Ahri" }]),
         );
-        cache.ingest_metadata("region-locale.json", &json!({ "locale": "ko_KR" }));
-        assert_eq!(cache.resolve_champion_name_localized(103, Lang::Fr), "Ahri");
-        assert_eq!(cache.resolve_champion_name_localized(103, Lang::En), "Ahri");
-        assert_eq!(cache.resolve_champion_id("Ahri"), 103);
-        let ahri = cache
-            .champion_catalog()
-            .into_iter()
-            .find(|c| c.id == 103)
-            .unwrap();
-        assert_eq!(ahri.name, "Ahri");
-
-        cache.ingest_metadata("region-locale.json", &json!({ "locale": "fr_FR" }));
         cache.ingest_metadata(
             "champion-summary.json",
-            &json!([{ "id": 20, "name": "Nunu et Willump", "alias": "Nunu" }]),
+            &json!([
+                { "id": 103, "name": "아리", "alias": "Ahri" },
+                { "id": 20, "name": "누누와 윌럼프", "alias": "Nunu" },
+                { "id": 9999, "name": "새 챔피언", "alias": "Newcomer" }
+            ]),
         );
+        assert_eq!(cache.resolve_champion_name_localized(103, Lang::Fr), "Ahri");
         assert_eq!(
             cache.resolve_champion_name_localized(20, Lang::Fr),
             "Nunu et Willump"
+        );
+        assert_eq!(
+            cache.resolve_champion_name_localized(20, Lang::En),
+            "Nunu & Willump"
+        );
+        assert_eq!(cache.resolve_champion_id("Ahri"), 103);
+        assert_eq!(cache.resolve_champion_id("Nunu et Willump"), 20);
+        let nunu = cache
+            .champion_catalog(Lang::Fr)
+            .into_iter()
+            .find(|c| c.id == 20)
+            .unwrap();
+        assert_eq!(nunu.name, "Nunu et Willump");
+        assert_eq!(
+            cache.resolve_champion_name_localized(9999, Lang::Fr),
+            "새 챔피언",
+            "a champion newer than Game Text keeps the client's name"
         );
     }
 
@@ -1373,7 +1350,7 @@ mod tests {
         assert_eq!(cache.resolve_champion_id("Garen"), 86);
         assert_eq!(cache.resolve_champion_id("Ahri"), 103);
         assert_eq!(cache.resolve_champion_id("Jade_Ahri"), 60103);
-        let catalog = cache.champion_catalog();
+        let catalog = cache.champion_catalog(Lang::En);
         let garens: Vec<i64> = catalog
             .iter()
             .filter(|c| c.name == "Garen")
@@ -1417,7 +1394,7 @@ mod tests {
             "Sélection..."
         );
 
-        let catalog = cache.champion_catalog();
+        let catalog = cache.champion_catalog(Lang::En);
         assert!(catalog
             .iter()
             .any(|c| c.id == 999 && c.roles == vec!["MIDDLE".to_string()]));

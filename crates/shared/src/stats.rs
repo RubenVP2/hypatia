@@ -460,10 +460,7 @@ impl GameDataNames {
 
     /// The name of `id` in `category` (`item`, `perk`, `style`, `spell`), never empty.
     pub fn name(&self, category: &str, id: i64, lang: crate::i18n::Lang) -> String {
-        use crate::champions::{
-            keystone_name_from_id_localized, rune_style_name_localized,
-            spell_name_from_id_localized,
-        };
+        use crate::game_text::{game_name, GameTextKind};
         let known = match category {
             "item" => self.items.get(&id),
             "perk" => self.perks.get(&id),
@@ -473,27 +470,16 @@ impl GameDataNames {
         if let Some(name) = known.filter(|n| !n.is_empty()) {
             return name.clone();
         }
-        // Built-in names cover keystones, styles and spells; `-1` gives each table's unknown name.
-        let builtin = |lookup: fn(i64, crate::i18n::Lang) -> &'static str| {
-            let name = lookup(id, lang);
-            (name != lookup(-1, lang)).then(|| name.to_string())
+        // Without client data (offline, demo), Game Text still names every id it knows.
+        let (kind, generic) = match category {
+            "item" => (GameTextKind::Item, lang.pick("Item", "Objet")),
+            "perk" => (GameTextKind::Perk, lang.pick("Rune", "Rune")),
+            "style" => (GameTextKind::PerkStyle, lang.pick("Rune path", "Voie")),
+            _ => (GameTextKind::Spell, lang.pick("Spell", "Sort")),
         };
-        let (known, generic) = match category {
-            "perk" => (
-                builtin(keystone_name_from_id_localized),
-                lang.pick("Rune", "Rune"),
-            ),
-            "style" => (
-                builtin(rune_style_name_localized),
-                lang.pick("Rune path", "Voie"),
-            ),
-            "spell" => (
-                builtin(spell_name_from_id_localized),
-                lang.pick("Spell", "Sort"),
-            ),
-            _ => (None, lang.pick("Item", "Objet")),
-        };
-        known.unwrap_or_else(|| format!("{generic} {id}"))
+        game_name(kind, id, lang)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{generic} {id}"))
     }
 }
 
@@ -548,9 +534,10 @@ mod tests {
     }
 
     #[test]
-    fn names_fall_back_to_builtin_tables() {
+    fn names_fall_back_to_game_text() {
         let names = GameDataNames::new(None);
         assert_eq!(names.name("spell", 4, Lang::Fr), "Saut éclair");
-        assert_eq!(names.name("item", 3089, Lang::En), "Item 3089");
+        assert_eq!(names.name("item", 3089, Lang::Fr), "Coiffe de Rabadon");
+        assert_eq!(names.name("item", 999_999, Lang::En), "Item 999999");
     }
 }

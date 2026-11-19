@@ -12,8 +12,13 @@ The single normalized snapshot of the current player state and match lifecycle (
 
 ### Champion Catalog
 The bidirectional lookup uniting Riot numeric champion IDs, localized display names, internal game aliases (such as `rawChampionName` suffixes), and Summoner's Rift role assignments behind one read-only catalog interface.
-- **Invariant**: Live client metadata synced from the running Riot client takes precedence for custom champion icons, and for names only when the client's locale (`/riotclient/region-locale`) is the Hypatia language shown: a Korean client keeps Hypatia's built-in names in English and French. Built-in entries merge in so locale differences never break ID resolution or Jungle/role filtering.
+- **Invariant**: Names come from Game Text by ID in the Hypatia language shown; live client metadata supplies custom champion icons, and its names only for a champion newer than Game Text. Built-in entries merge in so locale differences never break ID resolution or Jungle/role filtering.
 - **Invariant**: Placeholder values (`Selecting...`, `Sélection...`, `None`, `Unknown`) always resolve to champion ID `0`.
+
+### Game Text
+The names of champions, items, runes, rune trees, summoner spells and skins by Riot ID, one table per Hypatia language (`crates/shared/data/game_text/<lang>.tsv`), shipped in the binary and regenerated each patch with `cargo run -p hypatia-core --example update_game_text` (CommunityDragon, at development time only).
+- **Invariant**: The League client's language never reaches the screen: every Riot name shown is looked up by ID in Game Text for the Hypatia language, whatever locale the client runs in (players pick Korean for the voices or the font). The client's own name only fills an ID Game Text does not know yet.
+- **Invariant**: Every language table names the same IDs; a new Hypatia language is a new table plus its `Lang` arm.
 
 ### Position
 Canonical Summoner's Rift role (`Top`, `Jungle`, `Mid`, `Bot`, `Support`, `Fill`) normalizing inconsistent Riot strings (`MIDDLE`/`MID`, `BOTTOM`/`BOT`, `UTILITY`/`SUPPORT`) across lobby role preferences, draft assignments, live client scoreboard slots, and lane filters.

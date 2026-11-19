@@ -12,7 +12,7 @@ The single normalized snapshot of the current player state and match lifecycle (
 
 ### Champion Catalog
 The bidirectional lookup uniting Riot numeric champion IDs, localized display names, internal game aliases (such as `rawChampionName` suffixes), and Summoner's Rift role assignments behind one read-only catalog interface.
-- **Invariant**: Live client metadata synced from the running Riot client takes precedence for localized names and custom champion icons while merging with built-in offline entries so locale differences never break ID resolution or Jungle/role filtering.
+- **Invariant**: Live client metadata synced from the running Riot client takes precedence for custom champion icons, and for names only when the client's locale (`/riotclient/region-locale`) is the Hypatia language shown: a Korean client keeps Hypatia's built-in names in English and French. Built-in entries merge in so locale differences never break ID resolution or Jungle/role filtering.
 - **Invariant**: Placeholder values (`Selecting...`, `Sélection...`, `None`, `Unknown`) always resolve to champion ID `0`.
 
 ### Position
@@ -31,6 +31,7 @@ An enemy champion's last known place on the Live Board: the latest event that cr
 The dpm.lol-style knowledge about champions and the player: Champion Build (runes, spells, items, skill order with rates), Tier List, Matchups, Team Comp profile, and My Stats (the player's own games and per-champion summary). Types live in `crates/shared/src/stats.rs`.
 - **Invariant**: Local data (client game data, Riot recommended pages, local match history) is always available; Online data comes only through a `StatsSource` while `Settings::online_stats` is on, and switched off it performs no I/O.
 - **Invariant**: Every value carries a `StatsOrigin` shown to the player; online requests never carry an identity (summoner name, PUUID, token).
+- **Invariant**: My Stats totals and per-champion summaries count only Summoner's Rift games when the history has any (`summarised_games`), never remakes; ARAM (any Howling Abyss queue, ARAM: Mayhem included) and event modes are listed, not counted, and carry no lane.
 - **Invariant**: Views read Champion Stats only through `ChampionStats` (`AppState::stats`): non-blocking getters returning a `StatsState`, the Change Signal bumped when a fetch lands.
 - **Invariant**: The Mobile Remote's Stats tab reads the same getters through `GET /api/stats/{view}` (`remote_stats`), with the pairing token; it adds no `RemoteCommand`, and the phone cannot switch Online stats. The pushed snapshot's `stats_revision` tells it when a fetch landed.
 

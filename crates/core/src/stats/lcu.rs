@@ -16,6 +16,8 @@ use crate::riot_http::ReadOnlyRiotClient;
 
 /// Summoner's Rift, the only map Riot recommends rune pages for.
 pub const SUMMONERS_RIFT_MAP_ID: i64 = 11;
+/// Howling Abyss: every ARAM variant, whatever its queue id.
+pub const HOWLING_ABYSS_MAP_ID: i64 = 12;
 
 /// The player's last 20 games, newest first. Only the player's own participant is read.
 pub const MATCH_HISTORY_PATH: &str =
@@ -163,11 +165,20 @@ fn parse_game(game: &Value, self_puuid: Option<&str>) -> Option<PlayerGame> {
         perks.collect(),
     );
 
+    // Event queues come and go; the map says whether lanes mean anything.
+    let map_id = int(game, &["mapId"]);
+    let queue = queue_from_id(int(game, &["queueId"])).or(match map_id {
+        HOWLING_ABYSS_MAP_ID => Some(StatsQueue::Aram),
+        _ => None,
+    });
+    let on_rift =
+        map_id == SUMMONERS_RIFT_MAP_ID || queue.is_some_and(StatsQueue::on_summoners_rift);
+
     Some(PlayerGame {
         game_id: int(game, &["gameId"]),
         champion_id,
-        position: position_of(me),
-        queue: queue_from_id(int(game, &["queueId"])),
+        position: if on_rift { position_of(me) } else { None },
+        queue,
         win: stats.get("win").and_then(Value::as_bool).unwrap_or(false),
         duration_secs: count(duration_secs),
         started_at_ms: int(game, &["gameCreation"]),

@@ -57,7 +57,8 @@ impl StatsQueue {
             420 => Some(Self::RankedSolo),
             440 => Some(Self::RankedFlex),
             400 | 430 | 480 | 490 => Some(Self::Normal),
-            450 => Some(Self::Aram),
+            // Howling Abyss: ARAM, ARAM Clash, Butcher's Bridge, ARAM: Mayhem.
+            100 | 450 | 720 | 2400 => Some(Self::Aram),
             1700 | 1710 => Some(Self::Arena),
             _ => None,
         }
@@ -283,6 +284,72 @@ pub struct PlayerGame {
     pub items: Vec<i64>,
     pub runes: Option<RuneSetup>,
     pub spells: SpellPair,
+}
+
+/// Games shorter than this are remakes: listed, but left out of every average.
+pub const REMAKE_SECS: u32 = 300;
+
+impl PlayerGame {
+    /// A ranked or normal game on Summoner's Rift, with lanes.
+    pub fn on_summoners_rift(&self) -> bool {
+        self.queue.is_some_and(StatsQueue::on_summoners_rift)
+    }
+}
+
+/// The games My Stats totals and per-champion summaries are built from: Summoner's Rift games
+/// when there are any, so ARAM and event modes (with very different damage and farm) do not
+/// skew the rates; otherwise every game. Remakes never count. Order is kept.
+pub fn summarised_games(games: &[PlayerGame]) -> Vec<&PlayerGame> {
+    let played = || games.iter().filter(|g| g.duration_secs >= REMAKE_SECS);
+    if played().any(PlayerGame::on_summoners_rift) {
+        played().filter(|g| g.on_summoners_rift()).collect()
+    } else {
+        played().collect()
+    }
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+
+    fn game(id: i64, queue: Option<StatsQueue>, secs: u32) -> PlayerGame {
+        PlayerGame {
+            game_id: id,
+            queue,
+            duration_secs: secs,
+            ..PlayerGame::default()
+        }
+    }
+
+    #[test]
+    fn aram_mayhem_is_aram() {
+        assert_eq!(StatsQueue::from_queue_id(2400), Some(StatsQueue::Aram));
+        assert!(!StatsQueue::Aram.on_summoners_rift());
+    }
+
+    #[test]
+    fn summaries_keep_to_the_rift_when_it_was_played() {
+        let games = vec![
+            game(1, Some(StatsQueue::Aram), 1200),
+            game(2, Some(StatsQueue::RankedSolo), 1500),
+            game(3, None, 1300),
+            game(4, Some(StatsQueue::Normal), 200),
+            game(5, Some(StatsQueue::Normal), 1400),
+        ];
+        let ids: Vec<i64> = summarised_games(&games).iter().map(|g| g.game_id).collect();
+        assert_eq!(
+            ids,
+            vec![2, 5],
+            "ARAM, unknown modes and remakes are left out"
+        );
+
+        let howling_only = vec![game(1, Some(StatsQueue::Aram), 1200), game(2, None, 200)];
+        let ids: Vec<i64> = summarised_games(&howling_only)
+            .iter()
+            .map(|g| g.game_id)
+            .collect();
+        assert_eq!(ids, vec![1], "without Rift games every played game counts");
+    }
 }
 
 /// The My Stats profile: recent games and the per-champion summary derived from them.

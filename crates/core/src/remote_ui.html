@@ -2936,12 +2936,15 @@ button:disabled { cursor: default; }
     if (v.block.state !== "Ready") return head;
     const games = v.games;
     if (!games.length) return head + `<section class="panel"><div class="empty-note">${esc(t("stNoGames"))}</div></section>`;
-    const wins = games.filter(g => g.win).length;
-    const sum = (f) => games.reduce((n, g) => n + Number(f(g) || 0), 0);
+    // Totals cover the summarised games (Summoner's Rift when there are any); ARAM, event
+    // modes and remakes stay in the list below.
+    const counted = games.filter(g => g.summarised);
+    const wins = counted.filter(g => g.win).length;
+    const sum = (f) => counted.reduce((n, g) => n + Number(f(g) || 0), 0);
     const minutes = Math.max(1, sum(g => g.duration_secs) / 60);
     const tile = (val, label) => `<div class="tile"><b>${esc(val)}</b><span>${esc(label)}</span></div>`;
     const totals = `<div class="st-tiles">
-        <div class="tile wide"><b>${esc(fmtPct(wins / games.length))}</b><span>${esc(t("stWinRate"))} · ${esc(t("stRecord", wins, games.length - wins))}</span></div>
+        <div class="tile wide"><b>${esc(fmtPct(wins / Math.max(1, counted.length)))}</b><span>${esc(t("stWinRate"))} · ${esc(t("stRecord", wins, counted.length - wins))}</span></div>
         ${tile(fmtDec(kdaRatio(sum(g => g.kills), sum(g => g.deaths), sum(g => g.assists))), t("kdaRatio"))}
         ${tile(fmtDec(sum(g => g.cs) / minutes), t("csMin"))}
         ${tile(fmtNum(Math.round(sum(g => g.damage_to_champions) / minutes)), t("stDpm"))}

@@ -334,7 +334,7 @@ impl ChampionStats {
                 inner.landed();
             });
         }
-        map_state(state, |g| g.data.clone())
+        map_state(state, |g| g.for_lang(lang))
     }
 
     /// Riot's recommended rune pages and summoner spells for a champion and position, read from

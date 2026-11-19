@@ -11,9 +11,9 @@ use std::collections::HashMap;
 
 use hypatia_shared::links::{self, DPM_TIER_LIST};
 use hypatia_shared::{
-    builtin_champion_roles, default_stats_position, Attribution, ChampionBuild, ChampionLookup,
-    GameDataNames, ItemStage, Lang, Position, RankBracket, Rates, RuneSetup, Skill, StatsOrigin,
-    StatsQuery, StatsQueue, StatsState, StatsUnavailable, Tier,
+    builtin_champion_roles, default_stats_position, summarised_games, Attribution, ChampionBuild,
+    ChampionLookup, GameDataNames, ItemStage, Lang, Position, RankBracket, Rates, RuneSetup, Skill,
+    StatsOrigin, StatsQuery, StatsQueue, StatsState, StatsUnavailable, Tier,
 };
 use serde::{Deserialize, Serialize};
 
@@ -216,6 +216,8 @@ pub struct GameRow {
     pub damage_to_champions: u32,
     pub duration_secs: u32,
     pub started_at_ms: i64,
+    /// Counted in the totals ([`summarised_games`]); ARAM, event modes and remakes are only listed.
+    pub summarised: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -663,6 +665,10 @@ pub fn profile_view(app: &AppState, params: &StatsParams) -> ProfileView {
             .or_insert_with(|| namer.champion_name(id))
             .clone()
     };
+    let counted: Vec<i64> = summarised_games(&profile.games)
+        .iter()
+        .map(|g| g.game_id)
+        .collect();
     let games = profile
         .games
         .iter()
@@ -678,6 +684,7 @@ pub fn profile_view(app: &AppState, params: &StatsParams) -> ProfileView {
             damage_to_champions: g.damage_to_champions,
             duration_secs: g.duration_secs,
             started_at_ms: g.started_at_ms,
+            summarised: counted.contains(&g.game_id),
         })
         .collect();
     let champions = profile

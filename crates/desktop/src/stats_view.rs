@@ -11,9 +11,9 @@ use std::sync::Arc;
 use hypatia_core::AppState;
 use hypatia_shared::{
     builtin_champion_roles, default_stats_position as default_position, normalize_champion_key,
-    ChampionBuild, ChampionLookup, GameData, GameDataNames as Names, Lang, MatchupList,
-    PlayerProfile, Position, RankBracket, Rates, RuneSetup, Skill, StatsOrigin, StatsQuery,
-    StatsQueue, StatsState, StatsUnavailable, Tier, TierList,
+    summarised_games, ChampionBuild, ChampionLookup, GameData, GameDataNames as Names, Lang,
+    MatchupList, PlayerProfile, Position, RankBracket, Rates, RuneSetup, Skill, StatsOrigin,
+    StatsQuery, StatsQueue, StatsState, StatsUnavailable, Tier, TierList,
 };
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
@@ -522,7 +522,9 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         return;
     };
 
-    let games = &profile.games;
+    // Totals cover the summarised games (Summoner's Rift when there are any); the list below
+    // keeps every game.
+    let games = summarised_games(&profile.games);
     let n = games.len().max(1) as f32;
     let wins = games.iter().filter(|g| g.win).count() as f32;
     let (k, d, a) = games.iter().fold((0u32, 0u32, 0u32), |t, g| {

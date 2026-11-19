@@ -4,7 +4,10 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use hypatia_shared::{normalize_champion_key, GameData, GameDataEntry};
+use hypatia_shared::{
+    keystone_name_from_id_localized, normalize_champion_key, rune_style_name_localized,
+    spell_name_from_id_localized, GameData, GameDataEntry, Lang,
+};
 use serde_json::Value;
 
 use super::Fail;
@@ -58,6 +61,69 @@ pub struct LoadedGameData {
     pub index: Arc<GameDataIndex>,
     /// Client locale such as `fr_FR`, when the client told us.
     pub locale: Option<String>,
+    /// `data` as each Hypatia language shows it, indexed by `Lang as usize`: the client's own
+    /// names when it speaks that language, else built-in names for spells, keystones and rune
+    /// trees (items and minor runes exist only in the client's language).
+    pub by_lang: [Arc<GameData>; 2],
+}
+
+impl LoadedGameData {
+    fn new(data: GameData, index: GameDataIndex, locale: Option<String>) -> Self {
+        let data = Arc::new(data);
+        let by_lang = [Lang::En, Lang::Fr].map(|lang| {
+            if lang.spoken_by_client(locale.as_deref()) {
+                data.clone()
+            } else {
+                Arc::new(with_builtin_names(&data, lang))
+            }
+        });
+        Self {
+            data,
+            index: Arc::new(index),
+            locale,
+            by_lang,
+        }
+    }
+
+    /// The game data as `lang` shows it.
+    pub fn for_lang(&self, lang: Lang) -> Arc<GameData> {
+        self.by_lang[lang as usize].clone()
+    }
+}
+
+/// `data` with Hypatia's own names wherever it has one for that id.
+fn with_builtin_names(data: &GameData, lang: Lang) -> GameData {
+    let rename = |entries: &[GameDataEntry], name: &dyn Fn(i64) -> Option<String>| {
+        entries
+            .iter()
+            .map(|e| GameDataEntry {
+                name: name(e.id).unwrap_or_else(|| e.name.clone()),
+                ..e.clone()
+            })
+            .collect()
+    };
+    let known = |name: &str, unknown: &str| (name != unknown).then(|| name.to_string());
+    GameData {
+        perks: rename(&data.perks, &|id| {
+            known(
+                keystone_name_from_id_localized(id, lang),
+                keystone_name_from_id_localized(0, lang),
+            )
+        }),
+        perk_styles: rename(&data.perk_styles, &|id| {
+            known(
+                rune_style_name_localized(id, lang),
+                rune_style_name_localized(0, lang),
+            )
+        }),
+        spells: rename(&data.spells, &|id| {
+            known(
+                spell_name_from_id_localized(id, lang),
+                spell_name_from_id_localized(0, lang),
+            )
+        }),
+        ..data.clone()
+    }
 }
 
 /// Parses the four client JSONs. Unknown shapes yield empty lists, never a panic.
@@ -184,11 +250,7 @@ pub(crate) async fn load(
         _ => None,
     };
     let (data, index) = parse_game_data(&bodies[0], &bodies[1], &bodies[2], &bodies[3]);
-    Ok(LoadedGameData {
-        data: Arc::new(data),
-        index: Arc::new(index),
-        locale,
-    })
+    Ok(LoadedGameData::new(data, index, locale))
 }
 
 fn array(value: &Value) -> &[Value] {

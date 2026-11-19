@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
-use hypatia_shared::{PlayerChampionStats, PlayerGame, PlayerProfile, RuneSetup, StatsOrigin};
+use hypatia_shared::{
+    summarised_games, PlayerChampionStats, PlayerGame, PlayerProfile, RuneSetup, StatsOrigin,
+};
 
-/// Games shorter than this are remakes: listed, but left out of every average.
-pub const REMAKE_SECS: u32 = 300;
+pub use hypatia_shared::REMAKE_SECS;
 
 /// Items that say nothing about a build: trinkets, potions, wards, elixirs.
 const NON_BUILD_ITEMS: &[i64] = &[
@@ -26,12 +27,13 @@ pub fn build_profile(mut games: Vec<PlayerGame>, origin: StatsOrigin) -> PlayerP
     }
 }
 
-/// One summary per champion, most played first (ties: most recent first). Remakes are skipped.
+/// One summary per champion, most played first (ties: most recent first), over
+/// [`summarised_games`]: Summoner's Rift games when there are any, never remakes.
 /// `games` should be newest first: ties between rune pages and items go to the most recent.
 pub fn aggregate_champions(games: &[PlayerGame]) -> Vec<PlayerChampionStats> {
     let mut order: Vec<i64> = Vec::new();
     let mut by_champion: HashMap<i64, Vec<&PlayerGame>> = HashMap::new();
-    for game in games.iter().filter(|g| counts(g)) {
+    for game in summarised_games(games) {
         by_champion
             .entry(game.champion_id)
             .or_insert_with(|| {
@@ -87,10 +89,6 @@ pub fn summarize(champion_id: i64, games: &[&PlayerGame]) -> PlayerChampionStats
 /// `(kills + assists) / max(deaths, 1)`, the usual KDA ratio.
 pub fn kda_ratio(stats: &PlayerChampionStats) -> f32 {
     (stats.kills + stats.assists) / stats.deaths.max(1.0)
-}
-
-fn counts(game: &PlayerGame) -> bool {
-    game.duration_secs >= REMAKE_SECS
 }
 
 fn most_used_runes(games: &[&PlayerGame]) -> Option<RuneSetup> {

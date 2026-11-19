@@ -48,6 +48,10 @@ pub struct Cli {
     /// Pin a specific phase in Demo mode (lobby, queue, ready, champ-select, live, end)
     #[arg(long)]
     pub phase: Option<String>,
+
+    /// Open the Stats page on launch at a tab (build, tiers, matchups, mine)
+    #[arg(long, value_name = "TAB", num_args = 0..=1, default_missing_value = "build")]
+    pub stats: Option<String>,
 }
 
 impl Cli {
@@ -61,6 +65,17 @@ impl Cli {
             "live" | "inprogress" | "game" => "InProgress",
             "end" | "eog" | "endofgame" => "EndOfGame",
             _ => "ChampSelect",
+        })
+    }
+
+    /// Stats page tab for `--stats`, if given (0 build, 1 tier list, 2 matchups, 3 my stats).
+    pub fn stats_tab(&self) -> Option<i32> {
+        let tab = self.stats.as_deref()?;
+        Some(match tab.to_ascii_lowercase().as_str() {
+            "tiers" | "tier" | "tier-list" => 1,
+            "matchups" | "matchup" => 2,
+            "mine" | "my-stats" | "me" => 3,
+            _ => 0,
         })
     }
 }

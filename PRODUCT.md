@@ -25,7 +25,7 @@ Give every player a simple, immediately readable companion for champion select a
 ## Positioning
 
 Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
-- **100 % local, no account**: nothing leaves the machine, no sign-up, no ads, no telemetry.
+- **100 % local by default, no account**: nothing leaves the machine unless the player turns on Online stats, which sends no identity; no sign-up, no ads, no telemetry.
 - **Safe for the account**: read-only, no overlay injected into the game, no automation of any kind.
 - **Light and discreet**: fast start, low CPU and memory, does not cost FPS.
 - **Transparent**: shows exactly what the Riot client exposes, with the Observatory for those who want to look under the hood.
@@ -40,7 +40,8 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 
 - Match phases tracked: Lobby, Matchmaking queue, Champion select, Live game (port 2999), End of game. Player-facing focus is Champion select and Live game.
 - **Read-only by default, with an explicit opt-in Mobile Remote exception for accessibility**: the desktop observatory (`ReadOnlyRiotClient`) performs strictly `GET` requests and passive WebSocket subscriptions. When the user explicitly activates **Mobile Remote** (via the desktop UI toggle or `--remote`), a separate `LcuActionClient` and local LAN server paired via a 128-bit QR token allow one-handed mobile control of lobby role selection, queue start/stop, ready-check accept/decline, champion hover/lock, summoner spells, skins, rune pages, and role/pick-order/champion swaps. Every LCU write belongs to a closed enum allowlist (`RemoteCommand`) and requires an explicit user tap — zero background automation.
-- **Local data only**: every piece of information comes from local Riot APIs. No external stats services (champion win rates, builds, match history from third-party sites) unless this is revisited explicitly.
+- **Local data first**: every piece of information comes from local Riot APIs by default. **Champion Stats** (builds, runes, items, skill order, tier list, matchups, team comp, My Stats) are built from the client's own game data, Riot's recommended rune pages and the player's local match history.
+- **Online stats, opt-in only** (revisited 2026-11-18): global win rates, builds, tier list and matchups may come from one online provider, behind the `online_stats` setting, **off by default**. Switched off it performs no I/O. When on, requests carry only champion, role, queue, rank bracket, patch and the language names should come back in, never a summoner name, PUUID, token or anything from the lockfile. Every value is labelled with its origin (Local, Riot client, Online, Demo), and Online values link to the provider page they came from (MetaBot.GG, see `docs/research/online-stats-source.md`).
 - **Respect Riot anonymization**: in Ranked Solo/Duo champion select, ally identities are hidden by Riot; Hypatia must never try to reveal them.
 - Secrets (lockfile passwords, tokens, JWTs, PUUIDs) masked by default; only revealable in the Observatory.
 - **Observatory** (closed by default, opened from the left rail or `--telemetry`): live WAMP event stream, `GET` endpoint catalog and runner, JSON inspector and diff, Riot processes and ports.
@@ -48,7 +49,7 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 
 ## Evidence on Hand
 
-- Demo fixtures in `crates/core/src/fixtures.rs` simulate all five match phases, WAMP streams and callable endpoints; usable for screenshots and design work without League running. Demo data must stay clearly labelled as demo.
+- Demo fixtures in `crates/core/src/fixtures.rs` simulate all five match phases, WAMP streams and callable endpoints; usable for screenshots and design work without League running. Demo data must stay clearly labelled as demo. Demo Mode is a developer tool: the release build shows it only when launched with `--demo`; debug builds always offer it.
 - Data model of what can be shown: `crates/shared/src/summary.rs` (summoner, lobby, matchmaking, champion select, live game players and events).
 - No testimonials, user counts or press exist; do not fabricate any.
 

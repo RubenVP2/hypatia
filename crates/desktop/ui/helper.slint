@@ -1,0 +1,519 @@
+// Champ-select helper: the player's build (runes, spells, core items), lane matchup, both
+// teams' damage split and comp traits, and draft tips. Filled from the Match Projection's
+// `ChampSelectHelper` by `companion::build_helper_view`; every value carries its origin chip
+// and Online values the provider link.
+
+import { Theme, Type, Space } from "theme.slint";
+import { Card, Divider, GameIconBadge, Roundel, SectionLabel } from "parts.slint";
+
+export struct HelperIcon {
+    icon: image,
+    name: string,
+    initials: string,
+}
+
+export struct HelperChip {
+    label: string,
+    // A gap in the comp (no frontline, all magic...) rather than a strength.
+    gap: bool,
+}
+
+export struct HelperTeam {
+    // Fractions of physical / magic / true damage; all zero while no champion is known.
+    physical: float,
+    magic: float,
+    true-damage: float,
+    known: bool,
+    // Trait chips in two rows of at most two, gaps first.
+    traits: [HelperChip],
+    traits-more: [HelperChip],
+}
+
+export struct HelperView {
+    // False outside champion select; the panel is not drawn.
+    shown: bool,
+    has-champion: bool,
+    champion: string,
+    // "Mid", "" when the position is unknown.
+    position: string,
+    lane: int,
+    // "51.2% win rate" when Online data has it.
+    win-rate: string,
+    empty-note: string,
+
+    has-runes: bool,
+    keystone: HelperIcon,
+    primary-style: HelperIcon,
+    sub-style: HelperIcon,
+    runes-origin: string,
+    runes-online: bool,
+    runes-rate: string,
+
+    has-spells: bool,
+    spell1: HelperIcon,
+    spell2: HelperIcon,
+    spells-origin: string,
+    spells-online: bool,
+
+    items: [HelperIcon],
+    items-origin: string,
+    items-online: bool,
+    items-rate: string,
+
+    has-lane: bool,
+    lane-enemy: HelperIcon,
+    lane-line: string,
+    lane-rate: string,
+    lane-origin: string,
+    lane-online: bool,
+
+    mine: HelperTeam,
+    theirs: HelperTeam,
+    tips: [string],
+
+    // Discreet line under the panel: Online stats off, loading, or failed.
+    hint: string,
+    // Where the shown values come from, for the mini widget ("Riot client · Online").
+    sources: string,
+    attribution: string,
+    attribution-url: string,
+}
+
+// Where a value comes from: Riot client, Online, Your games, Demo.
+component OriginChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> online: false;
+    height: 18px;
+    width: chip-text.preferred-width + 10px;
+    border-radius: Theme.radius-sm;
+    background: root.online ? Theme.accent.with-alpha(0.12) : Theme.panel-raised;
+    border-width: 1px;
+    border-color: root.online ? Theme.accent.with-alpha(0.5) : Theme.rule;
+    accessible-role: text;
+    accessible-label: @tr("Source: {0}", root.label);
+    chip-text := Text {
+        text: root.label;
+        color: root.online ? Theme.accent : Theme.muted;
+        font-family: Type.mono-family;
+        font-size: Type.label;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// The provider credit Online data requires: a visible link to the page it came from.
+component SourceLink inherits Rectangle {
+    in property <string> label;
+    in property <string> url;
+    callback open(string);
+    height: 18px;
+    width: link-text.preferred-width;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.open(root.url); }
+    link-text := Text {
+        text: root.label;
+        color: touch.has-hover ? Theme.text : Theme.accent;
+        font-size: Type.label;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        y: parent.height - 2px;
+        height: 1px;
+        background: link-text.color;
+        opacity: 0.7;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.open(root.url); }
+    }
+}
+
+// Damage type inks. Not team, lane or signal colors: gold for physical, Hextech cyan for magic,
+// ivory for true damage.
+global DamageInk {
+    out property <color> physical: Theme.dark ? #d29a52 : #9a5f14;
+    out property <color> magic: Theme.dark ? #4fb8e8 : #1f6fa8;
+    out property <color> true-damage: Theme.dark ? #eef0f5 : #4c5364;
+}
+
+// Damage split of one team: a segmented bar (physical, magic, true) with its share in words.
+component DamageBar inherits VerticalLayout {
+    in property <string> team-label;
+    in property <bool> mine: true;
+    in property <HelperTeam> team;
+    property <float> phys: root.team.physical;
+    property <float> mag: root.team.magic;
+    property <float> tru: root.team.true-damage;
+    property <bool> known: root.team.known;
+    spacing: Space.xs;
+    accessible-role: text;
+    accessible-label: root.known
+        ? @tr("{0}: {1}% physical, {2}% magic, {3}% true damage", root.team-label, Math.round(root.phys * 100), Math.round(root.mag * 100), Math.round(root.tru * 100))
+        : @tr("{0}: no champion yet", root.team-label);
+
+    HorizontalLayout {
+        spacing: Space.sm;
+        Text {
+            text: root.team-label;
+            color: root.mine ? Theme.blue-soft : Theme.red-soft;
+            font-size: Type.label;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if root.known: Text {
+            text: @tr("{0}% AD · {1}% AP", Math.round(root.phys * 100), Math.round(root.mag * 100));
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        height: 8px;
+        border-radius: 4px;
+        clip: true;
+        background: Theme.panel-raised;
+        border-width: root.known ? 0px : 1px;
+        border-color: Theme.rule;
+        if root.known: Rectangle {
+            x: 0px;
+            width: parent.width * root.phys;
+            background: DamageInk.physical;
+        }
+        if root.known: Rectangle {
+            x: parent.width * root.phys;
+            width: parent.width * root.mag;
+            background: DamageInk.magic;
+        }
+        if root.known: Rectangle {
+            x: parent.width * (root.phys + root.mag);
+            width: parent.width * root.tru;
+            background: DamageInk.true-damage;
+        }
+    }
+}
+
+component TraitChip inherits Rectangle {
+    in property <HelperChip> chip;
+    property <bool> gap: root.chip.gap;
+    height: 20px;
+    width: trait-text.preferred-width + 12px;
+    border-radius: Theme.radius-sm;
+    background: root.gap ? Theme.danger-soft : Theme.panel-raised;
+    border-width: 1px;
+    border-color: root.gap ? Theme.danger.with-alpha(0.55) : Theme.rule;
+    trait-text := Text {
+        text: root.chip.label;
+        color: root.gap ? Theme.red-soft : Theme.text;
+        font-size: Type.label;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Trait chips on one line, clipped rather than widening the column (Rust sends two per row).
+component ChipRow inherits Rectangle {
+    in property <[HelperChip]> chips;
+    height: root.chips.length > 0 ? 20px : 0px;
+    min-width: 0px;
+    clip: true;
+    HorizontalLayout {
+        spacing: Space.xs;
+        alignment: start;
+        for c in root.chips: TraitChip { chip: c; }
+    }
+}
+
+// One build line: label column, content, origin chip on the right.
+component BuildLine inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> origin;
+    in property <bool> online: false;
+    spacing: Space.sm;
+    Text {
+        width: 58px;
+        text: root.label;
+        color: Theme.muted;
+        font-size: Type.label;
+        font-weight: 600;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    @children
+    if root.origin != "": VerticalLayout {
+        alignment: center;
+        OriginChip { label: root.origin; online: root.online; }
+    }
+}
+
+// Runes, spells and items of the player's pick.
+component BuildBlock inherits VerticalLayout {
+    in property <HelperView> h;
+    property <HelperIcon> keystone: root.h.keystone;
+    property <HelperIcon> primary: root.h.primary-style;
+    property <HelperIcon> secondary: root.h.sub-style;
+    property <HelperIcon> spell1: root.h.spell1;
+    property <HelperIcon> spell2: root.h.spell2;
+    spacing: Space.sm;
+
+    if root.h.has-runes: BuildLine {
+        label: @tr("Runes");
+        origin: root.h.runes-origin;
+        online: root.h.runes-online;
+        height: 40px;
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: Space.sm;
+            GameIconBadge {
+                y: (parent.height - self.height) / 2;
+                size: 36px;
+                icon: root.keystone.icon;
+                fallback-text: root.keystone.initials;
+                border: Theme.gold;
+                border-radius: 18px;
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.keystone.name;
+                    color: Theme.text;
+                    font-size: Type.body;
+                    font-weight: 800;
+                    overflow: elide;
+                }
+                HorizontalLayout {
+                    spacing: Space.xs;
+                    GameIconBadge { size: 14px; icon: root.primary.icon; border: transparent; badge-bg: transparent; }
+                    Text {
+                        text: root.secondary.name != ""
+                            ? @tr("{0} + {1}", root.primary.name, root.secondary.name)
+                            : root.primary.name;
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        overflow: elide;
+                    }
+                    if root.h.runes-rate != "": Text {
+                        overflow: elide;
+                        text: root.h.runes-rate;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                    }
+                }
+            }
+        }
+    }
+
+    if root.h.has-spells: BuildLine {
+        label: @tr("Spells");
+        origin: root.h.spells-origin;
+        online: root.h.spells-online;
+        height: 30px;
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: Space.sm;
+            GameIconBadge { y: (parent.height - self.height) / 2; size: 28px; icon: root.spell1.icon; fallback-text: root.spell1.initials; }
+            GameIconBadge { y: (parent.height - self.height) / 2; size: 28px; icon: root.spell2.icon; fallback-text: root.spell2.initials; }
+            Text {
+                horizontal-stretch: 1;
+                text: @tr("{0} + {1}", root.spell1.name, root.spell2.name);
+                color: Theme.text;
+                font-size: Type.small;
+                font-weight: 600;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    if root.h.items.length > 0: BuildLine {
+        label: @tr("Core items");
+        origin: root.h.items-origin;
+        online: root.h.items-online;
+        height: 50px;
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: Space.sm;
+            for item in root.h.items: VerticalLayout {
+                width: 60px;
+                spacing: Space.xxs;
+                alignment: start;
+                HorizontalLayout {
+                    alignment: center;
+                    GameIconBadge { size: 32px; icon: item.icon; fallback-text: item.initials; }
+                }
+                Text {
+                    text: item.name;
+                    color: Theme.muted;
+                    font-size: Type.label;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
+
+    if !root.h.has-runes && !root.h.has-spells && root.h.items.length == 0: Text {
+        text: root.h.empty-note;
+        color: Theme.muted;
+        font-size: Type.small;
+        wrap: word-wrap;
+    }
+
+    if root.h.has-lane: Divider {}
+    if root.h.has-lane: HorizontalLayout {
+        height: 30px;
+        spacing: Space.sm;
+        accessible-role: text;
+        accessible-label: root.h.lane-line + (root.h.lane-rate != "" ? ", " + root.h.lane-rate : "");
+        Roundel { y: (parent.height - self.height) / 2; lane: root.h.lane; size: 22px; }
+        Text {
+            text: root.h.lane-line;
+            color: Theme.text;
+            font-size: Type.body;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+        GameIconBadge {
+            y: (parent.height - self.height) / 2;
+            size: 24px;
+            icon: root.h.lane-enemy.icon;
+            fallback-text: root.h.lane-enemy.initials;
+            border: Theme.red;
+            border-radius: 12px;
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.h.lane-rate;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.h.lane-origin != "": VerticalLayout {
+            alignment: center;
+            OriginChip { label: root.h.lane-origin; online: root.h.lane-online; }
+        }
+    }
+}
+
+// Both teams' damage split and traits, then the draft tips.
+component CompBlock inherits VerticalLayout {
+    in property <HelperView> h;
+    // Bound once each, so an empty row is left out instead of adding layout spacing.
+    property <[HelperChip]> mine-1: root.h.mine.traits;
+    property <[HelperChip]> mine-2: root.h.mine.traits-more;
+    property <[HelperChip]> theirs-1: root.h.theirs.traits;
+    property <[HelperChip]> theirs-2: root.h.theirs.traits-more;
+    spacing: Space.sm;
+
+    DamageBar { team-label: @tr("Your team"); mine: true; team: root.h.mine; }
+    if root.mine-1.length > 0: ChipRow { chips: root.mine-1; }
+    if root.mine-2.length > 0: ChipRow { chips: root.mine-2; }
+    DamageBar { team-label: @tr("Enemy team"); mine: false; team: root.h.theirs; }
+    if root.theirs-1.length > 0: ChipRow { chips: root.theirs-1; }
+    if root.theirs-2.length > 0: ChipRow { chips: root.theirs-2; }
+    HorizontalLayout {
+        spacing: Space.md;
+        alignment: start;
+        for k[i] in [
+            { label: @tr("Physical"), ink: DamageInk.physical },
+            { label: @tr("Magic"), ink: DamageInk.magic },
+            { label: @tr("True"), ink: DamageInk.true-damage },
+        ]: HorizontalLayout {
+            spacing: Space.xs;
+            Rectangle { y: (parent.height - self.height) / 2; width: 8px; height: 8px; border-radius: 2px; background: k.ink; }
+            Text { text: k.label; color: Theme.muted; font-size: Type.label; vertical-alignment: center; }
+        }
+    }
+
+    if root.h.tips.length > 0: Divider {}
+    for tip in root.h.tips: HorizontalLayout {
+        spacing: Space.sm;
+        Rectangle {
+            width: 4px;
+            VerticalLayout {
+                padding-top: 6px;
+                alignment: start;
+                Rectangle { width: 4px; height: 4px; border-radius: 2px; background: Theme.gold-bright; }
+            }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: tip;
+            color: Theme.text;
+            font-size: Type.small;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// The full helper card of the champion select screen. Side by side when wide, stacked when
+// narrow (split Observatory, small window).
+export component DraftHelperPanel inherits Card {
+    in property <HelperView> h;
+    in property <bool> narrow: false;
+    callback open-link(string);
+
+    VerticalLayout {
+        padding: Space.md;
+        spacing: Space.md;
+
+        HorizontalLayout {
+            spacing: Space.sm;
+            height: 22px;
+            SectionLabel { text: @tr("YOUR BUILD"); vertical-alignment: center; }
+            if root.h.has-champion: Text {
+                text: root.h.position != "" ? @tr("{0} · {1}", root.h.champion, root.h.position) : root.h.champion;
+                color: Theme.text;
+                font-family: Type.display-family;
+                font-size: Type.name;
+                font-weight: 800;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.h.win-rate != "": Text {
+                text: root.h.win-rate;
+                color: Theme.muted;
+                font-family: Type.mono-family;
+                font-size: Type.label;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.h.attribution != "": SourceLink {
+                y: (parent.height - self.height) / 2;
+                label: root.h.attribution;
+                url: root.h.attribution-url;
+                open(url) => { root.open-link(url); }
+            }
+        }
+
+        if !root.narrow: HorizontalLayout {
+            spacing: Space.xl;
+            BuildBlock { horizontal-stretch: 3; h: root.h; }
+            Rectangle { width: 1px; background: Theme.rule; }
+            CompBlock { horizontal-stretch: 2; h: root.h; }
+        }
+        if root.narrow: VerticalLayout {
+            spacing: Space.md;
+            BuildBlock { h: root.h; }
+            Divider {}
+            CompBlock { h: root.h; }
+        }
+
+        if root.h.hint != "": Text {
+            text: root.h.hint;
+            color: Theme.muted;
+            font-size: Type.label;
+            wrap: word-wrap;
+        }
+    }
+}

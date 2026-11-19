@@ -180,6 +180,10 @@ One direction, Hextech: Hypatia's instrument grammar dressed in League's own mat
 - **Hextech Cyan** (`#0ac8b9` Night / `#087c73` Day): calm accent tint behind headers when no artwork is cached.
 - Gold is a material, never a signal: it does not replace amber for "act now".
 
+### Damage Inks
+Used only by the Draft Helper's damage split bar and its legend, never as team, lane or signal colors.
+- **Physical** (`#d29a52` Night / `#9a5f14` Day), **Magic** (`#4fb8e8` Night / `#1f6fa8` Day), **True** (`#eef0f5` Night / `#4c5364` Day).
+
 ### Client Artwork
 Imagery comes only from the player's own League client, fetched read-only over the LCU and never bundled or redistributed (`hypatia_core::art`, asset category `art`):
 - **Painted Summoner's Rift** (`map-south` / `map-north`, beam on the player's base) behind the `LineMap` markers; the vector rift remains the fallback.
@@ -221,7 +225,7 @@ Each piece is cropped, downscaled to about twice its largest on-screen size, and
 
 ## Layout
 
-Desktop uses a split horizontal shell: a fixed `216px` left workspace rail (scrollable when the window is short) housing Hypatia branding with its descriptor, mode switches (`Companion`, `Observatory`, `Mobile Remote`, `Performance`), optional demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and EN/FR and Night/Day controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter). Every gap and padding comes from the spacing scale (`Space.xxs` 2 to `Space.xl` 20).
+Desktop uses a split horizontal shell: a fixed `216px` left workspace rail (scrollable when the window is short) housing Hypatia branding with its descriptor, mode switches (`Companion`, `Stats`, `Observatory`, `Mobile Remote`, `Performance`), optional demo keypad, live Riot source health (`LCU`, `Riot Client`, `Live Game :2999`), and EN/FR and Night/Day controls; beside a `52px` phase progression ticker and a scrollable (`Flickable`) content stage (`20px` gutter). Every gap and padding comes from the spacing scale (`Space.xxs` 2 to `Space.xl` 20).
 
 When the Observatory opens in split mode (`horizontal-stretch` 3:2 split, `min-width: 380px` telemetry pane) or window width drops, Companion phase views detect `compact: width < 680px` and stack secondary panels cleanly beneath primary draft/match rosters without compressing labels. Mobile Remote flows in a single `560px` max-width centered column with a sticky topbar and a fixed thumb-zone bottom dock. The dock carries the phase's tabs and its one main action (Accept with a separate Decline below, Lock/Ban during your turn). Every tap target is at least `44px` (demo chips excepted). A state push patches the page in place instead of rebuilding it, so images do not reload, one-shot animations do not replay, and the scroll and the search field keep their place.
 
@@ -234,7 +238,7 @@ When the Observatory opens in split mode (`horizontal-stretch` 3:2 split, `min-w
 
 ## Elevation & Depth
 
-Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only the pairing and Performance sheets dim the canvas, with the themed `scrim` token (Night `#090b0fb3`, Day `#14171f73`); both close on backdrop click or Esc.
+Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only dialogs dim the canvas, with the themed `scrim` token (Night `#090b0fb3`, Day `#14171f73`). Every dialog is a `ModalSheet` (`parts.slint`): panel centered both ways over the canvas, scrolling when taller than the window, header with title, status line and Close, closing on backdrop click or Esc. Text inside a sheet wraps; nothing is clipped or pushed past its frame (the pairing URL wraps and has a Copy button).
 
 ### Named Rules
 **The Full-Perimeter 1px Rule.** Highlighted rows and alerts distinguish themselves through background tint (`signal-soft`, `danger-soft`, `green-soft`), leading icons/roundels, and `1px` full-perimeter borders — never thick (>1px) left or right accent stripes.
@@ -254,10 +258,20 @@ All interactive controls, inputs, status chips, and tabs share a crisp `4px` (`r
 - **Left Rail Item (`RailNavItem`):** `36px` height, `4px` radius, left `16×16` vector `Path` icon (`2px` stroke); active state is a `panel-raised` fill, `rule-strong` border and `text`-colored icon.
 - **Phase Ticker (`PhaseLine`):** Five milestones (`LOBBY`, `QUEUE`, `CHAMPIONS`, `LIVE`, `RESULTS`; FR `SALON`, `FILE`, `CHAMPIONS`, `EN JEU`, `RÉSULTATS`), a `2px` rail filling to `signal` up to the current phase over `240ms`.
 - **Mobile Tab Bar:** Equal-width grid in the bottom dock (`Pick`, `Skins`, `Loadout`, `Team` in draft; `Allies`, `Enemies` in game); the active tab is an ivory plate. An amber dot on `Team` flags an incoming swap request.
+- **Mobile mode switch:** the dock's last row, `Match | Stats`, in every phase; the active side follows the selection rule (`raised` and a `text` border). `Stats` shows the four Stats Page tabs (`Build`, `Tier list`, `Matchups`, `My stats`) in the tab bar above it, with origin tags, provider and dpm.lol links opening in the phone's browser. A ready check or the player's draft turn brings the phone back to `Match`.
+
+### Stats Page
+- **Rail entry `Stats`** opens Champion Stats in the companion stage (`ui/stats.slint`), with four quiet tabs: Champion Build, Tier List, Matchups, My Stats. The tab bar follows the selection rule: `panel-raised` and a `text` border, never amber.
+- **Origin chip** (`OriginChip`) on every block: `LOCAL`, `RIOT CLIENT`, `ONLINE` (Hextech cyan border and ink), `DEMO`, in `11px` mono. Online blocks add the provider credit as a cyan underlined link with an external-link icon (`SourceLink`); the header carries the same kind of link to dpm.lol. Links open in the browser only on click, through `links::open_external` and its host allowlist.
+- **Champion picker:** the champion's own splash runs behind the picker card (`HeroSplash`), a `56px` portrait framed in `gold-bright`, a backdrop search well, the player's most played champions or the search matches as chips, and lane `RoleChip`s with their roundels.
+- **Build blocks:** rune pages side by side (keystone `40px`, perks and shards with their client names), summoner spells, the item path by stage with chevrons between core items, and a Q/W/E/R skill grid where taken levels are cyan cells and R is gold. A global page equal to the client's recommended one says so instead of repeating it.
+- **Tier badges** S to D: S in `gold-bright` on a gold tint, A in cyan, B in `text`, C and D `muted`. Matchup win bars are Team Blue above 50 % and Team Red below, with a hairline at the even mark.
+- **States:** loading is still `panel-raised` bars (no shimmer: the Idle Budget Rule); Online stats off is one standalone card saying exactly what turning it on sends, with the panel's one ivory action; League offline, no data and failures are one plain sentence with a `2px` info icon.
 
 ### Cards & Telemetry Rows
 - **Roster & Player Rows:** Single-row `1px` `panel` containers (`50px–70px` tall) pairing a circular lane `Roundel` (`Top`/`Jgl`/`Mid`/`Bot`/`Sup`), team-colored `ChampPlate`, name + status subtitle, and right-aligned tabular telemetry figures (`Overpass Mono`).
 - **Line Map (`LineMap`):** Three lane paths plus optional dashed jungle corridor on a `400×400` grid; standing vs fallen tower nodes and non-overlapping staggered ally labels (`Bot` positioned above track, `Support` below track).
+- **Draft Helper (`DraftHelperPanel`, `ui/helper.slint`):** one `panel` card under the allied draft: build lines (runes, spells, three core items, lane matchup) on the left, both teams' damage split bars with trait chips and tips on the right; stacked when narrow. Each value carries a quiet origin chip (`Local`, `Riot client`, `Online`, `Demo`); Online values add the provider link in the header. The mini widget shows a one-row `MiniHelperStrip`, the phone a `Guide` tab.
 - **Telemetry JSON Inspector:** Scrollable recessed `backdrop` pane hosting copy-selectable `read-only` monospace text (`Overpass Mono`, `11px`) with JSON / Structural Diff / Previous views and secret reveal toggle.
 
 ## Motion

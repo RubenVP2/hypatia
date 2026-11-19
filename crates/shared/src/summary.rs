@@ -9,7 +9,9 @@ use crate::champions::{
     keystone_name_from_id_localized, recommended_pages_for_localized, rune_style_name_localized,
     ChampionLookup, Position,
 };
+use crate::draft_helper::{project_champ_select_helper, ChampSelectHelper, HelperStats};
 use crate::event::GamePhase;
+use crate::game_text::{game_name_or, GameTextKind};
 use crate::i18n::Lang;
 use crate::remote::{
     RemoteActiveAction, RemoteChampionOption, RemoteIncomingSwap, RemoteRunePage, RemoteSkinOption,
@@ -182,6 +184,9 @@ pub struct ChampSelectSummary {
     pub recommended_rune_pages: Vec<RemoteRunePage>,
     #[serde(default)]
     pub editable_rune_page_id: Option<i64>,
+    /// Build, lane matchup and team comps for the player's own pick (champ-select helper).
+    #[serde(default)]
+    pub helper: ChampSelectHelper,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -494,6 +499,17 @@ pub fn project_match(
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> SummarySnapshot {
+    project_match_with(inputs, champions, None, lang)
+}
+
+/// [`project_match`] with Champion Stats for the champ-select helper
+/// ([`ChampSelectSummary::helper`]); without them the helper holds only offline comp analysis.
+pub fn project_match_with(
+    inputs: &MatchInputs<'_>,
+    champions: &dyn ChampionLookup,
+    stats: Option<&dyn HelperStats>,
+    lang: Lang,
+) -> SummarySnapshot {
     let summoner = extract_summoner_summary(inputs.summoner, inputs.ranked, inputs.presences, lang);
     let lobby = extract_lobby_summary(inputs.lobby, summoner.as_ref(), lang);
     let matchmaking = extract_matchmaking_summary(
@@ -502,8 +518,17 @@ pub fn project_match(
         lobby.as_ref(),
         lang,
     );
-    let champ_select =
+    let mut champ_select =
         extract_champ_select_summary(inputs, summoner.as_ref(), lobby.as_ref(), champions, lang);
+    if let Some(cs) = champ_select.as_mut() {
+        let queue_id = lobby
+            .as_ref()
+            .map(|l| l.queue_id)
+            .filter(|&id| id > 0)
+            .or_else(|| matchmaking.as_ref().map(|m| m.queue_id))
+            .unwrap_or(0);
+        cs.helper = project_champ_select_helper(cs, queue_id, champions, stats, lang);
+    }
     let editable_rune_page_id = champ_select
         .as_ref()
         .and_then(|cs| cs.editable_rune_page_id)
@@ -1068,10 +1093,14 @@ fn extract_champ_select_summary(
                 })
                 .unwrap_or_default();
 
-            let raw_champ_id = member
+            // The LCU sends `championId: 0` until a pick is hovered; the declared intent fills
+            // in, and is never a lock.
+            let picked_id = member
                 .get("championId")
-                .or_else(|| member.get("championPickIntent"))
                 .and_then(|v| v.as_i64())
+                .filter(|&id| id > 0);
+            let raw_champ_id = picked_id
+                .or_else(|| member.get("championPickIntent").and_then(|v| v.as_i64()))
                 .unwrap_or(0);
             let (champ_id, champion_name) = resolve_champion_pair(
                 raw_champ_id,
@@ -1161,6 +1190,7 @@ fn extract_champ_select_summary(
                 is_premade,
                 selected_skin_id,
                 pick_locked: champ_id > 0
+                    && picked_id.is_some()
                     && locked_cells
                         .as_ref()
                         .is_none_or(|cells| cells.contains(&cell_id)),
@@ -1275,7 +1305,7 @@ fn extract_champ_select_summary(
 
     let pickable_ids = parse_id_list(inputs.pickable_champion_ids);
     let bannable_ids = parse_id_list(inputs.bannable_champion_ids);
-    let mut catalog = champions.champion_catalog();
+    let mut catalog = champions.champion_catalog(lang);
     for c in &mut catalog {
         if let Some(ref pids) = pickable_ids {
             if !pids.is_empty() {
@@ -1317,6 +1347,7 @@ fn extract_champ_select_summary(
         rune_pages,
         recommended_rune_pages,
         editable_rune_page_id,
+        helper: ChampSelectHelper::default(),
         sub_phase,
         time_left_sec,
         total_time_sec,
@@ -1349,7 +1380,7 @@ fn extract_available_skins(
                 .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
                 .filter_map(|s| {
                     let id = s.get("id")?.as_i64()?;
-                    let name = s.get("name")?.as_str()?.to_string();
+                    let name = game_name_or(GameTextKind::Skin, id, lang, s.get("name")?.as_str()?);
                     let tile_path = s
                         .get("tilePath")
                         .and_then(|v| v.as_str())
@@ -1568,7 +1599,13 @@ fn extract_live_game_summary(
                 skin_id,
                 riot_id: p_riot_id.to_string(),
                 champion_id,
-                champion_name: champ,
+                // The Live Client names champions in the client's language; Hypatia names them
+                // by id in its own.
+                champion_name: Some(champion_id)
+                    .filter(|&id| id > 0)
+                    .map(|id| champions.resolve_champion_name_localized(id, lang))
+                    .filter(|name| !name.starts_with("Champion #"))
+                    .unwrap_or(champ),
                 champion_alias,
                 team,
                 position,

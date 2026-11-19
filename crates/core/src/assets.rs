@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use hypatia_shared::{
-    builtin_champion_roles, is_champion_placeholder, normalize_champion_key,
+    builtin_champion_name, builtin_champion_roles, is_champion_placeholder, normalize_champion_key,
     BuiltinChampionCatalog, ChampionLookup, Lang, RemoteChampionOption, SourceId,
 };
 use serde_json::Value;
@@ -74,6 +74,7 @@ pub struct GameAssetCache {
     spell_paths: RwLock<HashMap<i64, String>>,
     perk_paths: RwLock<HashMap<i64, String>>,
     style_paths: RwLock<HashMap<i64, String>>,
+    item_paths: RwLock<HashMap<i64, String>>,
     skin_paths: RwLock<HashMap<i64, String>>,
     splash_paths: RwLock<HashMap<i64, String>>,
 }
@@ -110,6 +111,7 @@ impl GameAssetCache {
             spell_paths: RwLock::new(HashMap::new()),
             perk_paths: RwLock::new(HashMap::new()),
             style_paths: RwLock::new(HashMap::new()),
+            item_paths: RwLock::new(HashMap::new()),
             skin_paths: RwLock::new(HashMap::new()),
             splash_paths: RwLock::new(HashMap::new()),
         };
@@ -577,6 +579,11 @@ impl GameAssetCache {
                     out.push(p.clone());
                 }
             }
+            "item" => {
+                if let Some(p) = self.item_paths.read().unwrap().get(&id) {
+                    out.push(p.clone());
+                }
+            }
             "style" => {
                 if let Some(p) = self.style_paths.read().unwrap().get(&id) {
                     out.push(p.clone());
@@ -649,6 +656,7 @@ impl GameAssetCache {
             "perks.json",
             "perkstyles.json",
             "skins.json",
+            "items.json",
         ] {
             let p = meta_dir.join(file_name);
             if let Ok(bytes) = std::fs::read(&p) {
@@ -657,6 +665,17 @@ impl GameAssetCache {
                 }
             }
         }
+    }
+
+    /// Ingests a metadata JSON fetched elsewhere (e.g. Champion Stats game data) and keeps it in
+    /// the disk cache so icons resolve on the next launch before the client answers.
+    pub async fn ingest_and_persist_metadata(&self, file_name: &str, json: &Value, bytes: &[u8]) {
+        self.ingest_metadata(file_name, json);
+        let meta_path = self.cache_dir.join("meta").join(file_name);
+        if let Some(parent) = meta_path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        let _ = tokio::fs::write(&meta_path, bytes).await;
     }
 
     /// Parses cached/live Riot `lol-game-data` metadata JSONs into fast in-memory lookup maps.
@@ -720,6 +739,22 @@ impl GameAssetCache {
                     return;
                 };
                 let mut map = self.spell_paths.write().unwrap();
+                for entry in arr {
+                    let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
+                    if let Some(raw_path) = entry.get("iconPath").and_then(|v| v.as_str()) {
+                        if let Some(clean) = sanitize_lcu_asset_path(raw_path) {
+                            map.insert(id, clean);
+                        }
+                    }
+                }
+            }
+            "items.json" => {
+                let Some(arr) = json.as_array() else {
+                    return;
+                };
+                let mut map = self.item_paths.write().unwrap();
                 for entry in arr {
                     let Some(id) = entry.get("id").and_then(|v| v.as_i64()) else {
                         continue;
@@ -1065,6 +1100,7 @@ fn is_valid_asset_id(category: &str, id: i64) -> bool {
         | "spell"
         | "perk"
         | "style"
+        | "item"
         | "skin"
         | "splash"
         | crate::art::BANNER_CATEGORY => id > 0,
@@ -1073,7 +1109,7 @@ fn is_valid_asset_id(category: &str, id: i64) -> bool {
     }
 }
 
-fn resolve_live_lcu_creds(discovery: &DiscoveryManager) -> Option<(u16, String)> {
+pub(crate) fn resolve_live_lcu_creds(discovery: &DiscoveryManager) -> Option<(u16, String)> {
     if discovery.is_demo_override() {
         return None;
     }
@@ -1152,19 +1188,24 @@ impl ChampionLookup for GameAssetCache {
         if champion_id <= 0 {
             return lang.pick("Selecting...", "Sélection...").to_string();
         }
+        // Game Text names champions in Hypatia's language whatever the client speaks; the
+        // client's name only covers a champion newer than the tables.
+        if let Some(name) = builtin_champion_name(champion_id, lang) {
+            return name.to_string();
+        }
         if let Some(name) = self.champ_names_by_id.read().unwrap().get(&champion_id) {
             return name.clone();
         }
         BuiltinChampionCatalog.resolve_champion_name_localized(champion_id, lang)
     }
 
-    fn champion_catalog(&self) -> Vec<RemoteChampionOption> {
+    fn champion_catalog(&self, lang: Lang) -> Vec<RemoteChampionOption> {
         let synced = self.champ_catalog.read().unwrap();
         if synced.is_empty() {
-            return BuiltinChampionCatalog.champion_catalog();
+            return BuiltinChampionCatalog.champion_catalog(lang);
         }
         let mut merged: HashMap<i64, RemoteChampionOption> = BuiltinChampionCatalog
-            .champion_catalog()
+            .champion_catalog(lang)
             .into_iter()
             .map(|c| (c.id, c))
             .collect();
@@ -1172,7 +1213,6 @@ impl ChampionLookup for GameAssetCache {
             merged
                 .entry(opt.id)
                 .and_modify(|existing| {
-                    existing.name = opt.name.clone();
                     if !opt.roles.is_empty() {
                         existing.roles = opt.roles.clone();
                     }
@@ -1190,11 +1230,74 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn a_korean_client_keeps_hypatia_names_in_english_and_french() {
+        let cache = GameAssetCache::with_dir(std::env::temp_dir().join("hypatia-locale-names"));
+        cache.ingest_metadata(
+            "champion-summary.json",
+            &json!([{ "id": 103, "name": "아리", "alias": "Ahri" }]),
+        );
+        cache.ingest_metadata(
+            "champion-summary.json",
+            &json!([
+                { "id": 103, "name": "아리", "alias": "Ahri" },
+                { "id": 20, "name": "누누와 윌럼프", "alias": "Nunu" },
+                { "id": 9999, "name": "새 챔피언", "alias": "Newcomer" }
+            ]),
+        );
+        assert_eq!(cache.resolve_champion_name_localized(103, Lang::Fr), "Ahri");
+        assert_eq!(
+            cache.resolve_champion_name_localized(20, Lang::Fr),
+            "Nunu et Willump"
+        );
+        assert_eq!(
+            cache.resolve_champion_name_localized(20, Lang::En),
+            "Nunu & Willump"
+        );
+        assert_eq!(cache.resolve_champion_id("Ahri"), 103);
+        assert_eq!(cache.resolve_champion_id("Nunu et Willump"), 20);
+        let nunu = cache
+            .champion_catalog(Lang::Fr)
+            .into_iter()
+            .find(|c| c.id == 20)
+            .unwrap();
+        assert_eq!(nunu.name, "Nunu et Willump");
+        assert_eq!(
+            cache.resolve_champion_name_localized(9999, Lang::Fr),
+            "새 챔피언",
+            "a champion newer than Game Text keeps the client's name"
+        );
+    }
+
     fn temp_cache_dir(tag: &str) -> PathBuf {
         let dir =
             std::env::temp_dir().join(format!("hypatia_asset_test_{}_{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn item_icons_resolve_from_items_json() {
+        let cache = GameAssetCache::with_dir(temp_cache_dir("items"));
+        assert!(cache.candidate_lcu_paths("item", 3089).is_empty());
+        cache.ingest_metadata(
+            "items.json",
+            &serde_json::json!([
+                {"id": 3089, "iconPath": "/lol-game-data/assets/ASSETS/Items/Icons2D/3089_Mage_T3_DeathCap.png"},
+                {"id": 666, "iconPath": "https://evil.example/x.png"}
+            ]),
+        );
+        assert_eq!(
+            cache.candidate_lcu_paths("item", 3089),
+            vec![
+                "/lol-game-data/assets/ASSETS/Items/Icons2D/3089_Mage_T3_DeathCap.png".to_string()
+            ]
+        );
+        assert!(
+            cache.candidate_lcu_paths("item", 666).is_empty(),
+            "foreign paths are refused"
+        );
+        assert!(is_valid_asset_id("item", 3089) && !is_valid_asset_id("item", 0));
     }
 
     #[test]
@@ -1247,7 +1350,7 @@ mod tests {
         assert_eq!(cache.resolve_champion_id("Garen"), 86);
         assert_eq!(cache.resolve_champion_id("Ahri"), 103);
         assert_eq!(cache.resolve_champion_id("Jade_Ahri"), 60103);
-        let catalog = cache.champion_catalog();
+        let catalog = cache.champion_catalog(Lang::En);
         let garens: Vec<i64> = catalog
             .iter()
             .filter(|c| c.name == "Garen")
@@ -1291,7 +1394,7 @@ mod tests {
             "Sélection..."
         );
 
-        let catalog = cache.champion_catalog();
+        let catalog = cache.champion_catalog(Lang::En);
         assert!(catalog
             .iter()
             .any(|c| c.id == 999 && c.roles == vec!["MIDDLE".to_string()]));

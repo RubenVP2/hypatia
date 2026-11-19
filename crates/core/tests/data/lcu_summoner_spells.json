@@ -1,0 +1,5 @@
+[
+  {"id": 4, "name": "Flash", "description": "Teleports your champion a short distance toward your cursor's location.", "summonerLevel": 7, "cooldown": 300, "gameModes": ["CLASSIC", "ARAM"], "iconPath": "/lol-game-data/assets/DATA/Spells/Icons2D/Summoner_Flash.png"},
+  {"id": 14, "name": "Ignite", "description": "Ignites target enemy champion, dealing true damage over 5 seconds.", "summonerLevel": 9, "cooldown": 180, "gameModes": ["CLASSIC"], "iconPath": "/lol-game-data/assets/DATA/Spells/Icons2D/SummonerIgnite.png"},
+  {"id": 12, "name": "Teleport", "description": "After channeling, teleports your champion to target allied structure.", "summonerLevel": 7, "cooldown": 360, "gameModes": ["CLASSIC"], "iconPath": "/lol-game-data/assets/DATA/Spells/Icons2D/Summoner_Teleport_New.png"}
+]

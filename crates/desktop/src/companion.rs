@@ -8,9 +8,10 @@ use std::time::Instant;
 use hypatia_core::art::{self, ClientArt as ArtPiece};
 use hypatia_core::AppState;
 use hypatia_shared::{
-    spell_name_from_id_localized, ChampSelectSummary, EndOfGamePlayer, EndOfGameSummary, Lane,
-    Lang, LiveBoard, LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId,
-    SourceStatus, SummarySnapshot, SummonerSummary,
+    spell_name_from_id_localized, stats_origin_label, ChampSelectHelper, ChampSelectSummary,
+    EndOfGamePlayer, EndOfGameSummary, HelperComp, HelperEntry, HelperOnline, Lane, Lang,
+    LiveBoard, LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId, SourceStatus,
+    StatsOrigin, SummarySnapshot, SummonerSummary,
 };
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
@@ -20,8 +21,8 @@ use crate::labels::{
 };
 use crate::{
     AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine,
-    LiveView, MainWindow, MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
-    TowerDot, WaitView,
+    HelperChip, HelperIcon, HelperTeam, HelperView, LiveView, MainWindow, MapAlly, ObjectiveChip,
+    PartyRow, PitClock, PlayerLine, Screen, StatLine, TowerDot, WaitView,
 };
 
 fn objective_kind_index(kind: ObjectiveKind) -> i32 {
@@ -606,7 +607,241 @@ pub fn build_champ_select_view(
         their_ban_list: sync_rows(&models.their_bans, their_ban_list),
         anonymized: cs.is_ranked_solo_anonymized,
         splash_icon: icons.resolve_skin_art("splash", splash_skin, splash_champ),
+        helper: build_helper_view(&cs.helper, icons, lang),
     }
+}
+
+/// `51.2%` / `51,2 %`.
+fn format_percent(rate: f32, lang: Lang) -> String {
+    let value = format_decimal(f64::from(rate) * 100.0, lang);
+    if lang.is_fr() {
+        format!("{value} %")
+    } else {
+        format!("{value}%")
+    }
+}
+
+fn helper_icon(
+    icons: &mut impl IconLookup,
+    category: &'static str,
+    entry: &HelperEntry,
+) -> HelperIcon {
+    HelperIcon {
+        icon: icons.resolve_icon(category, entry.id),
+        name: SharedString::from(entry.name.as_str()),
+        initials: champ_initials(&entry.name),
+    }
+}
+
+/// Trait chips per row, and rows, one team has room for.
+const HELPER_CHIPS_PER_ROW: usize = 2;
+const HELPER_CHIP_ROWS: usize = 2;
+
+fn helper_team(comp: &HelperComp) -> HelperTeam {
+    // Gaps first: what a team lacks matters more than what it has.
+    let mut traits: Vec<_> = comp.traits.iter().collect();
+    traits.sort_by_key(|t| !t.gap);
+    traits.truncate(HELPER_CHIPS_PER_ROW * HELPER_CHIP_ROWS);
+    let chips = |row: &[&hypatia_shared::HelperTrait]| {
+        ModelRc::new(VecModel::from(
+            row.iter()
+                .map(|t| HelperChip {
+                    label: SharedString::from(t.label.as_str()),
+                    gap: t.gap,
+                })
+                .collect::<Vec<_>>(),
+        ))
+    };
+    let split = traits.len().min(HELPER_CHIPS_PER_ROW);
+    HelperTeam {
+        physical: comp.physical,
+        magic: comp.magic,
+        true_damage: comp.true_damage,
+        known: comp.champions > 0,
+        traits: chips(&traits[..split]),
+        traits_more: chips(&traits[split..]),
+    }
+}
+
+/// The champ-select helper panel (`helper.slint`) from the projected helper block.
+pub fn build_helper_view(
+    h: &ChampSelectHelper,
+    icons: &mut impl IconLookup,
+    lang: Lang,
+) -> HelperView {
+    let origin = |o: StatsOrigin| SharedString::from(stats_origin_label(o, lang));
+    let rate_tag = |rate: Option<f32>| {
+        rate.map(|r| {
+            let p = format_percent(r, lang);
+            if lang.is_fr() {
+                format!("{p} vict.")
+            } else {
+                format!("{p} WR")
+            }
+        })
+        .unwrap_or_default()
+    };
+    let mut view = HelperView {
+        shown: true,
+        has_champion: h.champion_id > 0,
+        champion: SharedString::from(h.champion_name.as_str()),
+        position: SharedString::from(
+            h.position
+                .map(|p| p.display_label(lang))
+                .unwrap_or_default(),
+        ),
+        lane: h.position.map_or(-1, Position::desktop_index),
+        win_rate: SharedString::from(
+            h.win_rate
+                .map(|r| {
+                    let p = format_percent(r, lang);
+                    if lang.is_fr() {
+                        format!("{p} de victoires")
+                    } else {
+                        format!("{p} win rate")
+                    }
+                })
+                .unwrap_or_default(),
+        ),
+        empty_note: SharedString::from(if h.champion_id > 0 {
+            lang.pick(
+                "No build for this champion yet.",
+                "Pas encore de build pour ce champion.",
+            )
+        } else {
+            lang.pick(
+                "Hover a champion to see its runes, spells and items.",
+                "Survolez un champion pour voir ses runes, sorts et objets.",
+            )
+        }),
+        mine: helper_team(&h.my_comp),
+        theirs: helper_team(&h.their_comp),
+        tips: ModelRc::new(VecModel::from(
+            h.tips
+                .iter()
+                .map(|t| SharedString::from(t.as_str()))
+                .collect::<Vec<_>>(),
+        )),
+        ..HelperView::default()
+    };
+    if let Some(r) = &h.runes {
+        view.has_runes = true;
+        view.keystone = helper_icon(icons, "perk", &r.keystone);
+        view.primary_style = helper_icon(icons, "style", &r.primary_style);
+        view.sub_style = helper_icon(icons, "style", &r.sub_style);
+        view.runes_origin = origin(r.origin);
+        view.runes_online = r.origin == StatsOrigin::Online;
+        view.runes_rate = SharedString::from(rate_tag(r.win_rate));
+    }
+    if let Some(sp) = &h.spells {
+        view.has_spells = true;
+        view.spell1 = helper_icon(icons, "spell", &sp.first);
+        view.spell2 = helper_icon(icons, "spell", &sp.second);
+        view.spells_origin = origin(sp.origin);
+        view.spells_online = sp.origin == StatsOrigin::Online;
+    }
+    if let Some(it) = &h.items {
+        view.items = ModelRc::new(VecModel::from(
+            it.items
+                .iter()
+                .map(|e| helper_icon(icons, "item", e))
+                .collect::<Vec<_>>(),
+        ));
+        view.items_origin = origin(it.origin);
+        view.items_online = it.origin == StatsOrigin::Online;
+        view.items_rate = SharedString::from(rate_tag(it.win_rate));
+    }
+    if let Some(lane) = &h.lane {
+        view.has_lane = true;
+        view.lane = lane.position.desktop_index();
+        view.lane_enemy = helper_icon(
+            icons,
+            "champion",
+            &HelperEntry {
+                id: lane.enemy_champion_id,
+                name: lane.enemy_champion_name.clone(),
+            },
+        );
+        view.lane_line = SharedString::from(format!(
+            "{} {} {}",
+            lane.position.display_label(lang),
+            lang.pick("vs", "contre"),
+            lane.enemy_champion_name
+        ));
+        view.lane_rate = SharedString::from(
+            lane.win_rate
+                .map(|r| {
+                    let p = format_percent(r, lang);
+                    let games = format_thousands(lane.games, lang);
+                    if lang.is_fr() {
+                        format!("{p} de victoires · {games} parties")
+                    } else {
+                        format!("{p} win rate · {games} games")
+                    }
+                })
+                .unwrap_or_default(),
+        );
+        if let Some(o) = lane.origin {
+            view.lane_origin = origin(o);
+            view.lane_online = o == StatsOrigin::Online;
+        }
+    }
+    let demo = [
+        h.runes.as_ref().map(|r| r.origin),
+        h.items.as_ref().map(|i| i.origin),
+    ]
+    .contains(&Some(StatsOrigin::Demo));
+    view.hint = SharedString::from(match &h.online {
+        _ if demo => lang
+            .pick("Demo figures, not real statistics.", "Chiffres de démo, pas de vraies statistiques.")
+            .to_string(),
+        HelperOnline::Off => lang
+            .pick(
+                "Local data only. Turn on Online stats in Settings for global builds and matchup win rates.",
+                "Données locales uniquement. Activez les statistiques en ligne dans les Paramètres pour les builds mondiaux et les taux de victoire par affrontement.",
+            )
+            .to_string(),
+        HelperOnline::Loading if h.champion_id > 0 => lang
+            .pick("Loading online stats…", "Chargement des statistiques en ligne…")
+            .to_string(),
+        HelperOnline::NoData if h.champion_id > 0 => lang
+            .pick("No online stats for this champion yet.", "Pas encore de statistiques en ligne pour ce champion.")
+            .to_string(),
+        HelperOnline::OtherMode if h.champion_id > 0 => lang
+            .pick(
+                "Online stats cover ranked Summoner's Rift games, not this mode.",
+                "Les statistiques en ligne couvrent les parties classées de la Faille, pas ce mode.",
+            )
+            .to_string(),
+        HelperOnline::Failed(message) => message.clone(),
+        _ => String::new(),
+    });
+    // The mini widget has no room for a chip per line: one line names every origin shown.
+    let mut sources: Vec<&str> = Vec::new();
+    for o in [
+        h.runes.as_ref().map(|r| r.origin),
+        h.spells.as_ref().map(|s| s.origin),
+        h.items.as_ref().map(|i| i.origin),
+        h.lane.as_ref().and_then(|l| l.origin),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let label = stats_origin_label(o, lang);
+        if !sources.contains(&label) {
+            sources.push(label);
+        }
+    }
+    view.sources = SharedString::from(sources.join(" · "));
+    if let Some(a) = h.attribution.as_ref().filter(|_| h.shows_online()) {
+        view.attribution = SharedString::from(format!(
+            "{} {}",
+            lang.pick("Data:", "Données :"),
+            a.provider
+        ));
+        view.attribution_url = SharedString::from(a.url.as_str());
+    }
+    view
 }
 
 pub fn build_live_view(
@@ -1674,6 +1909,129 @@ mod tests {
             (rows[0].x, rows[0].y),
             (rows[2].x, rows[2].y),
             "shared place fans out"
+        );
+    }
+
+    #[test]
+    fn helper_view_labels_origins_and_links_only_online_values() {
+        use hypatia_shared::{
+            Attribution, CompTrait, HelperItems, HelperLane, HelperRunes, HelperTrait,
+        };
+        let entry = |id, name: &str| HelperEntry {
+            id,
+            name: name.into(),
+        };
+        let mut h = ChampSelectHelper {
+            champion_id: 103,
+            champion_name: "Ahri".into(),
+            position: Some(Position::Mid),
+            win_rate: Some(0.512),
+            runes: Some(HelperRunes {
+                origin: StatsOrigin::RiotClient,
+                keystone: entry(8112, "Electrocute"),
+                primary_style: entry(8100, "Domination"),
+                sub_style: entry(8200, "Sorcery"),
+                selected_perk_ids: vec![8112, 8139, 8140, 8106, 8226, 8210, 5008, 5008, 5001],
+                win_rate: None,
+            }),
+            items: Some(HelperItems {
+                origin: StatsOrigin::Online,
+                items: vec![entry(3118, "Malignance")],
+                win_rate: Some(0.53),
+            }),
+            lane: Some(HelperLane {
+                position: Position::Mid,
+                enemy_champion_id: 99,
+                enemy_champion_name: "Lux".into(),
+                win_rate: Some(0.471),
+                games: 3200,
+                origin: Some(StatsOrigin::Online),
+            }),
+            my_comp: HelperComp {
+                champions: 3,
+                physical: 0.6,
+                magic: 0.4,
+                true_damage: 0.0,
+                traits: [
+                    CompTrait::Engage,
+                    CompTrait::Peel,
+                    CompTrait::Poke,
+                    CompTrait::LacksFrontline,
+                    CompTrait::Pick,
+                ]
+                .into_iter()
+                .map(|kind| HelperTrait {
+                    kind,
+                    label: format!("{kind:?}"),
+                    gap: kind == CompTrait::LacksFrontline,
+                })
+                .collect(),
+            },
+            online: HelperOnline::Ready,
+            attribution: Some(Attribution {
+                provider: "MetaBot.GG".into(),
+                url: "https://metabot.gg/en/league/champion/Ahri/build".into(),
+            }),
+            ..ChampSelectHelper::default()
+        };
+        let mut icons = crate::icons::NoopIconLookup;
+        let v = build_helper_view(&h, &mut icons, Lang::Fr);
+        assert!(v.shown && v.has_champion && v.has_runes && !v.has_spells);
+        assert_eq!(v.position, "Mid");
+        assert_eq!(v.win_rate, "51,2 % de victoires");
+        assert_eq!(
+            (v.runes_origin.as_str(), v.runes_online),
+            ("Client Riot", false)
+        );
+        assert_eq!(
+            (v.items_origin.as_str(), v.items_online),
+            ("En ligne", true)
+        );
+        assert_eq!(v.lane_line, "Mid contre Lux");
+        assert_eq!(v.lane_rate, "47,1 % de victoires · 3 200 parties");
+        assert_eq!(v.attribution, "Données : MetaBot.GG");
+        assert_eq!(v.hint, "");
+        assert_eq!(
+            v.sources, "Client Riot · En ligne",
+            "the mini widget names every origin once"
+        );
+        // Gaps first, two chips per row, four at most.
+        let first: Vec<_> = v
+            .mine
+            .traits
+            .iter()
+            .map(|c| (c.label.to_string(), c.gap))
+            .collect();
+        assert_eq!(
+            first,
+            [
+                ("LacksFrontline".to_string(), true),
+                ("Engage".to_string(), false)
+            ]
+        );
+        assert_eq!(v.mine.traits_more.row_count(), 2);
+
+        // Online off: no link, the hint says how to turn it on.
+        h.items.as_mut().unwrap().origin = StatsOrigin::Local;
+        h.lane.as_mut().unwrap().origin = None;
+        h.online = HelperOnline::Off;
+        let v = build_helper_view(&h, &mut icons, Lang::En);
+        assert_eq!(v.attribution, "");
+        assert!(v.hint.contains("Online stats"));
+        assert_eq!(v.sources, "Riot client · Your games");
+
+        // ARAM: the hint says the mode has no online builds.
+        h.online = HelperOnline::OtherMode;
+        assert!(build_helper_view(&h, &mut icons, Lang::Fr)
+            .hint
+            .contains("pas ce mode"));
+
+        // Nothing hovered yet: a neutral note, nothing invented.
+        let v = build_helper_view(&ChampSelectHelper::default(), &mut icons, Lang::En);
+        assert!(!v.has_champion && !v.has_runes && !v.has_lane && v.items.row_count() == 0);
+        assert_eq!(
+            v.empty_note,
+            "Hover a champion to see its runes, spells and items."
         );
     }
 

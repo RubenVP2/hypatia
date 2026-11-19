@@ -21,6 +21,7 @@ use tokio::sync::{broadcast, watch};
 use tracing::{info, warn};
 
 use crate::lcu_actions::{extract_remote_state, AlertTracker, LcuActionClient, RemoteActionError};
+use crate::remote_stats::{self, StatsParams};
 use crate::AppState;
 
 const REMOTE_UI_HTML: &str = include_str!("remote_ui.html");
@@ -362,6 +363,7 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         .route("/fonts/{name}", get(handle_font))
         .route("/assets/{category}/{id}", get(handle_asset))
         .route("/api/state", get(handle_get_state))
+        .route("/api/stats/{view}", get(handle_get_stats))
         .route("/api/action", post(handle_post_action))
         .route("/ws", get(handle_ws))
         .with_state(router_state);
@@ -614,6 +616,53 @@ async fn handle_get_state(
     let mut alert_guard = st.alerts.write().unwrap();
     let snap = extract_remote_state(&st.app, &mut alert_guard);
     (StatusCode::OK, Json(snap)).into_response()
+}
+
+/// The Stats tab's views (`champions`, `build`, `tiers`, `matchups`, `profile`). Read-only: each
+/// one only reads Champion Stats; the router serves them on `GET` alone.
+async fn handle_get_stats(
+    State(st): State<RemoteRouterState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+    Query(params): Query<StatsParams>,
+    Path(view): Path<String>,
+) -> Response {
+    if !check_host_and_origin(&headers, &st.allowed_hosts, st.port) {
+        return (StatusCode::FORBIDDEN, Json(json!({"error": "Forbidden"}))).into_response();
+    }
+    let expected = st.token.read().unwrap().clone();
+    if !check_token(&headers, q.token.as_deref(), &expected) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": st.app.lang().pick(
+                "Unauthorized — scan QR code again",
+                "Non autorisé — scannez à nouveau le QR code",
+            )})),
+        )
+            .into_response();
+    }
+    let app = &st.app;
+    let body = match view.as_str() {
+        "champions" => serde_json::to_value(remote_stats::champions_view(app, &params)),
+        "build" => serde_json::to_value(remote_stats::build_view(app, &params)),
+        "tiers" => serde_json::to_value(remote_stats::tiers_view(app, &params)),
+        "matchups" => serde_json::to_value(remote_stats::matchups_view(app, &params)),
+        "profile" => serde_json::to_value(remote_stats::profile_view(app, &params)),
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))).into_response(),
+    };
+    match body {
+        Ok(body) => (
+            StatusCode::OK,
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(body),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Serialization"})),
+        )
+            .into_response(),
+    }
 }
 
 async fn handle_post_action(
@@ -925,6 +974,190 @@ mod tests {
         assert_eq!(miss.status(), StatusCode::NOT_FOUND);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_remote_stats_views_are_authenticated_read_only_and_serve_demo_data() {
+        let app = AppState::start_with_lang(true, 2.0, hypatia_shared::Lang::En);
+        let app_ref = app.clone();
+        let handle = start_remote_server(app, 0).await.unwrap();
+        let token = handle.qr_visual().unwrap().token;
+        let base = format!("http://127.0.0.1:{}", handle.port);
+        let client = reqwest::Client::new();
+        let get = |path: &str| {
+            client
+                .get(format!("{base}{path}"))
+                .header("X-Hypatia-Token", &token)
+                .send()
+        };
+
+        // Every view needs the pairing token, by header or query.
+        for view in ["champions", "build", "tiers", "matchups", "profile"] {
+            let resp = client
+                .get(format!("{base}/api/stats/{view}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "{view}");
+            let stale = client
+                .get(format!("{base}/api/stats/{view}?token=0000"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(stale.status(), StatusCode::UNAUTHORIZED, "{view}");
+        }
+        let by_query = client
+            .get(format!("{base}/api/stats/tiers?token={token}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(by_query.status(), StatusCode::OK);
+
+        // Read-only: GET only, unknown views do not exist, and nothing turns Online stats on.
+        assert!(!app_ref.flags.online_stats());
+        for method in [
+            reqwest::Method::POST,
+            reqwest::Method::PUT,
+            reqwest::Method::PATCH,
+            reqwest::Method::DELETE,
+        ] {
+            let resp = client
+                .request(method.clone(), format!("{base}/api/stats/build"))
+                .header("X-Hypatia-Token", &token)
+                .json(&json!({"online_stats": true}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED, "{method}");
+        }
+        let unknown = get("/api/stats/settings").await.unwrap();
+        assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+        let _ = get("/api/stats/build?online_stats=true&online=1")
+            .await
+            .unwrap();
+        assert!(
+            !app_ref.flags.online_stats(),
+            "the phone cannot switch Online stats"
+        );
+
+        // Champion Build: demo data with origin, names, item stages, skills and the dpm.lol page.
+        let build: serde_json::Value = get("/api/stats/build?champion=103&position=MIDDLE")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(build["champion"]["id"], 103);
+        assert_eq!(build["champion"]["name"], "Ahri");
+        assert_eq!(build["position"], "Mid");
+        assert_eq!(build["build"]["state"], "Ready");
+        assert_eq!(build["build"]["origin"], "Demo");
+        assert!(
+            build["build"]["attribution"].is_null(),
+            "demo data carries no provider credit"
+        );
+        assert_eq!(build["client"]["origin"], "Demo");
+        assert_eq!(build["dpm_url"], "https://dpm.lol/champions/Ahri/build");
+        let pages = build["rune_pages"].as_array().unwrap();
+        assert_eq!(pages[0]["kind"], "popular");
+        assert!(!pages[0]["keystone"]["name"].as_str().unwrap().is_empty());
+        assert_eq!(pages[0]["shards"].as_array().unwrap().len(), 3);
+        assert_eq!(build["spells"][0]["first"]["name"], "Flash");
+        let stages: Vec<&str> = build["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| s["stage"].as_str())
+            .collect();
+        assert!(
+            stages.contains(&"Starting") && stages.contains(&"Core"),
+            "{stages:?}"
+        );
+        assert_eq!(build["skills"]["levels"].as_array().unwrap().len(), 15);
+        assert!(
+            !build["picks"].as_array().unwrap().is_empty(),
+            "most played champions"
+        );
+
+        // Without a champion the view starts on the game's champion or the most played one.
+        let seeded: serde_json::Value =
+            get("/api/stats/build").await.unwrap().json().await.unwrap();
+        assert!(seeded["champion"]["id"].as_i64().unwrap() > 0);
+
+        // Tier List: per role in Ranked Solo/Duo, no roles in ARAM.
+        let mids: serde_json::Value = get("/api/stats/tiers?role=MIDDLE")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(mids["block"]["origin"], "Demo");
+        assert_eq!(mids["dpm_url"], "https://dpm.lol/tierlist");
+        let rows = mids["entries"].as_array().unwrap();
+        assert!(!rows.is_empty());
+        assert!(rows.iter().all(|r| r["position"] == "Mid"));
+        let aram: serde_json::Value = get("/api/stats/tiers?queue=aram&role=MIDDLE")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(aram["queue"], "Aram");
+        assert!(aram["role"].is_null());
+
+        // Matchups: both columns sorted from the champion's point of view.
+        let matchups: serde_json::Value = get("/api/stats/matchups?champion=103&position=MIDDLE")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(matchups["block"]["state"], "Ready");
+        assert_eq!(
+            matchups["dpm_url"],
+            "https://dpm.lol/champions/Ahri/matchups"
+        );
+        let hardest = matchups["hardest"].as_array().unwrap();
+        let easiest = matchups["easiest"].as_array().unwrap();
+        assert!(!hardest.is_empty() || !easiest.is_empty());
+        assert!(hardest
+            .iter()
+            .all(|m| m["rates"]["win_rate"].as_f64().unwrap() < 0.5));
+        assert!(easiest
+            .iter()
+            .all(|m| m["rates"]["win_rate"].as_f64().unwrap() >= 0.5));
+
+        // My Stats: the demo player's twenty games and per-champion summary.
+        let profile: serde_json::Value = get("/api/stats/profile")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(profile["block"]["origin"], "Demo");
+        assert_eq!(profile["games"].as_array().unwrap().len(), 20);
+        assert!(profile["champions"][0]["champion"]["name"].is_string());
+
+        // The search roster, and names in the requested language.
+        let roster: serde_json::Value = get("/api/stats/champions?lang=fr")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(roster.as_array().unwrap().len() > 100);
+        app_ref.set_lang(hypatia_shared::Lang::Fr);
+        let fr: serde_json::Value = get("/api/stats/build?champion=103&lang=fr")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(fr["spells"][0]["first"]["name"], "Saut éclair");
+
+        // The pushed state carries the stats revision the phone watches.
+        let state: serde_json::Value = get("/api/state").await.unwrap().json().await.unwrap();
+        assert!(state["stats_revision"].is_u64());
     }
 
     #[test]

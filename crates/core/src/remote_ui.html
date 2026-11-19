@@ -54,6 +54,9 @@
   --bevel: rgba(200, 170, 110, 0.22);
   --veil-a: rgba(7, 11, 18, 0.10);
   --veil-b: rgba(11, 17, 27, 0.55);
+  --dmg-phys: #d29a52;
+  --dmg-mag: #4fb8e8;
+  --dmg-true: #eef0f5;
   --tap: 44px;
   --r: 6px;
   --r-sm: 4px;
@@ -101,6 +104,9 @@
   --bevel: rgba(122, 92, 36, 0.18);
   --veil-a: rgba(237, 233, 221, 0.05);
   --veil-b: rgba(237, 233, 221, 0.62);
+  --dmg-phys: #9a5f14;
+  --dmg-mag: #1f6fa8;
+  --dmg-true: #4c5364;
 }
 
 * { box-sizing: border-box; }
@@ -339,6 +345,7 @@ button:disabled { cursor: default; }
   padding-bottom: env(safe-area-inset-bottom);
 }
 .dock[hidden] { display: none; }
+.demo-strip[hidden] { display: none; }
 .dock-inner { max-width: 560px; margin: 0 auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .tab {
@@ -617,6 +624,34 @@ button:disabled { cursor: default; }
 }
 .spell-slot.focus { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px var(--gold-bright); }
 .slot-k { font: 700 11px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); }
+/* ---- Champ-select helper (Guide tab): build, lane, comps, tips ------------------------------- */
+.hl-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.hl-champ { font: 800 22px/1.05 var(--font-display); letter-spacing: 0.02em; }
+.hl-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 0; border-top: 1px solid var(--rule); }
+.hl-head + .hl-row { border-top: 0; }
+.hl-k { width: 64px; flex-shrink: 0; font: 700 11px var(--font-mono); letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+.hl-items { display: flex; gap: 8px; flex: 1; min-width: 0; }
+.hl-item { width: 64px; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.hl-item .meta { font-size: 11px; width: 100%; text-align: center; }
+.tag.online { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.hl-link { font: 700 12px var(--font-ui); color: var(--accent); text-decoration: underline; text-underline-offset: 3px; min-height: var(--tap); display: inline-flex; align-items: center; }
+.hl-apply { display: flex; justify-content: flex-end; padding: 0 0 8px; }
+.dmg { margin-top: 10px; }
+.dmg-top { display: flex; justify-content: space-between; gap: 8px; font: 700 11px var(--font-mono); }
+.dmg-top .blue { color: var(--blue); } .dmg-top .red { color: var(--red); }
+.dmg-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--raised); margin-top: 5px; }
+.dmg-bar i { display: block; height: 100%; }
+.dmg-bar .p { background: var(--dmg-phys); } .dmg-bar .m { background: var(--dmg-mag); } .dmg-bar .t { background: var(--dmg-true); }
+.dmg-bar.none { border: 1px solid var(--rule); background: transparent; }
+.traits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.trait { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: var(--r-sm); border: 1px solid var(--rule); background: var(--glass-row); font-size: 12px; font-weight: 700; }
+.trait.gap { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.dmg-key { display: flex; gap: 12px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+.dmg-key i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.tips { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.tips li { position: relative; padding-left: 14px; font-size: 13px; line-height: 1.4; }
+.tips li::before { content: ""; position: absolute; left: 2px; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--gold-bright); }
+.hl-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .chip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-top: 10px; }
 .chip-grid.three { grid-template-columns: repeat(3, 1fr); }
 .chip {
@@ -707,6 +742,102 @@ button:disabled { cursor: default; }
 .tile.wide { grid-column: span 3; display: flex; align-items: baseline; justify-content: center; gap: 10px; }
 .tile.wide b { font-size: 34px; }
 .team-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 4px 6px; }
+
+/* ---- Mode switch (Match | Stats), last row of the dock --------------------------------------- */
+.mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--glass-row); }
+.mode-btn {
+  min-height: var(--tap);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid transparent; border-radius: 3px;
+  font: 700 13px var(--font-display); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+}
+.mode-btn .icon { width: 17px; height: 17px; }
+.mode-btn.active { background: var(--raised); border-color: var(--text); color: var(--text); }
+
+/* ---- Stats tab: Champion Stats, read-only ---------------------------------------------------- */
+.st-hero { display: flex; align-items: center; gap: 12px; }
+.st-name { font: 800 28px/1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; }
+.st-links { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; }
+.hl-link .ext { width: 13px; height: 13px; margin-left: 5px; flex-shrink: 0; }
+.st-rates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.st-rate { padding: 7px 4px 6px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--glass-row); text-align: center; min-width: 0; }
+.st-rate b { display: block; font: 800 19px/1.05 var(--font-display); font-variant-numeric: tabular-nums; }
+.st-rate span { font: 700 10px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.st-roles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 12px; }
+.st-roles.six { grid-template-columns: repeat(6, 1fr); }
+.st-role {
+  min-height: 48px; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 1px solid var(--rule); border-radius: var(--r-sm);
+  background: var(--glass-row);
+  font-size: 11px; font-weight: 700; color: var(--muted);
+}
+.st-role span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.st-role.active { border-color: var(--text); background: var(--raised); color: var(--text); }
+.st-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; border: 1px solid var(--rule); border-radius: var(--r-sm); margin-top: 10px; }
+.st-seg button { min-height: 40px; border-radius: 3px; border: 1px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
+.st-seg button.active { background: var(--raised); border-color: var(--text); color: var(--text); }
+.st-state { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.st-state .icon { width: 18px; height: 18px; margin-top: 1px; }
+.st-state b { display: block; color: var(--text); font-size: 14px; }
+.skel { display: block; height: 12px; margin: 10px 0; border-radius: 3px; background: var(--raised); }
+.skel.w70 { width: 70%; } .skel.w40 { width: 40%; }
+.rp { padding: 12px 0 2px; border-top: 1px solid var(--rule); }
+.rp:first-of-type { border-top: 0; padding-top: 0; }
+.rp-head { display: flex; align-items: center; gap: 8px; }
+.rp-key { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.rp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.rp-cols .stack { gap: 6px; min-width: 0; }
+.perk { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; font-weight: 600; }
+.perk > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-style { display: flex; align-items: center; gap: 5px; font: 700 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+.rp-style span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shards { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.stage { padding: 10px 0 4px; border-top: 1px solid var(--rule); }
+.stage:first-of-type { border-top: 0; padding-top: 0; }
+.stage-head { display: flex; flex-direction: column; gap: 2px; }
+.stage-items { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 4px; margin-top: 8px; }
+.it { width: 60px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.it .meta { width: 100%; font-size: 10.5px; line-height: 1.15; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.chev { width: 12px; height: 40px; display: grid; place-items: center; color: var(--gold-bright); }
+.prio { display: flex; align-items: center; gap: 6px; margin-top: 8px; font: 800 22px/1 var(--font-display); }
+.prio .chev { height: auto; color: var(--muted); }
+.prio .r { color: var(--gold-bright); }
+.skill-grid { display: grid; grid-template-columns: 20px repeat(15, minmax(0, 1fr)); gap: 2px; margin-top: 12px; }
+.sk-k { display: grid; place-items: center; font: 800 13px var(--font-display); color: var(--muted); }
+.sk { aspect-ratio: 1; display: grid; place-items: center; border-radius: 2px; border: 1px solid var(--rule); background: var(--glass-row); font: 700 9px var(--font-mono); color: transparent; }
+.sk.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.sk.on.r { border-color: var(--gold-bright); background: rgba(200, 170, 110, 0.18); color: var(--gold-bright); }
+.st-row {
+  width: 100%; min-height: 54px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 2px;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+}
+.st-row:first-of-type { border-top: 0; }
+.st-row:active { background: var(--raised); }
+.st-rank { width: 22px; flex-shrink: 0; text-align: right; font: 600 12px var(--font-mono); color: var(--muted); }
+.tier-badge { width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); font: 800 17px var(--font-display); color: var(--muted); }
+.tier-badge.S { color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(200, 170, 110, 0.16); }
+.tier-badge.A { color: var(--accent); border-color: var(--accent); }
+.tier-badge.B { color: var(--text); border-color: var(--rule-strong); }
+.st-fig { flex-shrink: 0; text-align: right; }
+.st-fig b { display: block; font: 700 15px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+.st-fig span { font: 600 11px var(--font-mono); color: var(--muted); white-space: nowrap; }
+.st-nm { font-weight: 700; font-size: 15px; }
+.mu-bar { display: block; position: relative; height: 5px; margin-top: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.mu-bar i { position: absolute; top: 0; bottom: 0; }
+.mu-bar i.blue { left: 50%; background: var(--blue); }
+.mu-bar i.red { right: 50%; background: var(--red); }
+.mu-bar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--text); opacity: 0.55; }
+.res { display: inline-grid; place-items: center; min-width: 44px; height: 22px; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid; font: 700 11px var(--font-mono); letter-spacing: 0.04em; }
+.res.win { color: var(--blue); border-color: var(--blue); background: var(--blue-soft); }
+.res.loss { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+.kit { display: flex; align-items: center; gap: 3px; margin-top: 5px; }
+.st-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.st-tiles .tile.wide b { font-size: 30px; }
 
 @media (max-width: 360px) {
   .clock.specimen { font-size: 48px; }
@@ -922,7 +1053,116 @@ button:disabled { cursor: default; }
       eogDetail: "Waiting for the post-game stats.",
       standingBy: "Standing by",
       idleDetail: "Open a lobby in League on your PC, or turn on Demo mode, to drive the draft from here.",
-      defaultSaveName: "Hypatia Page"
+      tabGuide: "Guide",
+      yourBuild: "Your build",
+      hlSpells: "Spells",
+      coreItems: "Core items",
+      laneVs: "vs",
+      winRate: p => `${p} win rate`,
+      laneRate: (p, n) => `${p} win rate · ${n} games`,
+      dmgSplit: (ad, ap) => `${ad}% AD · ${ap}% AP`,
+      physical: "Physical",
+      magic: "Magic",
+      trueDmg: "True",
+      enemyComp: "Enemy team",
+      dataFrom: name => `Data: ${name}`,
+      applyRunes: "Apply these runes",
+      helperPage: champ => `Hypatia · ${champ}`,
+      hoverForBuild: "Hover a champion to see its runes, spells and items.",
+      noBuild: "No build for this champion yet.",
+      hintOff: "Local data only. Turn on Online stats in Settings on your PC for global builds and matchup win rates.",
+      hintLoading: "Loading online stats…",
+      hintNoData: "No online stats for this champion yet.",
+      hintOtherMode: "Online stats cover ranked Summoner's Rift games, not this mode.",
+      hintDemo: "Demo figures, not real statistics.",
+      originLocal: "Your games",
+      originRiotClient: "Riot client",
+      originOnline: "Online",
+      originDemo: "Demo",
+      trait_Engage: "Engage",
+      trait_Peel: "Peel",
+      trait_Poke: "Poke",
+      trait_Splitpush: "Splitpush",
+      trait_Teamfight: "Teamfight",
+      trait_Pick: "Catch",
+      trait_Scaling: "Late game",
+      trait_EarlyGame: "Early game",
+      trait_Frontline: "Frontline",
+      trait_LacksFrontline: "No frontline",
+      trait_LacksEngage: "No engage",
+      trait_AllPhysical: "All physical",
+      trait_AllMagic: "All magic",
+      defaultSaveName: "Hypatia Page",
+      modeLabel: "View",
+      modeMatch: "Match",
+      modeStats: "Stats",
+      stTabBuild: "Build",
+      stTabTiers: "Tier list",
+      stTabMatchups: "Matchups",
+      stTabMine: "My stats",
+      stChampBuild: "Champion build",
+      stChoose: "Choose a champion",
+      stChooseHint: "Search by name, or pick one of your champions below.",
+      stSearch: "Search a champion",
+      stMatches: "Matches",
+      stMostPlayed: "Your most played",
+      stNoChamp: "No champion by that name.",
+      stLoading: "Loading",
+      stOpenDpm: "Open on dpm.lol",
+      stOffTitle: "Online stats are off",
+      stOffBody: "Turn them on in Hypatia's settings on your PC (Performance) for global builds, tier lists and matchups.",
+      stOffline: "League of Legends is not running on your PC.",
+      stNoData: "No data for this yet: a new champion, a rare role or too few games.",
+      stFailed: "Could not read the stats from your PC.",
+      stGlobalBuild: "Global build",
+      stWin: "Win",
+      stPick: "Pick",
+      stBan: "Ban",
+      stGames: "Games",
+      stRateLine: (p, w) => `${p} of games · ${w} wins`,
+      stPage_popular: "Most popular page",
+      stPage_alternative: "Alternative page",
+      stPage_client: "Client's recommended page",
+      stSameAsClient: "Same as the client's recommended page",
+      stShards: "Shards",
+      stItemPath: "Item path",
+      stage_Starting: "Starting",
+      stage_Core: "Core",
+      stage_Boots: "Boots",
+      stage_Situational: "Situational",
+      stage_Items: "Items",
+      stSkillOrder: "Skill order",
+      stMaxFirst: "Max first",
+      stQueueSolo: "Solo/Duo",
+      stQueueArena: "Arena",
+      stAllRoles: "All",
+      stPatch: p => `Patch ${p}`,
+      stTierHint: "Tap a champion to open its build.",
+      stNoTier: "No champion listed for this role.",
+      stTierAria: (tier, name) => `Tier ${tier}, ${name}, open its build`,
+      stHardest: "Hardest matchups",
+      stEasiest: "Easiest matchups",
+      stHardestFor: n => `Lowest win rate for ${n}`,
+      stEasiestFor: n => `Highest win rate for ${n}`,
+      stNoneSample: "None in this sample.",
+      stGold15: g => `${g} gold at 15 min`,
+      stGamesN: n => `${n} ${n === 1 ? "game" : "games"}`,
+      stLastGames: "Your last games",
+      stHistoryNote: "Read from your client's match history on your PC.",
+      stByChampion: "By champion",
+      stRecent: "Recent games",
+      stNoGames: "No games in your recent history yet.",
+      stWinShort: "WIN",
+      stLossShort: "LOSS",
+      stRecord: (w, l) => `${w}W ${l}L`,
+      stWinRate: "Win rate",
+      stDpm: "DPM",
+      stOpenBuild: n => `${n}, open its build`,
+      q_RankedSolo: "Ranked Solo/Duo",
+      q_RankedFlex: "Ranked Flex",
+      q_Normal: "Normal",
+      q_Aram: "ARAM",
+      q_Arena: "Arena"
     },
     fr: {
       title: "Hypatia — Télécommande mobile",
@@ -1045,7 +1285,116 @@ button:disabled { cursor: default; }
       eogDetail: "En attente des statistiques d'après-partie.",
       standingBy: "En attente",
       idleDetail: "Ouvrez un salon dans League sur votre PC, ou activez le mode Démo, pour piloter la draft d'ici.",
-      defaultSaveName: "Page Hypatia"
+      tabGuide: "Guide",
+      yourBuild: "Votre build",
+      hlSpells: "Sorts",
+      coreItems: "Objets clés",
+      laneVs: "contre",
+      winRate: p => `${p} de victoires`,
+      laneRate: (p, n) => `${p} de victoires · ${n} parties`,
+      dmgSplit: (ad, ap) => `${ad} % AD · ${ap} % AP`,
+      physical: "Physiques",
+      magic: "Magiques",
+      trueDmg: "Bruts",
+      enemyComp: "Équipe ennemie",
+      dataFrom: name => `Données : ${name}`,
+      applyRunes: "Appliquer ces runes",
+      helperPage: champ => `Hypatia · ${champ}`,
+      hoverForBuild: "Survolez un champion pour voir ses runes, sorts et objets.",
+      noBuild: "Pas encore de build pour ce champion.",
+      hintOff: "Données locales uniquement. Activez les statistiques en ligne dans les Paramètres sur votre PC pour les builds mondiaux et les taux de victoire par affrontement.",
+      hintLoading: "Chargement des statistiques en ligne…",
+      hintNoData: "Pas encore de statistiques en ligne pour ce champion.",
+      hintOtherMode: "Les statistiques en ligne couvrent les parties classées de la Faille, pas ce mode.",
+      hintDemo: "Chiffres de démo, pas de vraies statistiques.",
+      originLocal: "Vos parties",
+      originRiotClient: "Client Riot",
+      originOnline: "En ligne",
+      originDemo: "Démo",
+      trait_Engage: "Engagement",
+      trait_Peel: "Protection",
+      trait_Poke: "Harcèlement",
+      trait_Splitpush: "Split push",
+      trait_Teamfight: "Combat d'équipe",
+      trait_Pick: "Attrape",
+      trait_Scaling: "Fin de partie",
+      trait_EarlyGame: "Début de partie",
+      trait_Frontline: "Ligne avant",
+      trait_LacksFrontline: "Pas de ligne avant",
+      trait_LacksEngage: "Pas d'engagement",
+      trait_AllPhysical: "Tout physique",
+      trait_AllMagic: "Tout magique",
+      defaultSaveName: "Page Hypatia",
+      modeLabel: "Vue",
+      modeMatch: "Partie",
+      modeStats: "Stats",
+      stTabBuild: "Build",
+      stTabTiers: "Tier list",
+      stTabMatchups: "Matchups",
+      stTabMine: "Mes stats",
+      stChampBuild: "Build du champion",
+      stChoose: "Choisissez un champion",
+      stChooseHint: "Cherchez par nom, ou choisissez l'un de vos champions ci-dessous.",
+      stSearch: "Chercher un champion",
+      stMatches: "Résultats",
+      stMostPlayed: "Vos plus joués",
+      stNoChamp: "Aucun champion à ce nom.",
+      stLoading: "Chargement",
+      stOpenDpm: "Ouvrir sur dpm.lol",
+      stOffTitle: "Les stats en ligne sont désactivées",
+      stOffBody: "Activez-les dans les réglages de Hypatia sur votre PC (Performance) pour les builds, tier lists et matchups mondiaux.",
+      stOffline: "League of Legends n'est pas lancé sur votre PC.",
+      stNoData: "Pas encore de données : champion récent, rôle rare ou trop peu de parties.",
+      stFailed: "Impossible de lire les stats depuis votre PC.",
+      stGlobalBuild: "Build mondial",
+      stWin: "Vict.",
+      stPick: "Choix",
+      stBan: "Bans",
+      stGames: "Parties",
+      stRateLine: (p, w) => `${p} des parties · ${w} de victoires`,
+      stPage_popular: "Page la plus jouée",
+      stPage_alternative: "Page alternative",
+      stPage_client: "Page recommandée par le client",
+      stSameAsClient: "Identique à la page recommandée par le client",
+      stShards: "Fragments",
+      stItemPath: "Objets",
+      stage_Starting: "Départ",
+      stage_Core: "Cœur",
+      stage_Boots: "Bottes",
+      stage_Situational: "Situationnels",
+      stage_Items: "Objets",
+      stSkillOrder: "Ordre des compétences",
+      stMaxFirst: "Monter d'abord",
+      stQueueSolo: "Solo/Duo",
+      stQueueArena: "Arène",
+      stAllRoles: "Tous",
+      stPatch: p => `Patch ${p}`,
+      stTierHint: "Touchez un champion pour ouvrir son build.",
+      stNoTier: "Aucun champion classé pour ce rôle.",
+      stTierAria: (tier, name) => `Rang ${tier}, ${name}, ouvrir son build`,
+      stHardest: "Matchups les plus durs",
+      stEasiest: "Matchups les plus faciles",
+      stHardestFor: n => `Plus faible taux de victoire de ${n}`,
+      stEasiestFor: n => `Meilleur taux de victoire de ${n}`,
+      stNoneSample: "Aucun dans cet échantillon.",
+      stGold15: g => `${g} or à 15 min`,
+      stGamesN: n => `${n} ${n <= 1 ? "partie" : "parties"}`,
+      stLastGames: "Vos dernières parties",
+      stHistoryNote: "Lu dans l'historique de votre client sur votre PC.",
+      stByChampion: "Par champion",
+      stRecent: "Parties récentes",
+      stNoGames: "Aucune partie dans votre historique récent.",
+      stWinShort: "VICT.",
+      stLossShort: "DÉF.",
+      stRecord: (w, l) => `${w}V ${l}D`,
+      stWinRate: "Victoires",
+      stDpm: "DPM",
+      stOpenBuild: n => `${n}, ouvrir son build`,
+      q_RankedSolo: "Classée Solo/Duo",
+      q_RankedFlex: "Classée Flexible",
+      q_Normal: "Normale",
+      q_Aram: "ARAM",
+      q_Arena: "Arène"
     }
   };
 
@@ -1138,7 +1487,23 @@ button:disabled { cursor: default; }
     wasTurn: false,
     viewKey: "",
     skinScrollKey: "",
-    sceneKey: ""
+    sceneKey: "",
+    // Stats tab: read-only views of Champion Stats, kept per sub-tab with the request they answer.
+    mode: store.get("hypatia_mode") === "stats" ? "stats" : "match",
+    statsTab: ["build", "tiers", "matchups", "mine"].includes(store.get("hypatia_stats_tab")) ? store.get("hypatia_stats_tab") : "build",
+    statsChamp: 0,
+    statsPos: "",
+    statsSearch: "",
+    tierQueue: "ranked_solo",
+    tierRole: "ALL",
+    statsData: {},
+    statsPending: "",
+    statsSeq: 0,
+    statsErr: false,
+    statsRev: null,
+    roster: null,
+    rosterLang: "",
+    rosterPending: ""
   };
 
   function activeLang() { return ui.langOverride || ui.serverLang || "en"; }
@@ -1593,11 +1958,21 @@ button:disabled { cursor: default; }
     morphChildren(a, b);
   }
 
+  /** The dock: the view's tabs and action, then the Match | Stats switch, always last. */
   function renderDock(html) {
     const dock = $("bottom-dock");
-    dock.hidden = !html;
-    morphInto($("dock-content"), html || "");
+    dock.hidden = false;
+    morphInto($("dock-content"), (html || "") + modeRowHtml());
     syncDockHeight();
+  }
+  const MATCH_SVG = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5"/></svg>`;
+  const CHART_SVG = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></svg>`;
+  function modeRowHtml() {
+    const stats = ui.mode === "stats";
+    return `<div class="mode-row" role="tablist" aria-label="${esc(t("modeLabel"))}" data-key="mode-row">
+        <button class="mode-btn ${stats ? "" : "active"}" role="tab" aria-selected="${!stats}" data-action="mode" data-mode="match">${MATCH_SVG}<span>${esc(t("modeMatch"))}</span></button>
+        <button class="mode-btn ${stats ? "active" : ""}" role="tab" aria-selected="${stats}" data-action="mode" data-mode="stats">${CHART_SVG}<span>${esc(t("modeStats"))}</span></button>
+      </div>`;
   }
   function syncDockHeight() {
     const dock = $("bottom-dock");
@@ -1951,6 +2326,110 @@ button:disabled { cursor: default; }
       </section>`;
   }
 
+  // ---- Champ-select helper: read-only, from the projection's `helper` block ------------------
+  function fmtPct(rate) {
+    const n = (Number(rate) * 100).toLocaleString(activeLang() === "fr" ? "fr-FR" : "en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return activeLang() === "fr" ? `${n} %` : `${n}%`;
+  }
+  function originTag(origin) {
+    if (!origin) return "";
+    const key = "origin" + origin;
+    return `<span class="tag ${origin === "Online" ? "online" : ""}">${esc(t(key))}</span>`;
+  }
+  // Families of I18N keys named <prefix><variant> (trait_, stPage_, stage_, q_): every variant
+  // has its own entry in EN and FR, so the lookup is built here rather than spelled out.
+  function tk(prefix, kind) { return t(prefix + kind); }
+
+  function dmgHtml(label, side, comp) {
+    const known = (comp && comp.champions) > 0;
+    const pct = v => Math.round(Number(v || 0) * 100);
+    const bar = known
+      ? `<div class="dmg-bar"><i class="p" style="width:${pct(comp.physical)}%"></i><i class="m" style="width:${pct(comp.magic)}%"></i><i class="t" style="width:${pct(comp.true_damage)}%"></i></div>`
+      : `<div class="dmg-bar none"></div>`;
+    const traits = known && comp.traits.length
+      ? `<div class="traits">${comp.traits.map(tr => `<span class="trait ${tr.gap ? "gap" : ""}">${esc(tk("trait_", tr.kind))}</span>`).join("")}</div>` : "";
+    return `<div class="dmg">
+        <div class="dmg-top"><span class="${side}">${esc(label)}</span>${known ? `<span class="meta mono">${esc(t("dmgSplit", pct(comp.physical), pct(comp.magic)))}</span>` : ""}</div>
+        ${bar}${traits}
+      </div>`;
+  }
+  function helperTab(cs) {
+    const h = cs.helper || {};
+    const has = Number(h.champion_id) > 0;
+    const online = h.online || { state: "Off" };
+    const shownOnline = [h.runes, h.spells, h.items].some(v => v && v.origin === "Online") || (h.lane && h.lane.origin === "Online");
+    const demo = [h.runes, h.items].some(v => v && v.origin === "Demo");
+    const r = h.runes, sp = h.spells, it = h.items, lane = h.lane;
+    const rows = [];
+    if (r) {
+      const perks = (r.selected_perk_ids || []).join(",");
+      const canApply = (r.selected_perk_ids || []).length === 9;
+      rows.push(`<div class="hl-row">
+          <span class="hl-k">${esc(t("runes"))}</span>
+          ${pt("perk", r.keystone.id, esc(initials(r.keystone.name)), 40, "round")}
+          <span class="grow"><b class="ellipsis" style="display:block">${esc(r.keystone.name)}</b>
+            <span class="meta row" style="gap:5px">${pt("style", r.sub_style.id, "", 16, "round no-rim")}<span class="ellipsis">${esc(styleName(r.primary_style.id, r.primary_style.name))} + ${esc(styleName(r.sub_style.id, r.sub_style.name))}</span></span></span>
+          ${originTag(r.origin)}
+        </div>`);
+      if (canApply) {
+        rows.push(`<div class="hl-apply"><button class="btn btn-ghost" data-action="select-rune-page" data-is-preset="1" data-name="${esc(t("helperPage", h.champion_name))}" data-pri="${r.primary_style.id}" data-sub="${r.sub_style.id}" data-perks="${esc(perks)}">${esc(t("applyRunes"))}</button></div>`);
+      }
+    }
+    if (sp) {
+      rows.push(`<div class="hl-row">
+          <span class="hl-k">${esc(t("hlSpells"))}</span>
+          ${pt("spell", sp.first.id, spellFallbackGlyph(sp.first.id, spellName(sp.first.id, sp.first.name)), 34)}
+          ${pt("spell", sp.second.id, spellFallbackGlyph(sp.second.id, spellName(sp.second.id, sp.second.name)), 34)}
+          <span class="grow ellipsis">${esc(spellName(sp.first.id, sp.first.name))} + ${esc(spellName(sp.second.id, sp.second.name))}</span>
+          ${originTag(sp.origin)}
+        </div>`);
+    }
+    if (it && it.items.length) {
+      rows.push(`<div class="hl-row">
+          <span class="hl-k">${esc(t("coreItems"))}</span>
+          <span class="hl-items">${it.items.map(e => `<span class="hl-item">${pt("item", e.id, esc(initials(e.name)), 40)}<span class="meta ellipsis">${esc(e.name)}</span></span>`).join("")}</span>
+          ${originTag(it.origin)}
+        </div>`);
+    }
+    if (!rows.length) rows.push(`<div class="empty-note">${esc(has ? t("noBuild") : t("hoverForBuild"))}</div>`);
+    if (lane) {
+      const li = laneInfo(lane.position);
+      rows.push(`<div class="hl-row">
+          ${roundel(lane.position)}
+          <b>${esc(li.label)} ${esc(t("laneVs"))} ${esc(lane.enemy_champion_name)}</b>
+          ${champPt(lane.enemy_champion_id, lane.enemy_champion_name, 30, "round enemy")}
+          <span class="grow meta ellipsis">${lane.win_rate != null ? esc(t("laneRate", fmtPct(lane.win_rate), fmtNum(lane.games))) : ""}</span>
+          ${lane.win_rate != null ? originTag(lane.origin) : ""}
+        </div>`);
+    }
+    const hint = demo ? t("hintDemo")
+      : online.state === "Off" ? t("hintOff")
+      : online.state === "Loading" && has ? t("hintLoading")
+      : online.state === "NoData" && has ? t("hintNoData")
+      : online.state === "OtherMode" && has ? t("hintOtherMode")
+      : online.state === "Failed" ? (online.message || "") : "";
+    const link = shownOnline && h.attribution
+      ? `<a class="hl-link" href="${esc(h.attribution.url)}" target="_blank" rel="noopener noreferrer">${esc(t("dataFrom", h.attribution.provider))}</a>` : "";
+    const tips = (h.tips || []).length ? `<ul class="tips">${h.tips.map(tip => `<li>${esc(tip)}</li>`).join("")}</ul>` : "";
+    return `
+      <section class="panel" aria-label="${esc(t("yourBuild"))}">
+        <div class="hl-head">
+          <span class="eyebrow">${esc(t("yourBuild"))}</span>
+          ${has ? `<span class="hl-champ">${esc(h.champion_name)}${h.position ? ` · ${esc(laneInfo(h.position).label)}` : ""}</span>` : ""}
+          ${h.win_rate != null ? `<span class="meta mono">${esc(t("winRate", fmtPct(h.win_rate)))}</span>` : ""}
+        </div>
+        ${rows.join("")}
+        ${link}
+      </section>
+      <section class="panel">
+        ${dmgHtml(t("yourTeam"), "blue", h.my_comp)}
+        ${dmgHtml(t("enemyComp"), "red", h.their_comp)}
+        <div class="dmg-key"><span><i style="background:var(--dmg-phys)"></i>${esc(t("physical"))}</span><span><i style="background:var(--dmg-mag)"></i>${esc(t("magic"))}</span><span><i style="background:var(--dmg-true)"></i>${esc(t("trueDmg"))}</span></div>
+        ${tips}
+        ${hint ? `<div class="hl-hint">${esc(hint)}</div>` : ""}
+      </section>`;
+  }
+
   function renderChampSelect(s) {
     const cs = s.champ_select;
     if (!cs) {
@@ -1966,6 +2445,7 @@ button:disabled { cursor: default; }
       { id: "pick", label: t("tabPick") },
       { id: "skins", label: t("tabSkins") },
       { id: "loadout", label: t("tabLoadout") },
+      { id: "guide", label: t("tabGuide") },
       { id: "team", label: t("tabTeam"), dot: incoming && ui.csTab !== "team" }
     ], ui.csTab, "cs-tab");
     if (isTurn) {
@@ -1981,6 +2461,7 @@ button:disabled { cursor: default; }
     const body = ui.csTab === "pick" ? pickTab(cs, act, isBan)
       : ui.csTab === "skins" ? skinsTab(cs)
       : ui.csTab === "loadout" ? loadoutTab(cs)
+      : ui.csTab === "guide" ? helperTab(cs)
       : teamTab(cs);
     const flash = isTurn && Date.now() < ui.turnFlashUntil;
     return `
@@ -2132,6 +2613,411 @@ button:disabled { cursor: default; }
       </section>`;
   }
 
+  // ---- Stats tab: Champion Stats, read-only ---------------------------------------------------
+  // Views come from `GET /api/stats/{view}`; nothing on this tab sends a command or changes a
+  // setting. A view still loading is read again when a pushed state brings a new stats_revision.
+  const STATS_VIEW = { build: "build", tiers: "tiers", matchups: "matchups", mine: "profile" };
+  const ROLE_KEYS = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
+  const POS_KEY = { Top: "TOP", Jungle: "JUNGLE", Mid: "MIDDLE", Bot: "BOTTOM", Support: "UTILITY" };
+  const EXT_SVG = `<svg class="ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>`;
+  const INFO_SVG = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>`;
+  const CHEV_SVG = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>`;
+
+  function statsKey(tab) {
+    const lang = activeLang();
+    if (tab === "tiers") return `tiers|${ui.tierQueue}|${ui.tierRole}|${lang}`;
+    if (tab === "mine") return `profile|${lang}`;
+    return `${tab}|${ui.statsChamp}|${ui.statsPos}|${lang}`;
+  }
+  function statsUrl(tab) {
+    const p = new URLSearchParams();
+    if (URL_TOKEN) p.set("token", URL_TOKEN);
+    p.set("lang", activeLang());
+    if (tab === "build" || tab === "matchups") {
+      if (ui.statsChamp > 0) p.set("champion", String(ui.statsChamp));
+      if (ui.statsPos) p.set("position", ui.statsPos);
+    } else if (tab === "tiers") {
+      p.set("queue", ui.tierQueue);
+      if (ui.tierRole !== "ALL") p.set("role", ui.tierRole);
+    }
+    return `/api/stats/${STATS_VIEW[tab]}?${p}`;
+  }
+  function authHeaders() {
+    const h = {};
+    if (URL_TOKEN) h["X-Hypatia-Token"] = URL_TOKEN;
+    return h;
+  }
+  /** Reads the open sub-tab's view unless the one held already answers it (`force`: read again). */
+  async function loadStats(force) {
+    const tab = ui.statsTab;
+    const key = statsKey(tab);
+    const have = ui.statsData[tab];
+    if (!force && ((have && have.key === key) || ui.statsPending === key)) return;
+    const seq = ++ui.statsSeq;
+    ui.statsPending = key;
+    let ok = false;
+    try {
+      const res = await fetch(statsUrl(tab), { headers: authHeaders() });
+      if (res.ok) {
+        const json = await res.json();
+        if (seq === ui.statsSeq) {
+          // The server picked the champion and role (the game's, else the most played): keep them
+          // so Build and Matchups follow the same champion.
+          if ((tab === "build" || tab === "matchups") && json.champion) {
+            ui.statsChamp = json.champion.id;
+            ui.statsPos = POS_KEY[json.position] || "";
+          }
+          ui.statsData[tab] = { key: statsKey(tab), json };
+        }
+        ok = true;
+      }
+    } catch (_) {}
+    if (seq !== ui.statsSeq) return;
+    ui.statsPending = "";
+    ui.statsErr = !ok;
+    if (ui.mode === "stats" && ui.state) renderState(ui.state);
+  }
+  /** The champion roster for the search field, read once per language. */
+  async function loadRoster() {
+    const lang = activeLang();
+    if ((ui.roster && ui.rosterLang === lang) || ui.rosterPending === lang) return;
+    ui.rosterPending = lang;
+    try {
+      const p = new URLSearchParams({ lang });
+      if (URL_TOKEN) p.set("token", URL_TOKEN);
+      const res = await fetch(`/api/stats/champions?${p}`, { headers: authHeaders() });
+      if (res.ok) { ui.roster = await res.json(); ui.rosterLang = lang; }
+    } catch (_) {}
+    ui.rosterPending = "";
+    if (ui.mode === "stats" && ui.state) renderState(ui.state);
+  }
+  function foldKey(s) {
+    return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+  function searchRoster(q) {
+    const key = foldKey(q);
+    if (!key || !ui.roster || ui.rosterLang !== activeLang()) return [];
+    const starts = [];
+    const contains = [];
+    for (const c of ui.roster) {
+      const n = foldKey(c.name);
+      if (n.startsWith(key)) starts.push(c);
+      else if (n.includes(key)) contains.push(c);
+    }
+    return starts.concat(contains).slice(0, 8);
+  }
+
+  function fmtDec(n) {
+    return Number(n || 0).toLocaleString(activeLang() === "fr" ? "fr-FR" : "en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+  function kdaRatio(k, d, a) { return (Number(k) + Number(a)) / Math.max(1, Number(d)); }
+  function rateLine(r) { return r ? t("stRateLine", fmtPct(r.pick_rate), fmtPct(r.win_rate)) : ""; }
+  function laneOf(pos) { return POS_KEY[pos] || ""; }
+  function extLink(url, label) {
+    return url ? `<a class="hl-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}${EXT_SVG}</a>` : "";
+  }
+  /** The provider credit, carried only by Online blocks (the server drops it for any other). */
+  function creditLink(b) {
+    return b && b.attribution ? extLink(b.attribution.url, t("dataFrom", b.attribution.provider)) : "";
+  }
+  function skeleton() {
+    return `<div aria-label="${esc(t("stLoading"))}" role="status"><i class="skel"></i><i class="skel w70"></i><i class="skel w40"></i></div>`;
+  }
+  /** A block that is not ready: still bars while loading, else one plain sentence. */
+  function blockState(b) {
+    if (!b || b.state === "Ready") return "";
+    if (b.state === "Loading") return skeleton();
+    if (b.state === "OnlineDisabled") {
+      return `<div class="st-state">${INFO_SVG}<div><b>${esc(t("stOffTitle"))}</b>${esc(t("stOffBody"))}</div></div>`;
+    }
+    const msg = b.state === "ClientOffline" ? t("stOffline")
+      : b.state === "NoData" ? t("stNoData")
+      : (b.message || t("stFailed"));
+    return `<div class="st-state">${INFO_SVG}<span>${esc(msg)}</span></div>`;
+  }
+  function blockHead(title, origin, extra = "") {
+    return `<div class="section-head"><span class="eyebrow">${esc(title)}</span><span class="row" style="gap:6px">${extra}${originTag(origin)}</span></div>`;
+  }
+  function itemPt(n, size) { return pt("item", n.id, esc(initials(n.name)), size); }
+  function perkRow(n, size) {
+    return `<span class="perk">${pt("perk", n.id, esc(initials(n.name)), size, "round")}<span>${esc(n.name)}</span></span>`;
+  }
+
+  // Build and Matchups share the champion picker: portrait, search, most played, roles.
+  function pickerPanel(v) {
+    const c = v && v.champion;
+    const q = ui.statsSearch;
+    const searching = q.trim().length > 0;
+    const list = searching ? searchRoster(q) : ((v && v.picks) || []);
+    const chips = list.length
+      ? `<div class="chip-grid">${list.map(ch => `<button class="chip ${c && ch.id === c.id ? "active" : ""}" data-action="st-champ" data-id="${ch.id}">${champPt(ch.id, ch.name, 28, "round")}<span>${esc(ch.name)}</span></button>`).join("")}</div>`
+      : (searching ? `<div class="meta" style="margin-top:8px">${esc(ui.roster ? t("stNoChamp") : t("stLoading"))}</div>` : "");
+    const pos = v && laneOf(v.position);
+    const roles = c ? `<div class="st-roles" role="radiogroup" aria-label="${esc(t("roles"))}">${ROLE_KEYS.map(k => {
+        const on = pos === k;
+        const l = laneInfo(k);
+        return `<button class="st-role ${on ? "active" : ""}" role="radio" aria-checked="${on}" data-action="st-role" data-role="${k}">${laneSvg(k, 17, l.color)}<span>${esc(l.label)}</span></button>`;
+      }).join("")}</div>` : "";
+    const rates = ui.statsTab === "build" && v && v.rates ? `<div class="st-rates">
+        <div class="st-rate"><b>${esc(fmtPct(v.rates.win_rate))}</b><span>${esc(t("stWin"))}</span></div>
+        <div class="st-rate"><b>${esc(fmtPct(v.rates.pick_rate))}</b><span>${esc(t("stPick"))}</span></div>
+        <div class="st-rate"><b>${esc(fmtPct(v.rates.ban_rate))}</b><span>${esc(t("stBan"))}</span></div>
+        <div class="st-rate"><b>${esc(fmtNum(v.rates.games))}</b><span>${esc(t("stGames"))}</span></div>
+      </div>` : "";
+    const head = c
+      ? `<div class="st-hero" data-key="st-hero-${c.id}">
+          ${champPt(c.id, c.name, 56, "self")}
+          <div class="grow">
+            <div class="eyebrow">${esc(ui.statsTab === "build" ? t("stChampBuild") : t("stTabMatchups"))}</div>
+            <div class="st-name ellipsis">${esc(c.name)}</div>
+            <div class="st-links">${extLink(v.dpm_url, t("stOpenDpm"))}</div>
+          </div>
+        </div>`
+      : `<div><div class="eyebrow">${esc(t("stChoose"))}</div><div class="meta" style="margin-top:4px">${esc(t("stChooseHint"))}</div></div>`;
+    return `<section class="panel" data-key="st-picker">
+        ${head}
+        ${rates}
+        <input id="stats-search" class="search" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" style="margin-top:12px" value="${esc(q)}" placeholder="${esc(t("stSearch"))}" aria-label="${esc(t("stSearch"))}">
+        ${list.length ? `<div class="sub-k">${esc(searching ? t("stMatches") : t("stMostPlayed"))}</div>` : ""}
+        ${chips}
+        ${roles}
+      </section>`;
+  }
+
+  function runePageHtml(p) {
+    const shard = n => SHARD_NAMES[n.id] ? shardName(n.id) : n.name;
+    return `<div class="rp">
+        <div class="rp-head"><b class="grow">${esc(tk("stPage_", p.kind))}</b>${originTag(p.origin)}</div>
+        ${p.rates ? `<div class="meta mono" style="margin-top:2px">${esc(rateLine(p.rates))}</div>` : ""}
+        ${p.matches_client ? `<div class="meta" style="margin-top:2px">${esc(t("stSameAsClient"))}</div>` : ""}
+        ${p.keystone ? `<div class="rp-key">
+          ${pt("perk", p.keystone.id, esc(initials(p.keystone.name)), 40, "round")}
+          <div class="grow"><b class="ellipsis" style="display:block">${esc(p.keystone.name)}</b>
+            <span class="meta">${esc(styleName(p.primary.id, p.primary.name))} + ${esc(styleName(p.secondary.id, p.secondary.name))}</span></div>
+        </div>` : ""}
+        <div class="rp-cols">
+          <div class="stack"><span class="rp-style">${pt("style", p.primary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.primary.id, p.primary.name))}</span></span>${p.primary_perks.map(n => perkRow(n, 26)).join("")}</div>
+          <div class="stack"><span class="rp-style">${pt("style", p.secondary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.secondary.id, p.secondary.name))}</span></span>${p.secondary_perks.map(n => perkRow(n, 26)).join("")}</div>
+        </div>
+        ${p.shards.length ? `<div class="sub-k" style="margin-top:10px">${esc(t("stShards"))}</div><div class="shards" style="margin-top:0">${p.shards.map(n => `<span class="tag">${esc(shard(n))}</span>`).join("")}</div>` : ""}
+      </div>`;
+  }
+
+  function buildBody(v) {
+    if (!v.champion) return pickerPanel(v);
+    const online = v.build.origin === "Online";
+    const credit = online ? creditLink(v.build) : "";
+    const out = [pickerPanel(v)];
+    if (v.build.state !== "Ready") {
+      out.push(`<section class="panel">${blockHead(t("stGlobalBuild"), null)}${blockState(v.build)}</section>`);
+    }
+    if (v.rune_pages.length) {
+      out.push(`<section class="panel">${blockHead(t("runes"), null)}${v.rune_pages.map(runePageHtml).join("")}${v.rune_pages.some(p => p.origin === "Online") ? `<div class="st-links">${credit}</div>` : ""}</section>`);
+    } else if (v.client.state !== "Ready" && v.client.state !== "NoData") {
+      out.push(`<section class="panel">${blockHead(t("runes"), null)}${blockState(v.client)}</section>`);
+    }
+    if (v.spells.length) {
+      out.push(`<section class="panel">${blockHead(t("sumSpells"), null)}${v.spells.map(r => `
+          <div class="hl-row">
+            ${pt("spell", r.first.id, spellFallbackGlyph(r.first.id, spellName(r.first.id, r.first.name)), 36)}
+            ${pt("spell", r.second.id, spellFallbackGlyph(r.second.id, spellName(r.second.id, r.second.name)), 36)}
+            <span class="grow"><b class="ellipsis" style="display:block">${esc(spellName(r.first.id, r.first.name))} + ${esc(spellName(r.second.id, r.second.name))}</b>
+              ${r.rates ? `<span class="meta mono">${esc(rateLine(r.rates))}</span>` : ""}</span>
+            ${originTag(r.origin)}
+          </div>`).join("")}</section>`);
+    }
+    if (v.items.length) {
+      out.push(`<section class="panel">${blockHead(t("stItemPath"), v.build.origin)}${v.items.map(st => {
+          const core = st.stage === "Core";
+          const items = st.items.map(n => `<span class="it">${itemPt(n, 40)}<span class="meta">${esc(n.name)}</span></span>`);
+          return `<div class="stage">
+              <div class="stage-head"><span class="slot-k">${esc(tk("stage_", (st.stage || "Items")).toUpperCase())}</span>${st.rates ? `<span class="meta mono">${esc(rateLine(st.rates))}</span>` : ""}</div>
+              <div class="stage-items">${core ? items.join(`<span class="chev">${CHEV_SVG}</span>`) : items.join("")}</div>
+            </div>`;
+        }).join("")}${online ? `<div class="st-links">${credit}</div>` : ""}</section>`);
+    }
+    if (v.skills) {
+      const sk = v.skills;
+      const letters = ["Q", "W", "E", "R"];
+      const grid = letters.map(L => `<span class="sk-k">${L}</span>${Array.from({ length: 15 }, (_, i) => {
+          const on = sk.levels[i] === L;
+          return `<span class="sk ${on ? "on" : ""} ${on && L === "R" ? "r" : ""}">${on ? i + 1 : ""}</span>`;
+        }).join("")}`).join("");
+      const prio = sk.priority.length ? `<div class="prio" aria-label="${esc(t("stMaxFirst"))}">${sk.priority.map(L => `<span class="${L === "R" ? "r" : ""}">${L}</span>`).join(`<span class="chev">${CHEV_SVG}</span>`)}<span class="meta" style="font:600 12px var(--font-ui);margin-left:6px">${esc(t("stMaxFirst"))}</span></div>` : "";
+      out.push(`<section class="panel">${blockHead(t("stSkillOrder"), sk.origin)}
+          ${sk.rates ? `<div class="meta mono">${esc(rateLine(sk.rates))}</div>` : ""}
+          ${prio}
+          <div class="skill-grid" aria-hidden="true">${grid}</div>
+          ${sk.origin === "Online" ? `<div class="st-links">${credit}</div>` : ""}
+        </section>`);
+    }
+    return out.join("");
+  }
+
+  function tierBody(v) {
+    const queues = [["ranked_solo", t("stQueueSolo")], ["aram", "ARAM"], ["arena", t("stQueueArena")]];
+    const lanes = ui.tierQueue === "ranked_solo";
+    const roleBtn = (k, inner) => `<button class="st-role ${ui.tierRole === k ? "active" : ""}" role="radio" aria-checked="${ui.tierRole === k}" data-action="st-tier-role" data-role="${k}">${inner}</button>`;
+    const controls = `<section class="panel" data-key="st-tier-controls">
+        <div class="section-head" style="margin-bottom:0">
+          <span class="eyebrow">${esc(t("stTabTiers"))}</span>
+          <span class="row" style="gap:6px">${v && v.patch ? `<span class="tag">${esc(t("stPatch", v.patch))}</span>` : ""}${v ? originTag(v.block.origin) : ""}</span>
+        </div>
+        <div class="st-seg" role="radiogroup">${queues.map(([k, l]) => `<button class="${ui.tierQueue === k ? "active" : ""}" role="radio" aria-checked="${ui.tierQueue === k}" data-action="st-queue" data-queue="${k}">${esc(l)}</button>`).join("")}</div>
+        ${lanes ? `<div class="st-roles six" role="radiogroup" aria-label="${esc(t("roles"))}">
+          ${roleBtn("ALL", `<span style="font-size:12px">${esc(t("stAllRoles"))}</span>`)}
+          ${ROLE_KEYS.map(k => { const l = laneInfo(k); return roleBtn(k, `${laneSvg(k, 17, l.color)}<span>${esc(l.label)}</span>`); }).join("")}
+        </div>` : ""}
+        <div class="st-links">${extLink(v && v.dpm_url, t("stOpenDpm"))}${v ? creditLink(v.block) : ""}</div>
+      </section>`;
+    if (!v) return controls + `<section class="panel">${skeleton()}</section>`;
+    if (v.block.state !== "Ready") return controls + `<section class="panel">${blockState(v.block)}</section>`;
+    const rows = v.entries.map((e, i) => `
+        <button class="st-row" data-key="tr-${e.champion.id}-${e.position || ""}" data-action="st-open" data-id="${e.champion.id}" data-pos="${laneOf(e.position)}" aria-label="${esc(t("stTierAria", e.tier, e.champion.name))}">
+          <span class="st-rank">${i + 1}</span>
+          <span class="tier-badge ${e.tier}">${e.tier}</span>
+          ${champPt(e.champion.id, e.champion.name, 36)}
+          <span class="grow">
+            <span class="st-nm ellipsis" style="display:block">${esc(e.champion.name)}</span>
+            <span class="meta row" style="gap:5px">${e.position ? `<span style="display:inline-flex" title="${esc(laneInfo(laneOf(e.position)).label)}">${laneSvg(laneOf(e.position), 13, laneInfo(laneOf(e.position)).color)}</span>` : ""}<span class="mono ellipsis" style="font-size:11px">${esc(t("stPick"))} ${esc(fmtPct(e.rates.pick_rate))} · ${esc(t("stBan"))} ${esc(fmtPct(e.rates.ban_rate))}</span></span>
+          </span>
+          <span class="st-fig"><b>${esc(fmtPct(e.rates.win_rate))}</b><span>${esc(t("stWin"))}</span></span>
+        </button>`).join("");
+    return controls + `<section class="panel" style="padding-top:8px;padding-bottom:8px">
+        ${rows || `<div class="empty-note">${esc(t("stNoTier"))}</div>`}
+        ${rows ? `<div class="hl-hint">${esc(t("stTierHint"))}</div>` : ""}
+      </section>`;
+  }
+
+  function matchupRow(m) {
+    const win = Number(m.rates.win_rate);
+    const span = Math.min(50, Math.abs(win - 0.5) / 0.1 * 50);
+    const gold = m.gold_diff_15 != null
+      ? t("stGold15", (m.gold_diff_15 > 0.5 ? "+" : m.gold_diff_15 < -0.5 ? "−" : "±") + fmtNum(Math.abs(Math.round(m.gold_diff_15)))) : "";
+    return `<button class="st-row" data-key="mu-${m.opponent.id}" data-action="st-open" data-id="${m.opponent.id}" data-pos="" aria-label="${esc(t("stOpenBuild", m.opponent.name))}">
+        ${champPt(m.opponent.id, m.opponent.name, 36, "enemy")}
+        <span class="grow">
+          <span class="st-nm ellipsis" style="display:block">${esc(m.opponent.name)}</span>
+          <span class="meta ellipsis" style="display:block">${esc(t("stGamesN", fmtNum(m.rates.games)))}${gold ? " · " + esc(gold) : ""}</span>
+          <span class="mu-bar"><i class="${win >= 0.5 ? "blue" : "red"}" style="width:${span.toFixed(1)}%"></i></span>
+        </span>
+        <span class="st-fig"><b style="color:${win >= 0.5 ? "var(--blue)" : "var(--red)"}">${esc(fmtPct(win))}</b></span>
+      </button>`;
+  }
+  function matchupsBody(v) {
+    if (!v.champion) return pickerPanel(v);
+    const out = [pickerPanel(v)];
+    if (v.block.state !== "Ready") {
+      out.push(`<section class="panel">${blockHead(t("stTabMatchups"), null)}${blockState(v.block)}</section>`);
+      return out.join("");
+    }
+    const col = (title, sub, list) => `<section class="panel">
+        ${blockHead(title, v.block.origin)}
+        <div class="meta" style="margin:-6px 0 4px">${esc(sub)}</div>
+        ${list.length ? list.map(matchupRow).join("") : `<div class="empty-note">${esc(t("stNoneSample"))}</div>`}
+      </section>`;
+    out.push(col(t("stHardest"), t("stHardestFor", v.champion.name), v.hardest));
+    out.push(col(t("stEasiest"), t("stEasiestFor", v.champion.name), v.easiest));
+    const credit = creditLink(v.block);
+    if (credit) out.push(`<div class="st-links" style="padding:0 4px">${credit}</div>`);
+    return out.join("");
+  }
+
+  function dayLabel(ms) {
+    if (!(ms > 0)) return "";
+    return new Date(ms).toLocaleDateString(activeLang() === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  }
+  function myStatsBody(v) {
+    const head = `<section class="panel">
+        ${blockHead(t("stLastGames"), v.block.origin)}
+        <div class="meta">${esc(t("stHistoryNote"))}</div>
+        ${blockState(v.block)}
+      </section>`;
+    if (v.block.state !== "Ready") return head;
+    const games = v.games;
+    if (!games.length) return head + `<section class="panel"><div class="empty-note">${esc(t("stNoGames"))}</div></section>`;
+    // Totals cover the summarised games (Summoner's Rift when there are any); ARAM, event
+    // modes and remakes stay in the list below.
+    const counted = games.filter(g => g.summarised);
+    const wins = counted.filter(g => g.win).length;
+    const sum = (f) => counted.reduce((n, g) => n + Number(f(g) || 0), 0);
+    const minutes = Math.max(1, sum(g => g.duration_secs) / 60);
+    const tile = (val, label) => `<div class="tile"><b>${esc(val)}</b><span>${esc(label)}</span></div>`;
+    const totals = `<div class="st-tiles">
+        <div class="tile wide"><b>${esc(fmtPct(wins / Math.max(1, counted.length)))}</b><span>${esc(t("stWinRate"))} · ${esc(t("stRecord", wins, counted.length - wins))}</span></div>
+        ${tile(fmtDec(kdaRatio(sum(g => g.kills), sum(g => g.deaths), sum(g => g.assists))), t("kdaRatio"))}
+        ${tile(fmtDec(sum(g => g.cs) / minutes), t("csMin"))}
+        ${tile(fmtNum(Math.round(sum(g => g.damage_to_champions) / minutes)), t("stDpm"))}
+      </div>`;
+    const champs = `<section class="panel" style="padding-bottom:8px">
+        ${blockHead(t("stByChampion"), v.block.origin)}
+        ${v.champions.map(c => `
+          <button class="st-row" data-key="mc-${c.champion.id}" data-action="st-open" data-id="${c.champion.id}" data-pos="" aria-label="${esc(t("stOpenBuild", c.champion.name))}">
+            ${champPt(c.champion.id, c.champion.name, 40)}
+            <span class="grow">
+              <span class="st-nm ellipsis" style="display:block">${esc(c.champion.name)}</span>
+              <span class="meta mono ellipsis" style="display:block">${esc(t("stRecord", c.wins, c.games - c.wins))} · ${esc(fmtDec(kdaRatio(c.kills, c.deaths, c.assists)))} ${esc(t("kdaRatio"))} · ${esc(fmtDec(c.cs_per_min))} CS</span>
+              <span class="kit">${c.keystone ? pt("perk", c.keystone.id, esc(initials(c.keystone.name)), 22, "round") : ""}${c.items.map(n => itemPt(n, 22)).join("")}</span>
+            </span>
+            <span class="st-fig"><b>${esc(fmtPct(c.wins / Math.max(1, c.games)))}</b><span>${esc(t("stGamesN", c.games))}</span></span>
+          </button>`).join("")}
+      </section>`;
+    const recent = `<section class="panel" style="padding-bottom:8px">
+        ${blockHead(t("stRecent"), v.block.origin)}
+        ${games.map((g, i) => {
+          const mins = Math.max(1, g.duration_secs / 60);
+          const pos = laneOf(g.position);
+          return `<button class="st-row" data-key="mg-${i}" data-action="st-open" data-id="${g.champion.id}" data-pos="${pos}" aria-label="${esc(t("stOpenBuild", g.champion.name))}">
+              ${champPt(g.champion.id, g.champion.name, 38)}
+              <span class="grow">
+                <span class="row" style="gap:6px"><span class="res ${g.win ? "win" : "loss"}">${esc(g.win ? t("stWinShort") : t("stLossShort"))}</span><span class="st-nm ellipsis">${esc(g.champion.name)}</span></span>
+                <span class="meta ellipsis" style="display:block;margin-top:2px">${pos ? esc(laneInfo(pos).label) + " · " : ""}${g.queue ? esc(tk("q_", g.queue)) + " · " : ""}${esc(dayLabel(g.started_at_ms))}</span>
+              </span>
+              <span class="st-fig"><b>${g.kills}/${g.deaths}/${g.assists}</b><span>${esc(fmtDec(g.cs / mins))} CS · ${esc(fmtSec(g.duration_secs))}</span></span>
+            </button>`;
+        }).join("")}
+      </section>`;
+    return head + totals + champs + recent;
+  }
+
+  function renderStats() {
+    renderDock(tabsHtml([
+      { id: "build", label: t("stTabBuild") },
+      { id: "tiers", label: t("stTabTiers") },
+      { id: "matchups", label: t("stTabMatchups") },
+      { id: "mine", label: t("stTabMine") }
+    ], ui.statsTab, "st-tab"));
+    loadStats(false);
+    const tab = ui.statsTab;
+    const entry = ui.statsData[tab];
+    // A view for another champion, role or language is not shown while the right one loads.
+    const v = entry && entry.key === statsKey(tab) ? entry.json : null;
+    if (tab === "tiers") return tierBody(v);
+    if (!v) {
+      const failed = ui.statsErr && !ui.statsPending;
+      const picker = tab === "build" || tab === "matchups" ? pickerPanel(entry && entry.json) : "";
+      return picker + `<section class="panel">${failed ? `<div class="st-state">${INFO_SVG}<span>${esc(t("stFailed"))}</span></div>` : skeleton()}</section>`;
+    }
+    if (tab === "build") return buildBody(v);
+    if (tab === "matchups") return matchupsBody(v);
+    return myStatsBody(v);
+  }
+  /** Behind the Stats tab: the chosen champion's splash on Build and Matchups, else the valley. */
+  function statsScene() {
+    const champ = (ui.statsTab === "build" || ui.statsTab === "matchups") ? ui.statsChamp : 0;
+    return champ > 0 ? { cat: "splash", id: champ * 1000, mode: "" } : { cat: "art", id: ART.backdrop, mode: "ambient" };
+  }
+  function openStatsChampion(id, pos, tab) {
+    ui.statsChamp = id;
+    ui.statsPos = pos || "";
+    ui.statsSearch = "";
+    if (tab) { ui.statsTab = tab; store.set("hypatia_stats_tab", tab); }
+    const field = $("stats-search");
+    if (field && document.activeElement === field) field.blur();
+    renderState(ui.state);
+    window.scrollTo(0, 0);
+  }
+
   // ---- Render loop ----------------------------------------------------------------------------
   function renderState(s) {
     if (!s) return;
@@ -2149,8 +3035,17 @@ button:disabled { cursor: default; }
     const turnNow = s.phase === "ReadyCheck"
       || Boolean(s.champ_select && s.champ_select.active_action
         && s.champ_select.active_action.is_my_turn && !s.champ_select.active_action.completed);
-    if (turnNow && !ui.wasTurn) ui.turnFlashUntil = Date.now() + 1400;
+    if (turnNow && !ui.wasTurn) {
+      ui.turnFlashUntil = Date.now() + 1400;
+      // A ready check or the player's draft turn brings the match back from the Stats tab.
+      if (ui.mode === "stats") { ui.mode = "match"; store.set("hypatia_mode", "match"); }
+    }
     ui.wasTurn = turnNow;
+    if (s.stats_revision !== ui.statsRev) {
+      const landed = ui.statsRev !== null;
+      ui.statsRev = s.stats_revision;
+      if (landed && ui.mode === "stats") loadStats(true);
+    }
     applyStaticChrome();
     fireAlertIfNew(s);
 
@@ -2170,7 +3065,8 @@ button:disabled { cursor: default; }
 
     let html;
     const post = s.phase === "EndOfGame" || s.phase === "PreEndOfGame" || s.phase === "WaitingForStats";
-    if (s.phase === "Lobby") html = renderLobby(s);
+    if (ui.mode === "stats") html = renderStats();
+    else if (s.phase === "Lobby") html = renderLobby(s);
     else if (s.phase === "Matchmaking") html = renderQueue(s);
     else if (s.phase === "ReadyCheck") html = renderReady(s);
     else if (s.phase === "ChampSelect") html = renderChampSelect(s);
@@ -2179,9 +3075,10 @@ button:disabled { cursor: default; }
     else html = renderIdle();
 
     const root = $("view-root");
-    const viewKey = s.phase + "|" + (s.phase === "ChampSelect" ? ui.csTab : s.phase === "InProgress" ? ui.liveTab : "");
+    const viewKey = ui.mode === "stats" ? "Stats|" + ui.statsTab
+      : s.phase + "|" + (s.phase === "ChampSelect" ? ui.csTab : s.phase === "InProgress" ? ui.liveTab : "");
     if (viewKey !== ui.viewKey) {
-      const phaseChanged = ui.viewKey.split("|")[0] !== s.phase;
+      const phaseChanged = ui.viewKey.split("|")[0] !== viewKey.split("|")[0];
       ui.viewKey = viewKey;
       root.innerHTML = html;
       if (phaseChanged) {
@@ -2192,7 +3089,7 @@ button:disabled { cursor: default; }
     } else {
       morphInto(root, html);
     }
-    setScene(sceneFor(s));
+    setScene(ui.mode === "stats" ? statsScene() : sceneFor(s));
     tickClocks();
     centerSelectedSkin();
   }
@@ -2249,10 +3146,20 @@ button:disabled { cursor: default; }
     if (ev.target.id === "champ-search") {
       ui.champQuery = ev.target.value;
       if (ui.state) renderState(ui.state);
+    } else if (ev.target.id === "stats-search") {
+      ui.statsSearch = ev.target.value;
+      loadRoster();
+      if (ui.state) renderState(ui.state);
     } else if (ev.target.id === "custom-rune-name") {
       ui.customName = ev.target.value;
       ui.customNameEdited = true;
     }
+  });
+
+  document.body.addEventListener("keydown", (ev) => {
+    if (ev.target.id !== "stats-search" || ev.key !== "Enter") return;
+    const first = searchRoster(ui.statsSearch)[0];
+    if (first) openStatsChampion(first.id, "", null);
   });
 
   // ---- Actions --------------------------------------------------------------------------------
@@ -2263,7 +3170,30 @@ button:disabled { cursor: default; }
     const act = btn.dataset.action;
     const cs = ui.state && ui.state.champ_select;
 
-    if (act === "demo-phase") {
+    if (act === "mode") {
+      ui.mode = btn.dataset.mode === "stats" ? "stats" : "match";
+      store.set("hypatia_mode", ui.mode);
+      renderState(ui.state);
+      window.scrollTo(0, 0);
+    } else if (act === "st-tab") {
+      ui.statsTab = btn.dataset.tab;
+      store.set("hypatia_stats_tab", ui.statsTab);
+      renderState(ui.state);
+      window.scrollTo(0, 0);
+    } else if (act === "st-champ") {
+      openStatsChampion(Number(btn.dataset.id), "", null);
+    } else if (act === "st-open") {
+      openStatsChampion(Number(btn.dataset.id), btn.dataset.pos, "build");
+    } else if (act === "st-role") {
+      ui.statsPos = btn.dataset.role;
+      renderState(ui.state);
+    } else if (act === "st-queue") {
+      ui.tierQueue = btn.dataset.queue;
+      renderState(ui.state);
+    } else if (act === "st-tier-role") {
+      ui.tierRole = btn.dataset.role;
+      renderState(ui.state);
+    } else if (act === "demo-phase") {
       sendCmd({ cmd: "demo_set_phase", phase: btn.dataset.phase });
     } else if (act === "demo-swap") {
       sendCmd({ cmd: "demo_simulate_incoming_swap" });

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::champions::Position;
+use crate::draft_helper::ChampSelectHelper;
 use crate::i18n::Lang;
 use crate::summary::{
     format_clock_mm_ss, ChampSelectEnemy, EndOfGameSummary, LiveGamePlayerSummary, SummarySnapshot,
@@ -86,6 +87,10 @@ pub struct RemoteStateSnapshot {
     /// Post-game block, only during the post-game phases. Champions only, no summoner names.
     #[serde(default)]
     pub end_of_game: Option<EndOfGameSummary>,
+    /// Champion Stats revision: changes when a stats fetch lands, so an open Stats tab on the
+    /// phone knows to read its view again.
+    #[serde(default)]
+    pub stats_revision: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -295,6 +300,9 @@ pub struct RemoteChampSelectState {
     pub rune_pages: Vec<RemoteRunePage>,
     pub recommended_rune_pages: Vec<RemoteRunePage>,
     pub rune_trees: Vec<RemoteRuneTree>,
+    /// The champ-select helper, as projected for the desktop.
+    #[serde(default)]
+    pub helper: ChampSelectHelper,
 }
 
 pub use crate::champions::{
@@ -471,6 +479,7 @@ pub fn project_remote_state(
             rune_pages: cs.rune_pages.clone(),
             recommended_rune_pages: cs.recommended_rune_pages.clone(),
             rune_trees: default_rune_trees_localized(lang),
+            helper: cs.helper.clone(),
         }
     });
 
@@ -668,6 +677,7 @@ pub fn project_remote_state(
         champ_select,
         live_game,
         end_of_game,
+        stats_revision: 0,
     }
 }
 

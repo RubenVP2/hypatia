@@ -18,7 +18,9 @@ const POSITIONS: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 
 fn rss_mb() -> f64 {
     let pid = sysinfo::Pid::from_u32(std::process::id());
-    let mut sys = sysinfo::System::new();
+    let Ok(mut sys) = sysinfo::System::new() else {
+        return 0.0;
+    };
     sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
     sys.process(pid)
         .map(|p| p.memory() as f64 / 1_048_576.0)
@@ -286,7 +288,7 @@ fn main() {
     // --- 4. Discovery scan (real OS process table, machine dependent) -------------------------
     let vault = SecretVault::new();
     for (label, detailed) in [("light", false), ("detailed", true)] {
-        let mut sys = sysinfo::System::new();
+        let mut sys = sysinfo::System::new().expect("sysinfo System::new");
         let mut since = HashMap::new();
         DiscoveryManager::scan_cycle(&mut sys, &vault, &mut since, detailed);
         const SCANS: u32 = 15;

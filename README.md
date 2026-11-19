@@ -89,7 +89,7 @@ Closing the Observatory immediately frees its event history from memory.
 
 ## For Developers
 
-Hypatia is a native **Rust 1.85+** & **Slint 1.18** workspace targeting Windows (`x86_64-pc-windows-msvc`), portable enough to build and run in `--demo` mode on Linux and macOS.
+Hypatia is a native **Rust 1.95+** & **Slint 1.19** workspace targeting Windows (`x86_64-pc-windows-msvc`), portable enough to build and run in `--demo` mode on Linux and macOS.
 
 <p align="center">
   <img src="docs/screenshots/desktop-observatory.png" alt="Hypatia Observatory — Side-by-side live event stream and JSON payload inspector" width="100%" />
@@ -101,7 +101,7 @@ Hypatia is a native **Rust 1.85+** & **Slint 1.18** workspace targeting Windows 
 crates/
 ├── shared/    # Data models, Match Projection, LiveBoard, RemoteCommand & RemoteStateSnapshot
 ├── core/      # Lockfile discovery, WAMP & LiveClient connectors, event store, settings, LcuActionClient, LAN Remote server
-└── desktop/   # Native Slint 1.18 desktop application
+└── desktop/   # Native Slint 1.19 desktop application
     └── src/   #   main · companion · telemetry (Observatory) · icons · labels · cli · win_dpi
 bench/         # Whole-application footprint benchmark
 ```

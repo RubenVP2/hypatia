@@ -33,5 +33,5 @@ Player-facing copy says **Observatory** (FR *Observatoire*). Code and older text
 
 ## Done
 
-- `cargo test --workspace` passes. On pull requests, CI runs lint only; on `main`, CI runs tests on Windows and Ubuntu, then `cargo build --release -p hypatia`.
+- `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass. CI runs formatting, `cargo deny --locked check`, `cargo audit`, `.slint`/`.pot`/`.po` i18n sync, and `hypatia-shared`/`hypatia-core` tests on Ubuntu, plus full `clippy` and `cargo test --workspace` on Windows (`x86_64-pc-windows-msvc`), adding `cargo build --release -p hypatia` on `main`.
 - UI changes are seen running: `cargo run -p hypatia -- --demo`, with `--phase <lobby|queue|ready|champ-select|live|end>` to pin a phase and `--remote` for the phone view.

@@ -20,8 +20,6 @@ No installer, no account, no setup:
 2. Unzip it anywhere and launch **`hypatia.exe`**.
 3. Open League of Legends as usual — Hypatia detects the client automatically and follows your match.
 
-Want to try the interface without opening League? Turn on **Demo mode** from the left rail.
-
 ---
 
 ## What It Does

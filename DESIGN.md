@@ -238,7 +238,7 @@ When the Observatory opens in split mode (`horizontal-stretch` 3:2 split, `min-w
 
 ## Elevation & Depth
 
-Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only the pairing and Performance sheets dim the canvas, with the themed `scrim` token (Night `#090b0fb3`, Day `#14171f73`); both close on backdrop click or Esc.
+Surfaces are **flat architectural planes** separated strictly by step tonal value (`shell` -> `ground` -> `panel` -> `raised`) and crisp `1px` perimeter hairlines (`rule` / `rule-strong`). Zero drop shadows or soft blurs appear on cards, buttons, inputs, or badges. Only dialogs dim the canvas, with the themed `scrim` token (Night `#090b0fb3`, Day `#14171f73`). Every dialog is a `ModalSheet` (`parts.slint`): panel centered both ways over the canvas, scrolling when taller than the window, header with title, status line and Close, closing on backdrop click or Esc. Text inside a sheet wraps; nothing is clipped or pushed past its frame (the pairing URL wraps and has a Copy button).
 
 ### Named Rules
 **The Full-Perimeter 1px Rule.** Highlighted rows and alerts distinguish themselves through background tint (`signal-soft`, `danger-soft`, `green-soft`), leading icons/roundels, and `1px` full-perimeter borders — never thick (>1px) left or right accent stripes.

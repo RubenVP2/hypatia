@@ -2063,3 +2063,101 @@ export component ChoiceRow inherits Rectangle {
         }
     }
 }
+
+// A dialog over the canvas: themed scrim, a panel centered both ways that scrolls when taller
+// than the window, a header with title, status line and Close, and dismissal on backdrop click
+// or Esc. Every popup uses it, so they all sit and behave the same.
+export component ModalSheet inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <color> subtitle-color: Theme.muted;
+    in property <length> panel-width: 600px;
+    // Called each time the sheet appears, before the first frame.
+    callback opened();
+    callback dismiss();
+
+    width: 100%;
+    height: 100%;
+    background: Theme.scrim;
+
+    TouchArea {
+        clicked => { root.dismiss(); }
+    }
+    FocusScope {
+        // Keyboard-only: must not swallow the backdrop click.
+        focus-on-click: false;
+        init => {
+            root.opened();
+            self.focus();
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.dismiss();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    panel := Rectangle {
+        width: min(root.panel-width, root.width - 2 * Space.xl);
+        height: min(body.preferred-height, root.height - 2 * Space.xl);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: Theme.panel;
+        border-radius: Theme.radius;
+        border-width: 1px;
+        border-color: Theme.rule-strong;
+        clip: true;
+
+        // Absorb clicks inside the panel so the backdrop does not dismiss it.
+        TouchArea {}
+
+        Flickable {
+            width: 100%;
+            height: 100%;
+            content-height: body.preferred-height;
+
+            body := VerticalLayout {
+                width: parent.width;
+                padding: Space.xl;
+                spacing: Space.md;
+
+                HorizontalLayout {
+                    spacing: Space.md;
+                    alignment: stretch;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: Space.xxs;
+                        Text {
+                            text: root.title;
+                            color: Theme.text;
+                            font-family: Type.display-family;
+                            font-size: Type.title;
+                            font-weight: 800;
+                            wrap: word-wrap;
+                        }
+                        if root.subtitle != "": Text {
+                            text: root.subtitle;
+                            color: root.subtitle-color;
+                            font-size: Type.small;
+                            font-weight: 600;
+                            wrap: word-wrap;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: start;
+                        Action {
+                            text: @tr("Close");
+                            clicked => { root.dismiss(); }
+                        }
+                    }
+                }
+
+                Divider { }
+
+                @children
+            }
+        }
+    }
+}

@@ -49,7 +49,7 @@ Unlike Porofessor, Blitz, OP.GG or U.GG, Hypatia is:
 
 ## Evidence on Hand
 
-- Demo fixtures in `crates/core/src/fixtures.rs` simulate all five match phases, WAMP streams and callable endpoints; usable for screenshots and design work without League running. Demo data must stay clearly labelled as demo.
+- Demo fixtures in `crates/core/src/fixtures.rs` simulate all five match phases, WAMP streams and callable endpoints; usable for screenshots and design work without League running. Demo data must stay clearly labelled as demo. Demo Mode is a developer tool: the release build shows it only when launched with `--demo`; debug builds always offer it.
 - Data model of what can be shown: `crates/shared/src/summary.rs` (summoner, lobby, matchmaking, champion select, live game players and events).
 - No testimonials, user counts or press exist; do not fabricate any.
 

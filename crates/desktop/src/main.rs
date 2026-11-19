@@ -242,6 +242,9 @@ impl Ui {
     }
 
     fn toggle_demo(&self) {
+        if !self.main.get_dev_tools() {
+            return;
+        }
         let next = !self.main.get_demo();
         self.app.set_demo_active(next, self.cli.demo_rate);
         self.main.set_demo(next);
@@ -909,6 +912,8 @@ fn main() {
 
     let main = MainWindow::new().expect("Failed to create MainWindow");
     main.set_demo(cli.demo);
+    // Demo Mode is for developers: debug builds, or a release launched with `--demo`.
+    main.set_dev_tools(cfg!(debug_assertions) || cli.demo);
     main.set_perf(perf_settings(&settings, hw, lang));
     main.set_perf_metrics(PerfMetrics::default());
 

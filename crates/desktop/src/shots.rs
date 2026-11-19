@@ -132,5 +132,19 @@ fn shots() {
     if only.is_empty() || "settings".contains(&only) {
         main.set_settings_open(true);
         capture("settings");
+        main.set_settings_open(false);
+    }
+    if only.is_empty() || "remote".contains(&only) {
+        main.set_remote_url(
+            "http://192.168.1.10:7879/?token=0123456789abcdef0123456789abcdef".into(),
+        );
+        main.set_remote_panel_open(true);
+        for (lang, code) in [(Lang::En, "en"), (Lang::Fr, "fr")] {
+            app.set_lang(lang);
+            slint::select_bundled_translation(code).unwrap();
+            main.set_language(code.into());
+            capture(&format!("remote-{code}"));
+        }
+        main.set_remote_panel_open(false);
     }
 }

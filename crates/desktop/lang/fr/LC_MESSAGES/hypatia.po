@@ -561,7 +561,7 @@ msgid "Waiting for QR scan on same Wi-Fi"
 msgstr "En attente du scan QR sur le même réseau Wi-Fi"
 
 #: ui/app.slint:2426 ui/app.slint:2583
-msgctxt "MainWindow"
+msgctxt "ModalSheet"
 msgid "Close"
 msgstr "Fermer"
 
@@ -572,8 +572,16 @@ msgstr "Scannez le code QR pour accepter la file, verrouiller vos choix et bans,
 
 #: ui/app.slint:2468
 msgctxt "MainWindow"
-msgid "DIRECT PAIRING URL (SELECT TO COPY)"
-msgstr "URL D'ASSOCIATION DIRECTE (SÉLECTIONNER POUR COPIER)"
+msgid "DIRECT PAIRING URL"
+msgstr "URL D'ASSOCIATION DIRECTE"
+
+msgctxt "MainWindow"
+msgid "Copy"
+msgstr "Copier"
+
+msgctxt "MainWindow"
+msgid "Copied"
+msgstr "Copié"
 
 #: ui/app.slint:2482
 msgctxt "MainWindow"

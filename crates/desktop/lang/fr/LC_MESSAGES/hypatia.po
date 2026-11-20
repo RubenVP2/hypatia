@@ -1160,6 +1160,10 @@ msgctxt "ChampionPicker"
 msgid "Your most played"
 msgstr "Vos plus joués"
 
+msgctxt "RuneTreeGrid"
+msgid "Shards"
+msgstr "Fragments"
+
 #: ui/stats.slint:745
 msgctxt "RunePageCard"
 msgid "Most popular page"
@@ -1174,6 +1178,10 @@ msgstr "Page alternative"
 msgctxt "RunePageCard"
 msgid "Client's recommended page"
 msgstr "Page recommandée par le client"
+
+msgctxt "RunePageCard"
+msgid "Your most played page"
+msgstr "Votre page la plus jouée"
 
 #: ui/stats.slint:748
 msgctxt "RunePageCard"
@@ -1205,10 +1213,54 @@ msgctxt "StageLabel"
 msgid "Situational"
 msgstr "Situationnels"
 
+msgctxt "StageLabel"
+msgid "Item 1"
+msgstr "Objet 1"
+
+msgctxt "StageLabel"
+msgid "Item 2"
+msgstr "Objet 2"
+
+msgctxt "StageLabel"
+msgid "Item 3"
+msgstr "Objet 3"
+
+msgctxt "StageLabel"
+msgid "Item 4"
+msgstr "Objet 4"
+
+msgctxt "StageLabel"
+msgid "Item 5"
+msgstr "Objet 5"
+
 #: ui/stats.slint:792
 msgctxt "StageLabel"
 msgid "Items"
 msgstr "Objets"
+
+msgctxt "BuildTab"
+msgid "Ranked Solo/Duo"
+msgstr "Classée Solo/Duo"
+
+msgctxt "BuildTab"
+msgid "Arena"
+msgstr "Arène"
+
+msgctxt "BuildTab"
+msgid "All ranks"
+msgstr "Tous rangs"
+
+msgctxt "BuildTab"
+msgid "Emerald+"
+msgstr "Émeraude+"
+
+msgctxt "BuildTab"
+msgid "Diamond+"
+msgstr "Diamant+"
+
+msgctxt "BuildTab"
+msgid "Master+"
+msgstr "Maître+"
 
 #: ui/stats.slint:962
 msgctxt "BuildTab"
@@ -1240,6 +1292,22 @@ msgctxt "BuildTab"
 msgid "GAMES"
 msgstr "PARTIES"
 
+msgctxt "BuildTab"
+msgid "Your games"
+msgstr "Vos parties"
+
+msgctxt "BuildTab"
+msgid "KDA"
+msgstr "KDA"
+
+msgctxt "BuildTab"
+msgid "CS/MIN"
+msgstr "CS/MIN"
+
+msgctxt "BuildTab"
+msgid "DPM"
+msgstr "DPM"
+
 #: ui/stats.slint:1015
 msgctxt "BuildTab"
 msgid "Client's recommended page"
@@ -1260,6 +1328,14 @@ msgctxt "BuildTab"
 msgid "Share of games and win rate for each stage"
 msgstr "Part des parties et taux de victoire à chaque étape"
 
+msgctxt "BuildTab"
+msgid "By stage"
+msgstr "Par étape"
+
+msgctxt "BuildTab"
+msgid "By slot"
+msgstr "Par emplacement"
+
 #: ui/stats.slint:1091
 msgctxt "BuildTab"
 msgid "Skill order"
@@ -1269,6 +1345,10 @@ msgstr "Ordre des compétences"
 msgctxt "BuildTab"
 msgid "Max first"
 msgstr "Monter d'abord"
+
+msgctxt "BuildTab"
+msgid "Alternative"
+msgstr "Alternative"
 
 #: ui/stats.slint:1127
 msgctxt "TierBadge"
@@ -1370,6 +1450,10 @@ msgctxt "MatchupsTab"
 msgid "Highest win rate for {0}"
 msgstr "Meilleur taux de victoire de {0}"
 
+msgctxt "ResultChip"
+msgid "RMK"
+msgstr "RMK"
+
 #: ui/stats.slint:1454
 msgctxt "ResultChip"
 msgid "WIN"
@@ -1380,6 +1464,10 @@ msgctxt "ResultChip"
 msgid "LOSS"
 msgstr "DÉF."
 
+msgctxt "GameRowView"
+msgid "RMK"
+msgstr "RMK"
+
 #: ui/stats.slint:1467
 msgctxt "GameRowView"
 msgid "WIN"
@@ -1389,6 +1477,10 @@ msgstr "VICT."
 msgctxt "GameRowView"
 msgid "LOSS"
 msgstr "DÉF."
+
+msgctxt "GameRowView"
+msgid "not in totals"
+msgstr "hors totaux"
 
 #: ui/stats.slint:1535
 msgctxt "ChampionSummaryRow"
@@ -1435,6 +1527,10 @@ msgctxt "MyStatsTab"
 msgid "DPM"
 msgstr "DPM"
 
+msgctxt "MyStatsTab"
+msgid "By role"
+msgstr "Par rôle"
+
 #: ui/stats.slint:1640
 msgctxt "MyStatsTab"
 msgid "By champion"
@@ -1465,6 +1561,30 @@ msgctxt "MyStatsTab"
 msgid "Recent games"
 msgstr "Parties récentes"
 
+msgctxt "MyStatsTab"
+msgid "All queues listed; totals above count valid Summoner's Rift games."
+msgstr "Toutes les files affichées ; les totaux ci-dessus comptent les parties valides de la Faille."
+
+msgctxt "MyStatsTab"
+msgid "All queues"
+msgstr "Toutes les files"
+
+msgctxt "MyStatsTab"
+msgid "Ranked Solo/Duo"
+msgstr "Classée Solo/Duo"
+
+msgctxt "MyStatsTab"
+msgid "Ranked Flex"
+msgstr "Classée Flexible"
+
+msgctxt "MyStatsTab"
+msgid "Arena"
+msgstr "Arène"
+
+msgctxt "MyStatsTab"
+msgid "All roles"
+msgstr "Tous les rôles"
+
 #: ui/stats.slint:1677
 msgctxt "MyStatsTab"
 msgid "No games in your recent history yet."
@@ -1475,10 +1595,17 @@ msgctxt "MyStatsTab"
 msgid "RESULT"
 msgstr "ISSUE"
 
-#: ui/stats.slint:1693
 msgctxt "MyStatsTab"
-msgid "TIME"
-msgstr "DURÉE"
+msgid "KDA / KP"
+msgstr "KDA / KP"
+
+msgctxt "MyStatsTab"
+msgid "CS / VS"
+msgstr "CS / VS"
+
+msgctxt "MyStatsTab"
+msgid "SCORE"
+msgstr "SCORE"
 
 #: ui/stats.slint:1740
 msgctxt "StatsPage"

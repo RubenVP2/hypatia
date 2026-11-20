@@ -574,6 +574,8 @@ pub fn assemble_build(
         spells: Vec::new(),
         items,
         skills: Vec::new(),
+        role_distribution: Vec::new(),
+        tier_rank: None,
         attribution: attribution(&build.content),
     })
 }

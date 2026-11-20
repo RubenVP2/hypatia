@@ -106,13 +106,29 @@ pub struct SpellPair {
     pub second: i64,
 }
 
-/// A build path stage: starting items, core items, boots, situational options.
+/// A build path stage: starting items, core items, boots, situational options, or slot-by-slot
+/// purchase choices (`Slot1`..`Slot5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ItemStage {
     Starting,
     Core,
     Boots,
     Situational,
+    Slot1,
+    Slot2,
+    Slot3,
+    Slot4,
+    Slot5,
+}
+
+impl ItemStage {
+    /// Whether this stage represents an individual purchase slot (`Item 1`..`Item 5`).
+    pub fn is_slot(self) -> bool {
+        matches!(
+            self,
+            Self::Slot1 | Self::Slot2 | Self::Slot3 | Self::Slot4 | Self::Slot5
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -150,6 +166,12 @@ pub struct ChampionBuild {
     pub spells: Vec<(SpellPair, Rates)>,
     pub items: Vec<ItemBlock>,
     pub skills: Vec<SkillOrder>,
+    /// Role pickrate share across Summoner's Rift positions (e.g. `[(Mid, 0.86), (Support, 0.14)]`).
+    #[serde(default)]
+    pub role_distribution: Vec<(Position, f32)>,
+    /// Tier standing and rank within the role (e.g. `(Tier::S, 4, 41)`).
+    #[serde(default)]
+    pub tier_rank: Option<(Tier, u32, u32)>,
     /// Link the provider requires next to its data (Online only).
     #[serde(default)]
     pub attribution: Option<Attribution>,
@@ -244,6 +266,17 @@ pub enum CompTrait {
     AllMagic,
 }
 
+/// Recognition badge for standout performance in a single match (computed locally).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MatchBadge {
+    /// Best performance score on the winning team.
+    Mvp,
+    /// Best performance score on the losing team.
+    Ace,
+    /// Multi-kill achievement (`3` = Triple, `4` = Quadra, `5` = Penta).
+    Multikill(u8),
+}
+
 /// Per-champion summary of the player's own games (My Stats).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlayerChampionStats {
@@ -258,9 +291,34 @@ pub struct PlayerChampionStats {
     pub cs_per_min: f32,
     pub gold_per_min: f32,
     pub vision_per_min: f32,
-    /// The player's most played rune page and final items on this champion.
+    /// The player's most played rune page, summoner spells, and final items on this champion.
     pub runes: Option<RuneSetup>,
+    #[serde(default)]
+    pub spells: Option<SpellPair>,
     pub items: Vec<i64>,
+}
+
+/// Per-role summary of the player's Summoner's Rift games (My Stats).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoleSummary {
+    pub position: Position,
+    pub games: u32,
+    pub wins: u32,
+    pub kda: f32,
+    pub cs_per_min: f32,
+    pub dpm: f32,
+}
+
+/// One day/session bucket of recent games in My Stats.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionGroup {
+    /// UTC calendar day (`started_at_ms.div_euclid(86_400_000)`).
+    pub day_key: i64,
+    pub wins: u32,
+    pub losses: u32,
+    pub avg_score: Option<f32>,
+    /// Indices into the input game slice belonging to this session.
+    pub game_indices: Vec<usize>,
 }
 
 /// One past game of the player, from local match history.
@@ -284,6 +342,27 @@ pub struct PlayerGame {
     pub items: Vec<i64>,
     pub runes: Option<RuneSetup>,
     pub spells: SpellPair,
+    /// Direct enemy lane opponent's champion ID on Summoner's Rift, when full match data is known.
+    #[serde(default)]
+    pub opponent_champion_id: Option<i64>,
+    /// Kill participation as a fraction in `0.0..=1.0` (`(kills + assists) / team_kills`).
+    #[serde(default)]
+    pub kill_participation: Option<f32>,
+    /// Share of team champion damage in `0.0..=1.0`.
+    #[serde(default)]
+    pub damage_share: Option<f32>,
+    /// Share of team gold in `0.0..=1.0`.
+    #[serde(default)]
+    pub gold_share: Option<f32>,
+    /// Deterministic local `0..=100` performance rating.
+    #[serde(default)]
+    pub performance_score: Option<u8>,
+    /// `1..=10` rank among all participants when full match data is available.
+    #[serde(default)]
+    pub placement: Option<u8>,
+    /// Standout match badge (`MVP`, `ACE`, or multi-kill).
+    #[serde(default)]
+    pub badge: Option<MatchBadge>,
 }
 
 /// Games shorter than this are remakes: listed, but left out of every average.
@@ -294,13 +373,18 @@ impl PlayerGame {
     pub fn on_summoners_rift(&self) -> bool {
         self.queue.is_some_and(StatsQueue::on_summoners_rift)
     }
+
+    /// Whether the match ended early as a remake (`duration_secs < REMAKE_SECS`).
+    pub fn is_remake(&self) -> bool {
+        self.duration_secs < REMAKE_SECS
+    }
 }
 
 /// The games My Stats totals and per-champion summaries are built from: Summoner's Rift games
 /// when there are any, so ARAM and event modes (with very different damage and farm) do not
 /// skew the rates; otherwise every game. Remakes never count. Order is kept.
 pub fn summarised_games(games: &[PlayerGame]) -> Vec<&PlayerGame> {
-    let played = || games.iter().filter(|g| g.duration_secs >= REMAKE_SECS);
+    let played = || games.iter().filter(|g| !g.is_remake());
     if played().any(PlayerGame::on_summoners_rift) {
         played().filter(|g| g.on_summoners_rift()).collect()
     } else {
@@ -352,12 +436,69 @@ mod summary_tests {
     }
 }
 
-/// The My Stats profile: recent games and the per-champion summary derived from them.
+/// The My Stats profile: recent games and the per-champion & per-role summaries derived from them.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlayerProfile {
     pub origin: StatsOrigin,
     pub games: Vec<PlayerGame>,
     pub champions: Vec<PlayerChampionStats>,
+    #[serde(default)]
+    pub roles: Vec<RoleSummary>,
+}
+
+/// Spatial slot layout of one rune tree (row 0 = keystones, rows 1..=3 = regular perk rows).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RuneStyleSlots {
+    pub style_id: i64,
+    pub rows: Vec<Vec<i64>>,
+}
+
+/// Standard 3x3 stat shard grid (Offense, Flex, Defense).
+pub const STAT_SHARD_ROWS: [[i64; 3]; 3] =
+    [[5008, 5005, 5007], [5008, 5010, 5001], [5011, 5013, 5001]];
+
+/// Built-in spatial slot layout for the five rune trees, used as fallback when the client's
+/// `perkstyles.json` has not been loaded (offline or `--demo`).
+pub fn builtin_rune_style_slots(style_id: i64) -> Option<Vec<Vec<i64>>> {
+    let rows: &[&[i64]] = match style_id {
+        // Precision
+        8000 => &[
+            &[8005, 8008, 8021, 8010],
+            &[9101, 9111, 8009],
+            &[9104, 9105, 9103],
+            &[8014, 8017, 8299],
+        ],
+        // Domination
+        8100 => &[
+            &[8112, 8128, 9923],
+            &[8126, 8139, 8143],
+            &[8137, 8140, 8141],
+            &[8135, 8105, 8106],
+        ],
+        // Sorcery
+        8200 => &[
+            &[8214, 8229, 8230],
+            &[8224, 8226, 8275],
+            &[8210, 8234, 8233],
+            &[8237, 8232, 8236],
+        ],
+        // Inspiration
+        8300 => &[
+            &[8351, 8360, 8369],
+            &[8306, 8304, 8321],
+            &[8313, 8352, 8345],
+            &[8347, 8410, 8316],
+        ],
+        // Resolve
+        8400 => &[
+            &[8437, 8439, 8465],
+            &[8446, 8463, 8401],
+            &[8429, 8444, 8473],
+            &[8451, 8453, 8242],
+        ],
+        _ => return None,
+    };
+    Some(rows.iter().map(|r| r.to_vec()).collect())
 }
 
 /// Static game data the stats views need to draw names and icons, from the local client
@@ -380,6 +521,21 @@ pub struct GameData {
     /// Item ids the client files under `Boots`, every tier.
     #[serde(default)]
     pub boots: Vec<i64>,
+    /// Spatial row/slot layout of each rune style, parsed from `perkstyles.json`.
+    #[serde(default)]
+    pub perk_style_slots: Vec<RuneStyleSlots>,
+}
+
+impl GameData {
+    /// Returns the spatial rows (keystone + 3 perk rows) for `style_id`, falling back to the
+    /// built-in layout when the client's `perkstyles.json` is unavailable.
+    pub fn style_rows(&self, style_id: i64) -> Option<Vec<Vec<i64>>> {
+        self.perk_style_slots
+            .iter()
+            .find(|s| s.style_id == style_id && !s.rows.is_empty())
+            .map(|s| s.rows.clone())
+            .or_else(|| builtin_rune_style_slots(style_id))
+    }
 }
 
 /// Why a stats lookup produced nothing.

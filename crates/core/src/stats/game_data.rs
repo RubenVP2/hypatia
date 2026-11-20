@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use hypatia_shared::{
     game_name, game_names, normalize_champion_key, GameData, GameDataEntry, GameTextKind, Lang,
+    RuneStyleSlots,
 };
 use serde_json::Value;
 
@@ -104,6 +105,7 @@ fn with_game_text(data: &GameData, lang: Lang) -> GameData {
         perk_styles: rename(&data.perk_styles, GameTextKind::PerkStyle),
         spells: rename(&data.spells, GameTextKind::Spell),
         boots: data.boots.clone(),
+        perk_style_slots: data.perk_style_slots.clone(),
     }
 }
 
@@ -141,10 +143,12 @@ pub fn parse_game_data(
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or_else(|| array(styles));
+    let mut perk_style_slots: Vec<RuneStyleSlots> = Vec::new();
     let perk_styles: Vec<GameDataEntry> = style_list
         .iter()
         .filter_map(|style| {
             let entry = entry(style, "tooltip")?;
+            let mut rows: Vec<Vec<i64>> = Vec::new();
             for slot in style
                 .get("slots")
                 .and_then(Value::as_array)
@@ -154,16 +158,27 @@ pub fn parse_game_data(
                 if slot.get("type").and_then(Value::as_str) == Some("kStatMod") {
                     continue;
                 }
+                let mut row = Vec::new();
                 for perk in slot
                     .get("perks")
                     .and_then(Value::as_array)
                     .into_iter()
                     .flatten()
                 {
-                    if let Some(id) = perk.as_i64() {
+                    if let Some(id) = perk.as_i64().filter(|id| *id > 0) {
                         index.perk_style.insert(id, entry.id);
+                        row.push(id);
                     }
                 }
+                if !row.is_empty() {
+                    rows.push(row);
+                }
+            }
+            if !rows.is_empty() {
+                perk_style_slots.push(RuneStyleSlots {
+                    style_id: entry.id,
+                    rows,
+                });
             }
             Some(entry)
         })
@@ -192,6 +207,7 @@ pub fn parse_game_data(
             perk_styles,
             spells,
             boots,
+            perk_style_slots,
         },
         index,
     )
@@ -391,6 +407,10 @@ mod tests {
         assert_eq!(index.style_of(8226), Some(8200));
         assert_eq!(index.style_of(5008), None, "shards belong to no style");
         assert_eq!(data.perk_styles.len(), 3);
+        let dom_rows = data.style_rows(8100).unwrap();
+        assert_eq!(dom_rows.len(), 4, "keystone + 3 regular rows, no stat mods");
+        assert_eq!(dom_rows[0], vec![8112, 8128, 9923]);
+        assert_eq!(dom_rows[1], vec![8126, 8139, 8143]);
 
         assert_eq!(index.spell_id("Flash"), Some(4));
         assert_eq!(

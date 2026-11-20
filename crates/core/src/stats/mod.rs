@@ -20,7 +20,7 @@
 //! | [`ChampionStats::build`] | online provider (opt-in) | `Online` |
 //! | [`ChampionStats::tier_list`] | online provider (opt-in) | `Online` |
 //! | [`ChampionStats::matchups`] | online provider (opt-in) | `Online` |
-//! | [`ChampionStats::player_profile`] | client match history (last 20 games) | `Local` |
+//! | [`ChampionStats::player_profile`] | client match history (last 50 games) | `Local` |
 //!
 //! In demo mode (`--demo`) every getter answers at once from [`demo::DemoStats`] with origin
 //! `Demo`, Online stats switch or not. Icons for ids in these values come from the asset cache:
@@ -448,7 +448,7 @@ impl ChampionStats {
         state
     }
 
-    /// My Stats: the player's last 20 games from the client and the per-champion summary.
+    /// My Stats: the player's last 50 games from the client and the per-champion & per-role summaries.
     /// Origin `Local`.
     pub fn player_profile(&self) -> StatsState<PlayerProfile> {
         if self.is_demo() {

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"POT-Creation-Date: 2026-11-19 19:55+0000\n"
+"POT-Creation-Date: 2026-11-20 10:31+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1095,47 +1095,47 @@ msgctxt "Theme"
 msgid "Fill"
 msgstr ""
 
-#: ui/stats.slint:252
+#: ui/stats.slint:337
 msgctxt "OriginChip"
 msgid "LOCAL"
 msgstr ""
 
-#: ui/stats.slint:253
+#: ui/stats.slint:338
 msgctxt "OriginChip"
 msgid "RIOT CLIENT"
 msgstr ""
 
-#: ui/stats.slint:253
+#: ui/stats.slint:338
 msgctxt "OriginChip"
 msgid "ONLINE"
 msgstr ""
 
-#: ui/stats.slint:253
+#: ui/stats.slint:338
 msgctxt "OriginChip"
 msgid "DEMO"
 msgstr ""
 
-#: ui/stats.slint:313
+#: ui/stats.slint:398
 msgctxt "SourceLink"
 msgid "Data: {0}"
 msgstr ""
 
-#: ui/stats.slint:314
+#: ui/stats.slint:399
 msgctxt "SourceLink"
 msgid "Open the {0} page"
 msgstr ""
 
-#: ui/stats.slint:364
+#: ui/stats.slint:449
 msgctxt "Skeleton"
 msgid "Loading"
 msgstr ""
 
-#: ui/stats.slint:405
+#: ui/stats.slint:490
 msgctxt "OnlineOffCard"
 msgid "Online stats are off"
 msgstr ""
 
-#: ui/stats.slint:414
+#: ui/stats.slint:499
 msgctxt "OnlineOffCard"
 msgid ""
 "Global win rates, builds, tier lists and matchups come from MetaBot.GG. "
@@ -1143,419 +1143,579 @@ msgid ""
 "Never your summoner name, your account or anything from your client."
 msgstr ""
 
-#: ui/stats.slint:420
+#: ui/stats.slint:505
 msgctxt "OnlineOffCard"
 msgid ""
 "Your own games and the client's recommended pages stay local either way. You "
 "can switch it off again in Performance."
 msgstr ""
 
-#: ui/stats.slint:429
+#: ui/stats.slint:514
 msgctxt "OnlineOffCard"
 msgid "Turn on Online stats"
 msgstr ""
 
-#: ui/stats.slint:461
+#: ui/stats.slint:546
 msgctxt "BlockState"
 msgid "League of Legends is not running. Start the client to read this from it."
 msgstr ""
 
-#: ui/stats.slint:463
+#: ui/stats.slint:548
 msgctxt "BlockState"
 msgid "No data for this yet: a new champion, a rare role or too few games."
 msgstr ""
 
-#: ui/stats.slint:605
+#: ui/stats.slint:699
 msgctxt "ChampionPicker"
 msgid "Choose a champion"
 msgstr ""
 
-#: ui/stats.slint:615
+#: ui/stats.slint:709
 msgctxt "ChampionPicker"
 msgid "Search by name, or pick one of your champions below."
 msgstr ""
 
-#: ui/stats.slint:645 ui/stats.slint:656 ui/stats.slint:675 ui/stats.slint:686
+#: ui/stats.slint:739 ui/stats.slint:750 ui/stats.slint:769 ui/stats.slint:780
 msgctxt "ChampionPicker"
 msgid "Search a champion"
 msgstr ""
 
-#: ui/stats.slint:699
+#: ui/stats.slint:793
 msgctxt "ChampionPicker"
 msgid "Matches"
 msgstr ""
 
-#: ui/stats.slint:699
+#: ui/stats.slint:793
 msgctxt "ChampionPicker"
 msgid "No champion by that name."
 msgstr ""
 
-#: ui/stats.slint:700
+#: ui/stats.slint:794
 msgctxt "ChampionPicker"
 msgid "Your most played"
 msgstr ""
 
-#: ui/stats.slint:745
+#: ui/stats.slint:885
+msgctxt "RuneTreeGrid"
+msgid "Shards"
+msgstr ""
+
+#: ui/stats.slint:911
 msgctxt "RunePageCard"
 msgid "Most popular page"
 msgstr ""
 
-#: ui/stats.slint:746
+#: ui/stats.slint:913
 msgctxt "RunePageCard"
 msgid "Alternative page"
 msgstr ""
 
-#: ui/stats.slint:746
+#: ui/stats.slint:915
 msgctxt "RunePageCard"
 msgid "Client's recommended page"
 msgstr ""
 
-#: ui/stats.slint:748
+#: ui/stats.slint:916
+msgctxt "RunePageCard"
+msgid "Your most played page"
+msgstr ""
+
+#: ui/stats.slint:918
 msgctxt "RunePageCard"
 msgid "Same as the client's recommended page"
 msgstr ""
 
-#: ui/stats.slint:777
+#: ui/stats.slint:948
 msgctxt "RunePageCard"
 msgid "Shards"
 msgstr ""
 
-#: ui/stats.slint:791
+#: ui/stats.slint:962
 msgctxt "StageLabel"
 msgid "Starting"
 msgstr ""
 
-#: ui/stats.slint:792
+#: ui/stats.slint:964
 msgctxt "StageLabel"
 msgid "Core"
 msgstr ""
 
-#: ui/stats.slint:792
+#: ui/stats.slint:966
 msgctxt "StageLabel"
 msgid "Boots"
 msgstr ""
 
-#: ui/stats.slint:792
+#: ui/stats.slint:968
 msgctxt "StageLabel"
 msgid "Situational"
 msgstr ""
 
-#: ui/stats.slint:792
+#: ui/stats.slint:970
+msgctxt "StageLabel"
+msgid "Item 1"
+msgstr ""
+
+#: ui/stats.slint:972
+msgctxt "StageLabel"
+msgid "Item 2"
+msgstr ""
+
+#: ui/stats.slint:974
+msgctxt "StageLabel"
+msgid "Item 3"
+msgstr ""
+
+#: ui/stats.slint:976
+msgctxt "StageLabel"
+msgid "Item 4"
+msgstr ""
+
+#: ui/stats.slint:977
+msgctxt "StageLabel"
+msgid "Item 5"
+msgstr ""
+
+#: ui/stats.slint:977
 msgctxt "StageLabel"
 msgid "Items"
 msgstr ""
 
-#: ui/stats.slint:964
-msgctxt "BuildTab"
-msgid "Global build"
-msgstr ""
-
-#: ui/stats.slint:965
-msgctxt "BuildTab"
-msgid "Win rates, item path and skill order"
-msgstr ""
-
-#: ui/stats.slint:978
-msgctxt "BuildTab"
-msgid "WIN RATE"
-msgstr ""
-
-#: ui/stats.slint:979
-msgctxt "BuildTab"
-msgid "PICK RATE"
-msgstr ""
-
-#: ui/stats.slint:980
-msgctxt "BuildTab"
-msgid "BAN RATE"
-msgstr ""
-
-#: ui/stats.slint:981
-msgctxt "BuildTab"
-msgid "GAMES"
-msgstr ""
-
-#: ui/stats.slint:1017
-msgctxt "BuildTab"
-msgid "Client's recommended page"
-msgstr ""
-
-#: ui/stats.slint:1033
-msgctxt "BuildTab"
-msgid "Summoner spells"
-msgstr ""
-
-#: ui/stats.slint:1071
-msgctxt "BuildTab"
-msgid "Item path"
-msgstr ""
-
-#: ui/stats.slint:1072
-msgctxt "BuildTab"
-msgid "Share of games and win rate for each stage"
-msgstr ""
-
-#: ui/stats.slint:1093
-msgctxt "BuildTab"
-msgid "Skill order"
-msgstr ""
-
-#: ui/stats.slint:1102
-msgctxt "BuildTab"
-msgid "Max first"
-msgstr ""
-
-#: ui/stats.slint:1129
+#: ui/stats.slint:1149
 msgctxt "TierBadge"
 msgid "Tier {0}"
 msgstr ""
 
-#: ui/stats.slint:1162
+#: ui/stats.slint:1179
+msgctxt "BuildTab"
+msgid "Ranked Solo/Duo"
+msgstr ""
+
+#: ui/stats.slint:1189
+msgctxt "BuildTab"
+msgid "Arena"
+msgstr ""
+
+#: ui/stats.slint:1197 ui/stats.slint:1222
+msgctxt "BuildTab"
+msgid "All ranks"
+msgstr ""
+
+#: ui/stats.slint:1202 ui/stats.slint:1227
+msgctxt "BuildTab"
+msgid "Emerald+"
+msgstr ""
+
+#: ui/stats.slint:1207 ui/stats.slint:1232
+msgctxt "BuildTab"
+msgid "Diamond+"
+msgstr ""
+
+#: ui/stats.slint:1212 ui/stats.slint:1237
+msgctxt "BuildTab"
+msgid "Master+"
+msgstr ""
+
+#: ui/stats.slint:1251
+msgctxt "BuildTab"
+msgid "Global build"
+msgstr ""
+
+#: ui/stats.slint:1252
+msgctxt "BuildTab"
+msgid "Win rates, item path and skill order"
+msgstr ""
+
+#: ui/stats.slint:1277 ui/stats.slint:1311
+msgctxt "BuildTab"
+msgid "WIN RATE"
+msgstr ""
+
+#: ui/stats.slint:1278
+msgctxt "BuildTab"
+msgid "PICK RATE"
+msgstr ""
+
+#: ui/stats.slint:1279
+msgctxt "BuildTab"
+msgid "BAN RATE"
+msgstr ""
+
+#: ui/stats.slint:1280
+msgctxt "BuildTab"
+msgid "GAMES"
+msgstr ""
+
+#: ui/stats.slint:1303
+msgctxt "BuildTab"
+msgid "Your games"
+msgstr ""
+
+#: ui/stats.slint:1312
+msgctxt "BuildTab"
+msgid "KDA"
+msgstr ""
+
+#: ui/stats.slint:1313
+msgctxt "BuildTab"
+msgid "CS/MIN"
+msgstr ""
+
+#: ui/stats.slint:1314
+msgctxt "BuildTab"
+msgid "DPM"
+msgstr ""
+
+#: ui/stats.slint:1376
+msgctxt "BuildTab"
+msgid "Client's recommended page"
+msgstr ""
+
+#: ui/stats.slint:1392
+msgctxt "BuildTab"
+msgid "Summoner spells"
+msgstr ""
+
+#: ui/stats.slint:1433
+msgctxt "BuildTab"
+msgid "Item path"
+msgstr ""
+
+#: ui/stats.slint:1434
+msgctxt "BuildTab"
+msgid "Share of games and win rate for each stage"
+msgstr ""
+
+#: ui/stats.slint:1443
+msgctxt "BuildTab"
+msgid "By stage"
+msgstr ""
+
+#: ui/stats.slint:1448
+msgctxt "BuildTab"
+msgid "By slot"
+msgstr ""
+
+#: ui/stats.slint:1484
+msgctxt "BuildTab"
+msgid "Skill order"
+msgstr ""
+
+#: ui/stats.slint:1493
+msgctxt "BuildTab"
+msgid "Max first"
+msgstr ""
+
+#: ui/stats.slint:1509
+msgctxt "BuildTab"
+msgid "Alternative"
+msgstr ""
+
+#: ui/stats.slint:1552
 msgctxt "TierRowView"
 msgid "{0}, {1}, open its build"
 msgstr ""
 
-#: ui/stats.slint:1221
+#: ui/stats.slint:1611
 msgctxt "TierTab"
 msgid "Ranked Solo/Duo"
 msgstr ""
 
-#: ui/stats.slint:1231
+#: ui/stats.slint:1621
 msgctxt "TierTab"
 msgid "Arena"
 msgstr ""
 
-#: ui/stats.slint:1240
+#: ui/stats.slint:1630
 msgctxt "TierTab"
 msgid "All roles"
 msgstr ""
 
-#: ui/stats.slint:1259
+#: ui/stats.slint:1649
 msgctxt "TierTab"
 msgid "Tier list"
 msgstr ""
 
-#: ui/stats.slint:1260
+#: ui/stats.slint:1650
 msgctxt "TierTab"
 msgid "Patch {0} · click a champion to open its build"
 msgstr ""
 
-#: ui/stats.slint:1271
+#: ui/stats.slint:1661
 msgctxt "TierTab"
 msgid "No champion listed for this role."
 msgstr ""
 
-#: ui/stats.slint:1283
+#: ui/stats.slint:1673
 msgctxt "TierTab"
 msgid "TIER"
 msgstr ""
 
-#: ui/stats.slint:1284
+#: ui/stats.slint:1674
 msgctxt "TierTab"
 msgid "CHAMPION"
 msgstr ""
 
-#: ui/stats.slint:1286
+#: ui/stats.slint:1676
 msgctxt "TierTab"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:1287
+#: ui/stats.slint:1677
 msgctxt "TierTab"
 msgid "PICK"
 msgstr ""
 
-#: ui/stats.slint:1288
+#: ui/stats.slint:1678
 msgctxt "TierTab"
 msgid "BAN"
 msgstr ""
 
-#: ui/stats.slint:1289
+#: ui/stats.slint:1679
 msgctxt "TierTab"
 msgid "GAMES"
 msgstr ""
 
-#: ui/stats.slint:1389
+#: ui/stats.slint:1779
 msgctxt "MatchupColumn"
 msgid "None in this sample."
 msgstr ""
 
-#: ui/stats.slint:1413
+#: ui/stats.slint:1803
 msgctxt "MatchupsTab"
 msgid "Matchups"
 msgstr ""
 
-#: ui/stats.slint:1425 ui/stats.slint:1439
+#: ui/stats.slint:1815 ui/stats.slint:1829
 msgctxt "MatchupsTab"
 msgid "Hardest matchups"
 msgstr ""
 
-#: ui/stats.slint:1426 ui/stats.slint:1440
+#: ui/stats.slint:1816 ui/stats.slint:1830
 msgctxt "MatchupsTab"
 msgid "Lowest win rate for {0}"
 msgstr ""
 
-#: ui/stats.slint:1431 ui/stats.slint:1444
+#: ui/stats.slint:1821 ui/stats.slint:1834
 msgctxt "MatchupsTab"
 msgid "Easiest matchups"
 msgstr ""
 
-#: ui/stats.slint:1432 ui/stats.slint:1445
+#: ui/stats.slint:1822 ui/stats.slint:1835
 msgctxt "MatchupsTab"
 msgid "Highest win rate for {0}"
 msgstr ""
 
-#: ui/stats.slint:1460
+#: ui/stats.slint:1853
+msgctxt "ResultChip"
+msgid "RMK"
+msgstr ""
+
+#: ui/stats.slint:1853
 msgctxt "ResultChip"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:1460
+#: ui/stats.slint:1853
 msgctxt "ResultChip"
 msgid "LOSS"
 msgstr ""
 
-#: ui/stats.slint:1473
+#: ui/stats.slint:2007
+msgctxt "GameRowView"
+msgid "RMK"
+msgstr ""
+
+#: ui/stats.slint:2007
 msgctxt "GameRowView"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:1473
+#: ui/stats.slint:2007
 msgctxt "GameRowView"
 msgid "LOSS"
 msgstr ""
 
-#: ui/stats.slint:1541
+#: ui/stats.slint:2069
+msgctxt "GameRowView"
+msgid "not in totals"
+msgstr ""
+
+#: ui/stats.slint:2172
 msgctxt "ChampionSummaryRow"
 msgid "{0}, open its build"
 msgstr ""
 
-#: ui/stats.slint:1615
+#: ui/stats.slint:2246
 msgctxt "MyStatsTab"
 msgid "Your last games"
 msgstr ""
 
-#: ui/stats.slint:1616
+#: ui/stats.slint:2247
 msgctxt "MyStatsTab"
 msgid "Read from your client's match history. It never leaves this machine."
 msgstr ""
 
-#: ui/stats.slint:1622
+#: ui/stats.slint:2253
 msgctxt "MyStatsTab"
 msgid "Reload history"
 msgstr ""
 
-#: ui/stats.slint:1633
+#: ui/stats.slint:2290
 msgctxt "MyStatsTab"
 msgid "GAMES"
 msgstr ""
 
-#: ui/stats.slint:1634
+#: ui/stats.slint:2291
 msgctxt "MyStatsTab"
 msgid "WIN RATE"
 msgstr ""
 
-#: ui/stats.slint:1635 ui/stats.slint:1660 ui/stats.slint:1697
+#: ui/stats.slint:2292 ui/stats.slint:2342 ui/stats.slint:2423
 msgctxt "MyStatsTab"
 msgid "KDA"
 msgstr ""
 
-#: ui/stats.slint:1636 ui/stats.slint:1662 ui/stats.slint:1698
+#: ui/stats.slint:2293 ui/stats.slint:2344
 msgctxt "MyStatsTab"
 msgid "CS/MIN"
 msgstr ""
 
-#: ui/stats.slint:1637 ui/stats.slint:1661 ui/stats.slint:1699
+#: ui/stats.slint:2294 ui/stats.slint:2343 ui/stats.slint:2425
 msgctxt "MyStatsTab"
 msgid "DPM"
 msgstr ""
 
-#: ui/stats.slint:1647
+#: ui/stats.slint:2301
+msgctxt "MyStatsTab"
+msgid "By role"
+msgstr ""
+
+#: ui/stats.slint:2329
 msgctxt "MyStatsTab"
 msgid "By champion"
 msgstr ""
 
-#: ui/stats.slint:1648
+#: ui/stats.slint:2330
 msgctxt "MyStatsTab"
 msgid "Most used runes and items on each. Click one to open its build."
 msgstr ""
 
-#: ui/stats.slint:1658 ui/stats.slint:1695
+#: ui/stats.slint:2340 ui/stats.slint:2421
 msgctxt "MyStatsTab"
 msgid "CHAMPION"
 msgstr ""
 
-#: ui/stats.slint:1659
+#: ui/stats.slint:2341
 msgctxt "MyStatsTab"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:1663
+#: ui/stats.slint:2345
 msgctxt "MyStatsTab"
 msgid "RUNES & ITEMS"
 msgstr ""
 
-#: ui/stats.slint:1679
+#: ui/stats.slint:2361
 msgctxt "MyStatsTab"
 msgid "Recent games"
 msgstr ""
 
-#: ui/stats.slint:1684
+#: ui/stats.slint:2362
+msgctxt "MyStatsTab"
+msgid "All queues listed; totals above count valid Summoner's Rift games."
+msgstr ""
+
+#: ui/stats.slint:2370
+msgctxt "MyStatsTab"
+msgid "All queues"
+msgstr ""
+
+#: ui/stats.slint:2375
+msgctxt "MyStatsTab"
+msgid "Ranked Solo/Duo"
+msgstr ""
+
+#: ui/stats.slint:2380
+msgctxt "MyStatsTab"
+msgid "Ranked Flex"
+msgstr ""
+
+#: ui/stats.slint:2390
+msgctxt "MyStatsTab"
+msgid "Arena"
+msgstr ""
+
+#: ui/stats.slint:2399
+msgctxt "MyStatsTab"
+msgid "All roles"
+msgstr ""
+
+#: ui/stats.slint:2410
 msgctxt "MyStatsTab"
 msgid "No games in your recent history yet."
 msgstr ""
 
-#: ui/stats.slint:1693
+#: ui/stats.slint:2419
 msgctxt "MyStatsTab"
 msgid "RESULT"
 msgstr ""
 
-#: ui/stats.slint:1700
+#: ui/stats.slint:2422
 msgctxt "MyStatsTab"
-msgid "TIME"
+msgid "KDA / KP"
 msgstr ""
 
-#: ui/stats.slint:1748
+#: ui/stats.slint:2424
+msgctxt "MyStatsTab"
+msgid "CS / VS"
+msgstr ""
+
+#: ui/stats.slint:2426
+msgctxt "MyStatsTab"
+msgid "SCORE"
+msgstr ""
+
+#: ui/stats.slint:2474
 msgctxt "StatsPage"
 msgid "CHAMPION STATS"
 msgstr ""
 
-#: ui/stats.slint:1757
+#: ui/stats.slint:2483
 msgctxt "StatsPage"
 msgid "Your client and your games, plus global numbers from MetaBot.GG."
 msgstr ""
 
-#: ui/stats.slint:1758
+#: ui/stats.slint:2484
 msgctxt "StatsPage"
 msgid "From your client and your own games. Online stats are off."
 msgstr ""
 
-#: ui/stats.slint:1766
+#: ui/stats.slint:2492
 msgctxt "StatsPage"
 msgid "Open on dpm.lol"
 msgstr ""
 
-#: ui/stats.slint:1767
+#: ui/stats.slint:2493
 msgctxt "StatsPage"
 msgid "Open this page on dpm.lol in your browser"
 msgstr ""
 
-#: ui/stats.slint:1776
+#: ui/stats.slint:2502
 msgctxt "StatsPage"
 msgid "Champion Build"
 msgstr ""
 
-#: ui/stats.slint:1781
+#: ui/stats.slint:2507
 msgctxt "StatsPage"
 msgid "Tier List"
 msgstr ""
 
-#: ui/stats.slint:1786
+#: ui/stats.slint:2512
 msgctxt "StatsPage"
 msgid "Matchups"
 msgstr ""
 
-#: ui/stats.slint:1791
+#: ui/stats.slint:2517
 msgctxt "StatsPage"
 msgid "My Stats"
 msgstr ""

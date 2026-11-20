@@ -1070,9 +1070,16 @@ mod tests {
             .filter_map(|s| s["stage"].as_str())
             .collect();
         assert!(
-            stages.contains(&"Starting") && stages.contains(&"Core"),
+            stages.contains(&"Starting") && stages.contains(&"Core") && stages.contains(&"Slot1"),
             "{stages:?}"
         );
+        assert_eq!(pages[0]["primary_rows"].as_array().unwrap().len(), 4);
+        assert_eq!(pages[0]["secondary_rows"].as_array().unwrap().len(), 3);
+        assert_eq!(pages[0]["shard_rows"].as_array().unwrap().len(), 3);
+        assert!(build["local_build"]["games"].as_u64().unwrap() > 0);
+        assert!(build["tier_rank"].is_array());
+        assert!(!build["role_distribution"].as_array().unwrap().is_empty());
+        assert!(!build["alt_skills"].as_array().unwrap().is_empty());
         assert_eq!(build["skills"]["levels"].as_array().unwrap().len(), 15);
         assert!(
             !build["picks"].as_array().unwrap().is_empty(),
@@ -1127,7 +1134,7 @@ mod tests {
             .iter()
             .all(|m| m["rates"]["win_rate"].as_f64().unwrap() >= 0.5));
 
-        // My Stats: the demo player's twenty games and per-champion summary.
+        // My Stats: the demo player's twenty games, role summaries, rich rows, and queue filters.
         let profile: serde_json::Value = get("/api/stats/profile")
             .await
             .unwrap()
@@ -1135,8 +1142,25 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(profile["block"]["origin"], "Demo");
-        assert_eq!(profile["games"].as_array().unwrap().len(), 20);
+        let all_games = profile["games"].as_array().unwrap();
+        assert_eq!(all_games.len(), 20);
+        assert!(all_games.iter().any(|g| g["remake"] == true));
+        assert!(all_games.iter().any(|g| g["queue"] == "Aram"));
+        assert!(all_games[0]["opponent"]["id"].as_i64().unwrap() > 0);
+        assert!(all_games[0]["performance_score"].as_u64().unwrap() > 0);
+        assert_eq!(all_games[0]["badge"], "Mvp");
+        assert!(!profile["roles"].as_array().unwrap().is_empty());
         assert!(profile["champions"][0]["champion"]["name"].is_string());
+
+        let aram_only: serde_json::Value = get("/api/stats/profile?queue=aram")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let aram_games = aram_only["games"].as_array().unwrap();
+        assert_eq!(aram_games.len(), 1);
+        assert_eq!(aram_games[0]["queue"], "Aram");
 
         // The search roster, and names in the requested language.
         let roster: serde_json::Value = get("/api/stats/champions?lang=fr")

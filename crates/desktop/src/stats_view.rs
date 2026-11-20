@@ -8,12 +8,14 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
+use hypatia_core::stats::profile::group_sessions;
 use hypatia_core::AppState;
 use hypatia_shared::{
-    builtin_champion_roles, default_stats_position as default_position, normalize_champion_key,
-    summarised_games, ChampionBuild, ChampionLookup, GameData, GameDataNames as Names, Lang,
-    MatchupList, PlayerProfile, Position, RankBracket, Rates, RuneSetup, Skill, StatsOrigin,
-    StatsQuery, StatsQueue, StatsState, StatsUnavailable, Tier, TierList,
+    builtin_champion_roles, builtin_rune_style_slots, default_stats_position as default_position,
+    normalize_champion_key, summarised_games, ChampionBuild, ChampionLookup, GameData,
+    GameDataNames as Names, ItemStage, Lang, MatchBadge, MatchupList, PlayerGame, PlayerProfile,
+    Position, RankBracket, Rates, RuneSetup, Skill, StatsOrigin, StatsQuery, StatsQueue,
+    StatsState, StatsUnavailable, SummonerSummary, Tier, TierList, STAT_SHARD_ROWS,
 };
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
@@ -21,8 +23,9 @@ use crate::icons::DesktopAssetLoader;
 use crate::links;
 use crate::{
     MainWindow, StatsBlock, StatsBridge, StatsChampOption, StatsChampionSummary, StatsGameRow,
-    StatsIcon, StatsItemStage, StatsMatchupRow, StatsRates, StatsRunePage, StatsSkillOrder,
-    StatsSpellRow, StatsTierRow, StatsTotals,
+    StatsIcon, StatsItemStage, StatsLocalBuild, StatsMatchupRow, StatsRankedCard, StatsRates,
+    StatsRoleSummary, StatsRuneNode, StatsRunePage, StatsRuneRow, StatsSkillOrder,
+    StatsSkillVariant, StatsSpellRow, StatsTierRow, StatsTotals,
 };
 
 /// Champions shown in the picker: search matches, or the player's most played.
@@ -41,10 +44,20 @@ struct Selection {
     tab: i32,
     champion_id: i64,
     position: Option<Position>,
+    /// Build tab queue: 0 Ranked Solo/Duo, 1 ARAM, 2 Arena.
+    build_queue: i32,
+    /// Build tab bracket: 0 All, 1 Emerald+, 2 Diamond+, 3 Master+.
+    build_bracket: i32,
+    /// Build tab item display: 0 by stage, 1 by slot (Item 1..5).
+    item_view: i32,
     /// 0 Ranked Solo/Duo, 1 ARAM, 2 Arena.
     tier_queue: i32,
     /// -1 all roles, else a desktop lane index.
     tier_role: i32,
+    /// My Stats queue filter: -1 All, 0 Ranked Solo, 1 Flex, 2 ARAM, 3 Arena.
+    my_queue: i32,
+    /// My Stats role filter: -1 All, 0..4 desktop lane index.
+    my_role: i32,
     search: String,
 }
 
@@ -54,8 +67,13 @@ impl Default for Selection {
             tab: TAB_BUILD,
             champion_id: 0,
             position: None,
+            build_queue: 0,
+            build_bracket: 1,
+            item_view: 0,
             tier_queue: 0,
             tier_role: -1,
+            my_queue: -1,
+            my_role: -1,
             search: String::new(),
         }
     }
@@ -68,6 +86,7 @@ struct Inputs {
     lang: Lang,
     online: bool,
     icons: (bool, bool, u64, u64),
+    summoner: Option<SummonerSummary>,
     game_data: Option<StatsState<Arc<GameData>>>,
     recommended: Option<StatsState<ChampionBuild>>,
     build: Option<StatsState<ChampionBuild>>,
@@ -90,12 +109,32 @@ impl StatsView {
         self.selection.tab = tab.clamp(TAB_BUILD, TAB_MY_STATS);
     }
 
+    pub fn select_build_queue(&mut self, queue: i32) {
+        self.selection.build_queue = queue.clamp(0, 2);
+    }
+
+    pub fn select_build_bracket(&mut self, bracket: i32) {
+        self.selection.build_bracket = bracket.clamp(0, 3);
+    }
+
+    pub fn select_item_view(&mut self, mode: i32) {
+        self.selection.item_view = mode.clamp(0, 1);
+    }
+
     pub fn select_tier_queue(&mut self, queue: i32) {
         self.selection.tier_queue = queue.clamp(0, 2);
     }
 
     pub fn select_tier_role(&mut self, role: i32) {
         self.selection.tier_role = role.clamp(-1, 4);
+    }
+
+    pub fn select_my_queue(&mut self, queue: i32) {
+        self.selection.my_queue = queue.clamp(-1, 3);
+    }
+
+    pub fn select_my_role(&mut self, role: i32) {
+        self.selection.my_role = role.clamp(-1, 4);
     }
 
     pub fn select_role(&mut self, lane: i32) {
@@ -183,11 +222,25 @@ impl StatsView {
     }
 
     fn query(&self) -> StatsQuery {
+        let queue = if self.selection.tab == TAB_BUILD {
+            tier_queue(self.selection.build_queue)
+        } else {
+            StatsQueue::RankedSolo
+        };
+        let bracket = if self.selection.tab == TAB_BUILD {
+            rank_bracket(self.selection.build_bracket)
+        } else {
+            RankBracket::default()
+        };
         StatsQuery {
             champion_id: self.selection.champion_id,
-            position: self.selection.position,
-            queue: StatsQueue::RankedSolo,
-            bracket: RankBracket::default(),
+            position: if queue.on_summoners_rift() {
+                self.selection.position
+            } else {
+                None
+            },
+            queue,
+            bracket,
             patch: None,
         }
     }
@@ -208,6 +261,9 @@ impl StatsView {
                 app.assets.image_revision(),
                 app.assets.metadata_revision(),
             ),
+            summoner: (tab == TAB_MY_STATS)
+                .then(|| app.get_summary().summoner.clone())
+                .flatten(),
             game_data: matches!(tab, TAB_BUILD | TAB_MY_STATS).then(|| stats.game_data()),
             recommended: (tab == TAB_BUILD && has_champion)
                 .then(|| stats.recommended_build(&query)),
@@ -227,25 +283,26 @@ impl StatsView {
         let bridge = main.global::<StatsBridge>();
         let lang = inputs.lang;
         let sel = &inputs.selection;
-        let names = Names::new(
-            inputs
-                .game_data
-                .as_ref()
-                .and_then(|g| g.ready())
-                .map(|g| g.as_ref()),
-        );
+        let game_data = inputs.game_data.as_ref().and_then(|g| g.ready()).cloned();
+        let names = Names::new(game_data.as_deref());
         let mut ctx = Ctx {
             app,
             lang,
             loader: &mut self.loader,
             names,
+            game_data,
         };
 
         bridge.set_tab(sel.tab);
         bridge.set_online_enabled(inputs.online);
         bridge.set_role(sel.position.map_or(-1, |p| p.desktop_index()));
+        bridge.set_build_queue(sel.build_queue);
+        bridge.set_build_bracket(sel.build_bracket);
+        bridge.set_item_view(sel.item_view);
         bridge.set_tier_queue(sel.tier_queue);
         bridge.set_tier_role(sel.tier_role);
+        bridge.set_my_queue(sel.my_queue);
+        bridge.set_my_role(sel.my_role);
         if bridge.get_search().as_str() != sel.search {
             bridge.set_search(sel.search.as_str().into());
         }
@@ -307,10 +364,17 @@ pub fn wire(bridge: &StatsBridge<'_>) {
         with_ui(|ui| ui.update_stats(|s, app| s.select_champion(app, id.into(), None)))
     });
     bridge.on_select_role(|lane| with_ui(|ui| ui.update_stats(|s, _| s.select_role(lane))));
+    bridge.on_select_build_queue(|q| with_ui(|ui| ui.update_stats(|s, _| s.select_build_queue(q))));
+    bridge.on_select_build_bracket(|b| {
+        with_ui(|ui| ui.update_stats(|s, _| s.select_build_bracket(b)))
+    });
+    bridge.on_select_item_view(|m| with_ui(|ui| ui.update_stats(|s, _| s.select_item_view(m))));
     bridge.on_search_edited(|text| with_ui(|ui| ui.update_stats(|s, _| s.search_edited(&text))));
     bridge.on_search_accepted(|| with_ui(|ui| ui.update_stats(|s, app| s.search_accepted(app))));
     bridge.on_select_tier_queue(|q| with_ui(|ui| ui.update_stats(|s, _| s.select_tier_queue(q))));
     bridge.on_select_tier_role(|r| with_ui(|ui| ui.update_stats(|s, _| s.select_tier_role(r))));
+    bridge.on_select_my_queue(|q| with_ui(|ui| ui.update_stats(|s, _| s.select_my_queue(q))));
+    bridge.on_select_my_role(|r| with_ui(|ui| ui.update_stats(|s, _| s.select_my_role(r))));
     bridge.on_open_build(|id, lane| {
         with_ui(|ui| ui.update_stats(|s, app| s.open_build(app, id.into(), lane)))
     });
@@ -341,20 +405,98 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
     bridge.set_client_block(block(client_state, |b| (b.origin, None)));
     let build = build_state.ready();
     let client = client_state.ready();
+    let profile = inputs.profile.as_ref().and_then(|p| p.ready());
     let link = |b: &ChampionBuild| attribution(b.origin, b.attribution.as_ref());
 
+    // Role pickrate shares for the 5 lane chips.
+    let mut shares = vec![SharedString::new(); 5];
+    if let Some(b) = build {
+        for &(pos, share) in &b.role_distribution {
+            let idx = pos.desktop_index();
+            if (0..5).contains(&idx) && share > 0.0 {
+                let pct = (share * 100.0).round() as u32;
+                shares[idx as usize] = format!("{pct}%").into();
+            }
+        }
+    }
+    bridge.set_role_shares(model(shares));
+
     bridge.set_rates(match build {
-        Some(b) if b.rates.games > 0 || b.rates.win_rate > 0.0 => StatsRates {
-            has: true,
-            win: percent(b.rates.win_rate, lang).into(),
-            pick: percent(b.rates.pick_rate, lang).into(),
-            ban: percent(b.rates.ban_rate, lang).into(),
-            games: thousands(b.rates.games, lang).into(),
+        Some(b) if b.rates.games > 0 || b.rates.win_rate > 0.0 => {
+            let (tier, rank_label) = match b.tier_rank {
+                Some((t, r, total)) => (
+                    tier_index(t),
+                    if lang.is_fr() {
+                        format!("Rang {r}/{total}")
+                    } else {
+                        format!("Rank {r}/{total}")
+                    },
+                ),
+                None => (-1, String::new()),
+            };
+            StatsRates {
+                has: true,
+                win: percent(b.rates.win_rate, lang).into(),
+                pick: percent(b.rates.pick_rate, lang).into(),
+                ban: percent(b.rates.ban_rate, lang).into(),
+                games: thousands(b.rates.games, lang).into(),
+                tier,
+                rank_label: rank_label.into(),
+            }
+        }
+        _ => StatsRates {
+            tier: -1,
+            ..StatsRates::default()
         },
-        _ => StatsRates::default(),
     });
 
-    // Rune pages: the global ones first, then the client's own unless it is one of them.
+    // Player's own local stats on this champion.
+    let local_champ = profile.and_then(|p| {
+        p.champions
+            .iter()
+            .find(|c| c.champion_id == inputs.selection.champion_id)
+            .map(|c| (p.origin, c))
+    });
+    bridge.set_local_build(match local_champ {
+        Some((origin, c)) => StatsLocalBuild {
+            has: true,
+            origin: origin_index(origin),
+            record: format!(
+                "{} · {}",
+                games_label(c.games, lang),
+                record_label(c.wins, c.games.saturating_sub(c.wins), lang)
+            )
+            .into(),
+            win_rate: percent(c.wins as f32 / c.games.max(1) as f32, lang).into(),
+            kda: decimal(kda_ratio(c.kills, c.deaths, c.assists), lang).into(),
+            cs_min: decimal(c.cs_per_min, lang).into(),
+            dpm: thousands(c.dpm.round() as u32, lang).into(),
+            keystone: c
+                .runes
+                .as_ref()
+                .and_then(|r| r.perk_ids.first())
+                .map(|&id| ctx.icon("perk", id))
+                .unwrap_or_default(),
+            spell_a: c
+                .spells
+                .map(|s| ctx.icon("spell", s.first))
+                .unwrap_or_default(),
+            spell_b: c
+                .spells
+                .map(|s| ctx.icon("spell", s.second))
+                .unwrap_or_default(),
+            items: model(
+                c.items
+                    .iter()
+                    .take(6)
+                    .map(|&id| ctx.icon("item", id))
+                    .collect(),
+            ),
+        },
+        None => StatsLocalBuild::default(),
+    });
+
+    // Rune pages: global pages first, then client recommended (if distinct), then player's own.
     let client_page = client.and_then(|c| c.runes.first().map(|(page, _)| page));
     let mut pages = Vec::new();
     if let Some(b) = build {
@@ -377,22 +519,27 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
             pages.push(ctx.rune_page(page, 2, c.origin, String::new(), false, "", ""));
         }
     }
+    if let Some((origin, c)) = local_champ {
+        if let Some(page) = c.runes.as_ref() {
+            let local_detail = format!(
+                "{} · {}",
+                games_label(c.games, lang),
+                percent(c.wins as f32 / c.games.max(1) as f32, lang)
+            );
+            pages.push(ctx.rune_page(page, 3, origin, local_detail, false, "", ""));
+        }
+    }
     bridge.set_rune_pages(model(pages));
 
-    // Summoner spells: the global pair, and the client's when it differs.
+    // Summoner spells: top 2 global pairs, and the client's when it differs.
     let mut spells = Vec::new();
-    if let Some((pair, rates)) = build.and_then(|b| b.spells.first()) {
-        spells.push(ctx.spell_row(
-            pair.first,
-            pair.second,
-            build.map_or(StatsOrigin::Local, |b| b.origin),
-            rates_line(rates, lang),
-        ));
+    if let Some(b) = build {
+        for (pair, rates) in b.spells.iter().take(2) {
+            spells.push(ctx.spell_row(pair.first, pair.second, b.origin, rates_line(rates, lang)));
+        }
     }
     if let Some((pair, _)) = client.and_then(|c| c.spells.first()) {
-        let same = build
-            .and_then(|b| b.spells.first())
-            .is_some_and(|(p, _)| p == pair);
+        let same = build.is_some_and(|b| b.spells.iter().take(2).any(|(p, _)| p == pair));
         if !same {
             spells.push(ctx.spell_row(
                 pair.first,
@@ -404,26 +551,29 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
     }
     bridge.set_spells(model(spells));
 
-    let items: Vec<StatsItemStage> = build
-        .map(|b| {
-            b.items
-                .iter()
-                .filter(|block| !block.item_ids.is_empty())
-                .map(|block| StatsItemStage {
-                    stage: block.stage.map_or(4, |s| s as i32),
-                    items: model(
-                        block
-                            .item_ids
-                            .iter()
-                            .map(|&id| ctx.icon("item", id))
-                            .collect(),
-                    ),
-                    rates: rates_line(&block.rates, lang).into(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    bridge.set_items(model(items));
+    let mut stage_items = Vec::new();
+    let mut slot_items = Vec::new();
+    if let Some(b) = build {
+        for blk in b.items.iter().filter(|blk| !blk.item_ids.is_empty()) {
+            let row = StatsItemStage {
+                stage: stage_index(blk.stage),
+                items: model(
+                    blk.item_ids
+                        .iter()
+                        .map(|&id| ctx.icon("item", id))
+                        .collect(),
+                ),
+                rates: rates_line(&blk.rates, lang).into(),
+            };
+            if blk.stage.is_some_and(ItemStage::is_slot) {
+                slot_items.push(row);
+            } else {
+                stage_items.push(row);
+            }
+        }
+    }
+    bridge.set_items(model(stage_items));
+    bridge.set_slot_items(model(slot_items));
 
     let skills = build
         .and_then(|b| b.skills.first().map(|s| (s, b.origin)))
@@ -443,6 +593,26 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         });
         bridge.set_skills_origin(origin_index(origin));
     }
+    let alt_skills: Vec<StatsSkillVariant> = build
+        .map(|b| {
+            b.skills
+                .iter()
+                .skip(1)
+                .take(2)
+                .filter(|s| !s.priority.is_empty())
+                .map(|s| StatsSkillVariant {
+                    priority: model(
+                        s.priority
+                            .iter()
+                            .map(|&k| SharedString::from(skill_letter(k)))
+                            .collect(),
+                    ),
+                    rates: rates_line(&s.rates, lang).into(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    bridge.set_alt_skills(model(alt_skills));
 }
 
 fn push_tiers(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
@@ -511,20 +681,8 @@ fn push_matchups(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
     bridge.set_easiest(model(easiest));
 }
 
-fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
-    let lang = ctx.lang;
-    let empty = StatsState::Loading;
-    let state = inputs.profile.as_ref().unwrap_or(&empty);
-    bridge.set_profile_block(block(state, |p| (p.origin, None)));
-    let Some(profile) = state.ready() else {
-        bridge.set_my_champions(model(Vec::new()));
-        bridge.set_games(model(Vec::new()));
-        return;
-    };
-
-    // Totals cover the summarised games (Summoner's Rift when there are any); the list below
-    // keeps every game.
-    let games = summarised_games(&profile.games);
+fn compute_totals(profile_games: &[PlayerGame], lang: Lang) -> StatsTotals {
+    let games = summarised_games(profile_games);
     let n = games.len().max(1) as f32;
     let wins = games.iter().filter(|g| g.win).count() as f32;
     let (k, d, a) = games.iter().fold((0u32, 0u32, 0u32), |t, g| {
@@ -537,7 +695,7 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         .max(1.0);
     let cs: u32 = games.iter().map(|g| g.cs).sum();
     let damage: u32 = games.iter().map(|g| g.damage_to_champions).sum();
-    bridge.set_totals(StatsTotals {
+    StatsTotals {
         games: games.len().to_string().into(),
         win_rate: if games.is_empty() {
             "—".into()
@@ -547,7 +705,75 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         kda: decimal(kda_ratio(k as f32, d as f32, a as f32), lang).into(),
         cs_min: decimal(cs as f32 / minutes, lang).into(),
         dpm: thousands((damage as f32 / minutes).round() as u32, lang).into(),
+    }
+}
+
+fn filter_my_games(profile_games: &[PlayerGame], my_queue: i32, my_role: i32) -> Vec<&PlayerGame> {
+    let queue_filter = my_queue_filter(my_queue);
+    let role_filter = position_from_lane(my_role);
+    profile_games
+        .iter()
+        .filter(|g| queue_filter.is_none_or(|q| g.queue == Some(q)))
+        .filter(|g| role_filter.is_none_or(|r| g.position == Some(r)))
+        .collect()
+}
+
+fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
+    let lang = ctx.lang;
+    let empty = StatsState::Loading;
+    let state = inputs.profile.as_ref().unwrap_or(&empty);
+    bridge.set_profile_block(block(state, |p| (p.origin, None)));
+
+    // Ranked standing card from SummonerSummary.
+    bridge.set_ranked_card(match inputs.summoner.as_ref() {
+        Some(s) if s.rank_tier.as_deref().is_some_and(|t| !t.is_empty()) => {
+            let tier = s.rank_tier.as_deref().unwrap_or_default();
+            let div = s.rank_division.as_deref().unwrap_or_default();
+            let tier_label = if div.is_empty() {
+                tier.to_string()
+            } else {
+                format!("{tier} {div}")
+            };
+            let wins = s.rank_wins.unwrap_or(0);
+            let losses = s.rank_losses.unwrap_or(0);
+            let total = (wins + losses).max(1);
+            StatsRankedCard {
+                has: true,
+                tier_label: tier_label.into(),
+                lp: format!("{} LP", s.rank_lp.unwrap_or(0)).into(),
+                record: record_label(wins, losses, lang).into(),
+                win_rate: percent(wins as f32 / total as f32, lang).into(),
+            }
+        }
+        _ => StatsRankedCard::default(),
     });
+
+    let Some(profile) = state.ready() else {
+        bridge.set_role_summaries(model(Vec::new()));
+        bridge.set_my_champions(model(Vec::new()));
+        bridge.set_games(model(Vec::new()));
+        return;
+    };
+
+    // Totals cover the summarised games (Summoner's Rift when there are any); the list below
+    // keeps every game in `profile.games` (filtered only by explicit user queue/role filters).
+    bridge.set_totals(compute_totals(&profile.games, lang));
+
+    let role_summaries: Vec<StatsRoleSummary> = profile
+        .roles
+        .iter()
+        .map(|r| {
+            let wr = r.wins as f32 / r.games.max(1) as f32;
+            StatsRoleSummary {
+                lane: r.position.desktop_index(),
+                games: games_label(r.games, lang).into(),
+                win_rate: percent(wr, lang).into(),
+                kda: decimal(r.kda, lang).into(),
+                win_value: wr,
+            }
+        })
+        .collect();
+    bridge.set_role_summaries(model(role_summaries));
 
     let champions: Vec<StatsChampionSummary> = profile
         .champions
@@ -580,13 +806,86 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         .collect();
     bridge.set_my_champions(model(champions));
 
-    let rows: Vec<StatsGameRow> = games
+    let counted_ids: Vec<i64> = summarised_games(&profile.games)
         .iter()
-        .map(|g| {
+        .map(|g| g.game_id)
+        .collect();
+    let visible = filter_my_games(
+        &profile.games,
+        inputs.selection.my_queue,
+        inputs.selection.my_role,
+    );
+    let sessions = group_sessions(&visible);
+    let mut session_headers: Vec<(String, String)> =
+        vec![(String::new(), String::new()); visible.len()];
+    for s in &sessions {
+        if let Some(&first_idx) = s.game_indices.first() {
+            let header = if s.day_key > 0 {
+                date_label(s.day_key * 86_400_000, lang)
+            } else {
+                lang.pick("Session", "Session").to_string()
+            };
+            let rec = record_label(s.wins, s.losses, lang);
+            let summary = match s.avg_score {
+                Some(avg) => format!(
+                    "{rec} · {} {}",
+                    lang.pick("Avg", "Moy."),
+                    avg.round() as u32
+                ),
+                None => rec,
+            };
+            session_headers[first_idx] = (header, summary);
+        }
+    }
+
+    let rows: Vec<StatsGameRow> = visible
+        .iter()
+        .enumerate()
+        .map(|(idx, g)| {
             let minutes = (g.duration_secs as f32 / 60.0).max(1.0);
+            let opponent = g
+                .opponent_champion_id
+                .filter(|id| *id > 0)
+                .map(|id| ctx.champion(id))
+                .unwrap_or_default();
+            let keystone = g
+                .runes
+                .as_ref()
+                .and_then(|r| r.perk_ids.first())
+                .map(|&id| ctx.icon("perk", id))
+                .unwrap_or_default();
+            let spell_a = if g.spells.first > 0 {
+                ctx.icon("spell", g.spells.first)
+            } else {
+                StatsIcon::default()
+            };
+            let spell_b = if g.spells.second > 0 {
+                ctx.icon("spell", g.spells.second)
+            } else {
+                StatsIcon::default()
+            };
+            let items = model(
+                g.items
+                    .iter()
+                    .take(6)
+                    .map(|&id| ctx.icon("item", id))
+                    .collect(),
+            );
+            let kp = g
+                .kill_participation
+                .map(|v| format!("{}% KP", (v * 100.0).round() as u32))
+                .unwrap_or_default();
+            let vs_min = format!("{} VS/m", decimal(g.vision_score as f32 / minutes, lang));
+            let (score, score_value) = match g.performance_score {
+                Some(s) => (s.to_string(), i32::from(s)),
+                None => (String::new(), 0),
+            };
+            let (session_header, session_summary) = &session_headers[idx];
             StatsGameRow {
                 champion: ctx.champion(g.champion_id),
                 win: g.win,
+                remake: g.is_remake(),
+                summarised: counted_ids.contains(&g.game_id),
                 lane: g.position.map_or(-1, |p| p.desktop_index()),
                 queue: g
                     .queue
@@ -594,22 +893,41 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
                     .unwrap_or_default()
                     .into(),
                 kda: format!("{}/{}/{}", g.kills, g.deaths, g.assists).into(),
-                ratio: format!(
-                    "{} KDA",
+                ratio: if g.kill_participation.is_some() {
                     decimal(
                         kda_ratio(g.kills as f32, g.deaths as f32, g.assists as f32),
-                        lang
+                        lang,
                     )
-                )
+                } else {
+                    format!(
+                        "{} KDA",
+                        decimal(
+                            kda_ratio(g.kills as f32, g.deaths as f32, g.assists as f32),
+                            lang
+                        )
+                    )
+                }
                 .into(),
-                cs_min: decimal(g.cs as f32 / minutes, lang).into(),
+                cs_min: format!("{} CS/m", decimal(g.cs as f32 / minutes, lang)).into(),
                 dpm: thousands(
                     (g.damage_to_champions as f32 / minutes).round() as u32,
                     lang,
                 )
                 .into(),
+                vs_min: vs_min.into(),
+                kp: kp.into(),
                 duration: format!("{}:{:02}", g.duration_secs / 60, g.duration_secs % 60).into(),
                 when: date_label(g.started_at_ms, lang).into(),
+                opponent,
+                keystone,
+                spell_a,
+                spell_b,
+                items,
+                score: score.into(),
+                score_value,
+                badge: badge_index(g.badge),
+                session_header: session_header.as_str().into(),
+                session_summary: session_summary.as_str().into(),
             }
         })
         .collect();
@@ -622,6 +940,7 @@ struct Ctx<'a> {
     lang: Lang,
     loader: &'a mut DesktopAssetLoader,
     names: Names,
+    game_data: Option<Arc<GameData>>,
 }
 
 impl Ctx<'_> {
@@ -660,6 +979,13 @@ impl Ctx<'_> {
         self.loader.resolve(self.app, "splash", champion_id * 1000)
     }
 
+    fn style_rows(&self, style_id: i64) -> Option<Vec<Vec<i64>>> {
+        self.game_data
+            .as_deref()
+            .and_then(|g| g.style_rows(style_id))
+            .or_else(|| builtin_rune_style_slots(style_id))
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn rune_page(
         &mut self,
@@ -674,6 +1000,62 @@ impl Ctx<'_> {
         let perks = &page.perk_ids;
         let slice =
             |from: usize, to: usize| perks.get(from..to.min(perks.len())).unwrap_or_default();
+        let primary_rows: Vec<StatsRuneRow> = self
+            .style_rows(page.primary_style_id)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| StatsRuneRow {
+                        nodes: model(
+                            row.into_iter()
+                                .map(|id| StatsRuneNode {
+                                    icon: self.icon("perk", id),
+                                    active: perks.contains(&id),
+                                })
+                                .collect(),
+                        ),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let secondary_rows: Vec<StatsRuneRow> = self
+            .style_rows(page.sub_style_id)
+            .map(|rows| {
+                rows.into_iter()
+                    .skip(1)
+                    .map(|row| StatsRuneRow {
+                        nodes: model(
+                            row.into_iter()
+                                .map(|id| StatsRuneNode {
+                                    icon: self.icon("perk", id),
+                                    active: perks.contains(&id),
+                                })
+                                .collect(),
+                        ),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let shard_rows: Vec<StatsRuneRow> = if page.shard_ids.is_empty() {
+            Vec::new()
+        } else {
+            STAT_SHARD_ROWS
+                .iter()
+                .enumerate()
+                .map(|(row_idx, row)| {
+                    let chosen = page.shard_ids.get(row_idx).copied();
+                    StatsRuneRow {
+                        nodes: model(
+                            row.iter()
+                                .map(|&id| StatsRuneNode {
+                                    icon: self.icon("perk", id),
+                                    active: chosen == Some(id),
+                                })
+                                .collect(),
+                        ),
+                    }
+                })
+                .collect()
+        };
         StatsRunePage {
             kind,
             origin: origin_index(origin),
@@ -705,6 +1087,9 @@ impl Ctx<'_> {
                     .map(|&id| self.icon("perk", id))
                     .collect(),
             ),
+            primary_rows: model(primary_rows),
+            secondary_rows: model(secondary_rows),
+            shard_rows: model(shard_rows),
         }
     }
 
@@ -815,6 +1200,51 @@ fn tier_queue(index: i32) -> StatsQueue {
         1 => StatsQueue::Aram,
         2 => StatsQueue::Arena,
         _ => StatsQueue::RankedSolo,
+    }
+}
+
+fn my_queue_filter(index: i32) -> Option<StatsQueue> {
+    match index {
+        0 => Some(StatsQueue::RankedSolo),
+        1 => Some(StatsQueue::RankedFlex),
+        2 => Some(StatsQueue::Aram),
+        3 => Some(StatsQueue::Arena),
+        _ => None,
+    }
+}
+
+fn rank_bracket(index: i32) -> RankBracket {
+    match index {
+        0 => RankBracket::All,
+        2 => RankBracket::DiamondPlus,
+        3 => RankBracket::MasterPlus,
+        _ => RankBracket::EmeraldPlus,
+    }
+}
+
+fn stage_index(stage: Option<ItemStage>) -> i32 {
+    match stage {
+        Some(ItemStage::Starting) => 0,
+        Some(ItemStage::Core) => 1,
+        Some(ItemStage::Boots) => 2,
+        Some(ItemStage::Situational) => 3,
+        Some(ItemStage::Slot1) => 5,
+        Some(ItemStage::Slot2) => 6,
+        Some(ItemStage::Slot3) => 7,
+        Some(ItemStage::Slot4) => 8,
+        Some(ItemStage::Slot5) => 9,
+        None => 4,
+    }
+}
+
+fn badge_index(badge: Option<MatchBadge>) -> i32 {
+    match badge {
+        Some(MatchBadge::Mvp) => 1,
+        Some(MatchBadge::Ace) => 2,
+        Some(MatchBadge::Multikill(3)) => 3,
+        Some(MatchBadge::Multikill(4)) => 4,
+        Some(MatchBadge::Multikill(_)) => 5,
+        None => 0,
     }
 }
 
@@ -1071,5 +1501,59 @@ mod tests {
                 .as_str(),
             "x"
         );
+    }
+
+    #[test]
+    fn my_stats_totals_count_rift_while_list_keeps_every_game() {
+        let mk =
+            |id: i64, queue: Option<StatsQueue>, pos: Option<Position>, secs: u32, win: bool| {
+                PlayerGame {
+                    game_id: id,
+                    champion_id: 103,
+                    position: pos,
+                    queue,
+                    win,
+                    duration_secs: secs,
+                    kills: 6,
+                    deaths: 2,
+                    assists: 4,
+                    cs: 180,
+                    damage_to_champions: 24_000,
+                    ..PlayerGame::default()
+                }
+            };
+        let games = vec![
+            mk(
+                1,
+                Some(StatsQueue::RankedSolo),
+                Some(Position::Mid),
+                1800,
+                true,
+            ),
+            mk(2, Some(StatsQueue::Aram), None, 1200, false),
+            mk(3, Some(StatsQueue::Arena), None, 900, true),
+            mk(
+                4,
+                Some(StatsQueue::RankedSolo),
+                Some(Position::Mid),
+                200,
+                false,
+            ),
+        ];
+        // Totals strictly reflect the 1 valid Ranked Solo game (100% WR, 1 game).
+        let totals = compute_totals(&games, Lang::En);
+        assert_eq!(totals.games.as_str(), "1");
+        assert_eq!(totals.win_rate.as_str(), "100.0%");
+
+        // Unfiltered list keeps all 4 games (Ranked Solo, ARAM, Arena, and Remake).
+        let all = filter_my_games(&games, -1, -1);
+        assert_eq!(all.len(), 4);
+        // Queue filter narrows cleanly to ARAM.
+        let aram = filter_my_games(&games, 2, -1);
+        assert_eq!(aram.len(), 1);
+        assert_eq!(aram[0].game_id, 2);
+        // Role filter narrows cleanly to Mid.
+        let mid = filter_my_games(&games, -1, 2);
+        assert_eq!(mid.len(), 2);
     }
 }

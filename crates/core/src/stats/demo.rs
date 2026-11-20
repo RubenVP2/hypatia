@@ -3,10 +3,10 @@
 //! is labelled [`StatsOrigin::Demo`]. Numbers are illustrative, not real statistics.
 
 use hypatia_shared::{
-    ChampionBuild, GameData, GameDataEntry, ItemBlock, ItemStage, Lang, Matchup, MatchupList,
-    PlayerGame, PlayerProfile, Position, RankBracket, Rates, RuneSetup, Skill, SkillOrder,
-    SpellPair, StatsOrigin, StatsQuery, StatsQueue, StatsResult, StatsSource, StatsUnavailable,
-    Tier, TierEntry, TierList,
+    builtin_rune_style_slots, ChampionBuild, GameData, GameDataEntry, ItemBlock, ItemStage, Lang,
+    MatchBadge, Matchup, MatchupList, PlayerGame, PlayerProfile, Position, RankBracket, Rates,
+    RuneSetup, RuneStyleSlots, Skill, SkillOrder, SpellPair, StatsOrigin, StatsQuery, StatsQueue,
+    StatsResult, StatsSource, StatsUnavailable, Tier, TierEntry, TierList,
 };
 
 use super::profile::build_profile;
@@ -421,65 +421,176 @@ impl DemoStats {
                 })
                 .collect()
         };
+        let perk_style_slots = [8000, 8100, 8200, 8300, 8400]
+            .into_iter()
+            .filter_map(|style_id| {
+                Some(RuneStyleSlots {
+                    style_id,
+                    rows: builtin_rune_style_slots(style_id)?,
+                })
+            })
+            .collect();
         GameData {
             items: entries(ITEMS),
             perks: entries(PERKS),
             perk_styles: entries(STYLES),
             spells: entries(SPELLS),
-            boots: Vec::new(),
+            boots: vec![3006, 3020, 3047, 3117, 3158],
+            perk_style_slots,
         }
     }
 
-    /// Twenty recent games of the demo player (mostly Ahri, the demo pick), aggregated.
+    /// Recent games of the demo player (mostly Ahri, plus Lux/Zed/Jinx/Thresh/Aatrox, an ARAM,
+    /// and a remake across multiple sessions), aggregated with rich local metrics.
     pub fn player_profile(&self) -> PlayerProfile {
         const SCHEDULE: [i64; 20] = [
-            103, 103, 99, 103, 238, 103, 222, 99, 103, 238, 103, 99, 222, 103, 238, 99, 103, 222,
+            103, 103, 99, 103, 238, 103, 222, 99, 103, 238, 103, 99, 222, 412, 238, 266, 103, 222,
             238, 99,
         ];
+        const OPPONENTS: [i64; 20] = [
+            238, 99, 103, 238, 103, 99, 81, 238, 99, 103, 238, 103, 145, 111, 99, 122, 238, 81,
+            103, 238,
+        ];
         const BASE_MS: i64 = 1_795_420_800_000;
-        let games = SCHEDULE
+        let mut games: Vec<PlayerGame> = SCHEDULE
             .iter()
             .enumerate()
             .map(|(i, &champion_id)| {
                 let c = find(champion_id).expect("demo schedule uses demo champions");
                 let n = i as u32;
-                let win = (n * 7 + champion_id as u32) % 5 < 3;
-                let duration_secs = 1500 + (n * 97) % 900;
-                let minutes = duration_secs / 60;
+                let is_aram = i == 4;
+                let is_remake = i == 7;
+                let win = !is_remake && (n * 7 + champion_id as u32) % 5 < 3;
+                let duration_secs = if is_remake {
+                    215
+                } else if is_aram {
+                    1080
+                } else {
+                    1500 + (n * 97) % 900
+                };
+                let minutes = (duration_secs / 60).max(1);
+                let kills = if is_remake {
+                    0
+                } else if win {
+                    7 + n % 5
+                } else {
+                    3 + n % 3
+                };
+                let deaths = if is_remake {
+                    0
+                } else if win {
+                    2 + n % 3
+                } else {
+                    5 + n % 3
+                };
+                let assists = if is_remake { 0 } else { 6 + (n * 3) % 7 };
+                let score = if is_remake {
+                    None
+                } else {
+                    Some(if win {
+                        (72 + (n * 5) % 23) as u8
+                    } else {
+                        (44 + (n * 7) % 34) as u8
+                    })
+                };
+                let placement = score.map(|s| {
+                    if s >= 88 {
+                        1
+                    } else if s >= 80 {
+                        2
+                    } else if s >= 70 {
+                        3
+                    } else if s >= 58 {
+                        5
+                    } else {
+                        7
+                    }
+                });
+                let badge = if is_remake {
+                    None
+                } else if win && placement == Some(1) {
+                    Some(MatchBadge::Mvp)
+                } else if !win && score.is_some_and(|s| s >= 72) {
+                    Some(MatchBadge::Ace)
+                } else if i == 2 {
+                    Some(MatchBadge::Multikill(3))
+                } else {
+                    None
+                };
                 PlayerGame {
                     game_id: 7_100_000_000 + i as i64,
                     champion_id,
-                    position: Some(c.position),
-                    queue: Some(if i % 4 == 3 {
+                    position: if is_aram { None } else { Some(c.position) },
+                    queue: Some(if is_aram {
+                        StatsQueue::Aram
+                    } else if i % 4 == 3 {
                         StatsQueue::RankedFlex
                     } else {
                         StatsQueue::RankedSolo
                     }),
                     win,
                     duration_secs,
-                    started_at_ms: BASE_MS - i as i64 * 5 * 3_600_000,
-                    kills: if win { 7 + n % 5 } else { 3 + n % 3 },
-                    deaths: if win { 2 + n % 3 } else { 5 + n % 3 },
-                    assists: 6 + (n * 3) % 7,
-                    damage_to_champions: minutes * (720 + (n * 37) % 260),
-                    cs: minutes * (6 + n % 3) + minutes / 2,
-                    gold: minutes * (380 + (n * 11) % 70),
-                    vision_score: minutes * 9 / 10 + n % 6,
-                    items: c
-                        .core
-                        .iter()
-                        .chain(&[c.boots])
-                        .chain(c.situational.iter().take((n % 3) as usize))
-                        .copied()
-                        .collect(),
+                    started_at_ms: BASE_MS - i as i64 * 7 * 3_600_000,
+                    kills,
+                    deaths,
+                    assists,
+                    damage_to_champions: if is_remake {
+                        900
+                    } else {
+                        minutes * (720 + (n * 37) % 260)
+                    },
+                    cs: if is_remake {
+                        18
+                    } else if is_aram {
+                        54
+                    } else {
+                        minutes * (6 + n % 3) + minutes / 2
+                    },
+                    gold: if is_remake {
+                        1_600
+                    } else {
+                        minutes * (380 + (n * 11) % 70)
+                    },
+                    vision_score: if is_remake || is_aram {
+                        0
+                    } else {
+                        minutes * 9 / 10 + n % 6
+                    },
+                    items: if is_remake {
+                        c.starting.to_vec()
+                    } else {
+                        c.core
+                            .iter()
+                            .chain(&[c.boots])
+                            .chain(c.situational.iter().take((n % 3) as usize))
+                            .copied()
+                            .collect()
+                    },
                     runes: Some(runes(c)),
                     spells: SpellPair {
                         first: c.spells.0,
                         second: c.spells.1,
                     },
+                    opponent_champion_id: if is_aram { None } else { Some(OPPONENTS[i]) },
+                    kill_participation: (!is_remake)
+                        .then(|| (0.48 + ((n * 7) % 30) as f32 * 0.01).min(0.84)),
+                    damage_share: (!is_remake)
+                        .then(|| (0.19 + ((n * 5) % 16) as f32 * 0.01).min(0.38)),
+                    gold_share: (!is_remake)
+                        .then(|| (0.18 + ((n * 3) % 10) as f32 * 0.01).min(0.30)),
+                    performance_score: score,
+                    placement,
+                    badge,
                 }
             })
             .collect();
+        // Ensure at least one game has MVP and one has ACE for clear visual verification.
+        if let Some(first) = games.first_mut() {
+            first.win = true;
+            first.performance_score = Some(91);
+            first.placement = Some(1);
+            first.badge = Some(MatchBadge::Mvp);
+        }
         build_profile(games, StatsOrigin::Demo)
     }
 }
@@ -501,6 +612,69 @@ impl StatsSource for DemoStats {
             },
             ..runes(c)
         };
+        let alt_spell = if c.spells.1 == 14 { 12 } else { 14 };
+        let alt_prio: Vec<Skill> = {
+            let mut p = skills(c.priority);
+            if p.len() >= 3 {
+                p.swap(1, 2);
+            }
+            p
+        };
+        // Role distribution: primary role gets 82%, secondary catalog role (if any) gets 18%.
+        let mut role_distribution = vec![(c.position, 0.82)];
+        if let Some(alt_pos) = hypatia_shared::builtin_champion_roles(c.id)
+            .iter()
+            .filter_map(|r| Position::parse(r))
+            .find(|&p| p != c.position && p != Position::Fill)
+        {
+            role_distribution.push((alt_pos, 0.18));
+        } else {
+            role_distribution[0].1 = 1.0;
+        }
+        let role_peers: Vec<&DemoChampion> = CHAMPIONS
+            .iter()
+            .filter(|o| o.position == c.position)
+            .collect();
+        let rank_pos = role_peers.iter().filter(|o| o.win > c.win).count() as u32 + 1;
+
+        let mut items = vec![
+            block(ItemStage::Starting, c.starting, 0.74, c.win),
+            block(ItemStage::Core, c.core, 0.31, c.win + 0.024),
+            block(ItemStage::Boots, &[c.boots], 0.62, c.win + 0.006),
+            block(ItemStage::Situational, c.situational, 0.12, c.win + 0.011),
+        ];
+        // Slot-by-slot choices (Item 1..5).
+        if let Some(&i1) = c.core.first() {
+            let mut s1 = vec![i1];
+            if let Some(&alt) = c.situational.first() {
+                s1.push(alt);
+            }
+            items.push(block(ItemStage::Slot1, &s1, 0.56, c.win + 0.014));
+        }
+        if let Some(&i2) = c.core.get(1) {
+            let mut s2 = vec![i2];
+            if let Some(&alt) = c.situational.get(1) {
+                s2.push(alt);
+            }
+            items.push(block(ItemStage::Slot2, &s2, 0.44, c.win + 0.021));
+        }
+        if let Some(&i3) = c.core.get(2) {
+            let mut s3 = vec![i3];
+            if let Some(&alt) = c.situational.get(2) {
+                s3.push(alt);
+            }
+            items.push(block(ItemStage::Slot3, &s3, 0.33, c.win + 0.029));
+        }
+        if !c.situational.is_empty() {
+            items.push(block(
+                ItemStage::Slot4,
+                &c.situational[..c.situational.len().min(2)],
+                0.19,
+                c.win + 0.018,
+            ));
+            items.push(block(ItemStage::Slot5, c.situational, 0.11, c.win + 0.015));
+        }
+
         Ok(ChampionBuild {
             query: demo_query(c, query),
             origin: StatsOrigin::Demo,
@@ -514,24 +688,37 @@ impl StatsSource for DemoStats {
                 (runes(c), rates(c.win + 0.008, 0.46, total * 46 / 100)),
                 (alt_runes, rates(c.win - 0.006, 0.18, total * 18 / 100)),
             ],
-            spells: vec![(
-                SpellPair {
-                    first: c.spells.0,
-                    second: c.spells.1,
-                },
-                rates(c.win + 0.002, 0.81, total * 81 / 100),
-            )],
-            items: vec![
-                block(ItemStage::Starting, c.starting, 0.74, c.win),
-                block(ItemStage::Core, c.core, 0.31, c.win + 0.024),
-                block(ItemStage::Boots, &[c.boots], 0.62, c.win + 0.006),
-                block(ItemStage::Situational, c.situational, 0.12, c.win + 0.011),
+            spells: vec![
+                (
+                    SpellPair {
+                        first: c.spells.0,
+                        second: c.spells.1,
+                    },
+                    rates(c.win + 0.002, 0.72, total * 72 / 100),
+                ),
+                (
+                    SpellPair {
+                        first: c.spells.0,
+                        second: alt_spell,
+                    },
+                    rates(c.win - 0.004, 0.24, total * 24 / 100),
+                ),
             ],
-            skills: vec![SkillOrder {
-                levels: skills(c.skills),
-                priority: skills(c.priority),
-                rates: rates(c.win + 0.004, 0.58, total * 58 / 100),
-            }],
+            items,
+            skills: vec![
+                SkillOrder {
+                    levels: skills(c.skills),
+                    priority: skills(c.priority),
+                    rates: rates(c.win + 0.004, 0.58, total * 58 / 100),
+                },
+                SkillOrder {
+                    levels: skills(c.skills),
+                    priority: alt_prio,
+                    rates: rates(c.win - 0.007, 0.26, total * 26 / 100),
+                },
+            ],
+            role_distribution,
+            tier_rank: Some((c.tier, rank_pos, role_peers.len() as u32)),
             attribution: None,
         })
     }
@@ -753,7 +940,26 @@ mod tests {
             assert_eq!(build.origin, StatsOrigin::Demo);
             assert_eq!(build.runes[0].0.perk_ids.len(), 6, "{id}");
             assert_eq!(build.skills[0].levels.len(), 15, "{id} skill order");
-            assert_eq!(build.items.len(), 4);
+            assert_eq!(build.skills.len(), 2, "{id} skill variants");
+            assert_eq!(build.spells.len(), 2, "{id} spell variants");
+            assert_eq!(
+                build
+                    .items
+                    .iter()
+                    .filter(|b| b.stage.is_some_and(|s| !s.is_slot()))
+                    .count(),
+                4
+            );
+            assert_eq!(
+                build
+                    .items
+                    .iter()
+                    .filter(|b| b.stage.is_some_and(ItemStage::is_slot))
+                    .count(),
+                5
+            );
+            assert!(!build.role_distribution.is_empty());
+            assert!(build.tier_rank.is_some());
             assert!(
                 !demo.matchups(&query).unwrap().is_empty(),
                 "{id} has lane opponents"

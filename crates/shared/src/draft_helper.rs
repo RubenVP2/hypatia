@@ -1025,6 +1025,7 @@ mod tests {
                 items: vec![1001, 3020, 3175, 3118, 4645, 3089, 3157],
                 ..PlayerChampionStats::default()
             }],
+            ..PlayerProfile::default()
         };
         let stats = FakeStats {
             profile: StatsState::Ready(profile),

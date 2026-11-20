@@ -835,9 +835,31 @@ button:disabled { cursor: default; }
 .res { display: inline-grid; place-items: center; min-width: 44px; height: 22px; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid; font: 700 11px var(--font-mono); letter-spacing: 0.04em; }
 .res.win { color: var(--blue); border-color: var(--blue); background: var(--blue-soft); }
 .res.loss { color: var(--red); border-color: var(--red); background: var(--red-soft); }
-.kit { display: flex; align-items: center; gap: 3px; margin-top: 5px; }
+.res.rmk { color: var(--muted); border-color: var(--rule-strong); background: var(--raised); }
+.kit { display: flex; align-items: center; gap: 3px; margin-top: 5px; flex-wrap: wrap; }
 .st-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .st-tiles .tile.wide b { font-size: 30px; }
+.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.rp-col { display: flex; flex-direction: column; gap: 6px; }
+.rp-row { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.rp-node { display: inline-flex; border-radius: 9999px; }
+.rp-node.dim { opacity: 0.25; }
+.rp-node.key-on { outline: 1px solid var(--gold-bright); }
+.rp-node.on { outline: 1px solid var(--accent); }
+.rank-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--gold); border-radius: var(--r-sm); background: var(--raised); margin-bottom: 10px; }
+.rank-card b { font: 800 20px var(--font-display); color: var(--gold-bright); letter-spacing: 0.02em; }
+.role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
+.role-card { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--panel); color: var(--text); text-align: left; min-height: 44px; cursor: pointer; }
+.role-card.active { border-color: var(--text); background: var(--raised); }
+.sess-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; margin: 8px 0 4px; border-radius: var(--r-sm); background: var(--backdrop); font: 700 11px var(--font-mono); color: var(--muted); }
+.sess-head b { color: var(--text); }
+.sc-pill { display: inline-flex; align-items: center; gap: 4px; }
+.sc-num { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 20px; padding: 0 4px; border-radius: var(--r-sm); border: 1px solid var(--rule); background: var(--raised); font: 700 11px var(--font-mono); color: var(--muted); }
+.sc-num.hi { border-color: var(--gold-bright); color: var(--gold-bright); }
+.sc-num.mid { border-color: var(--accent); color: var(--text); }
+.mbadge { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 5px; border-radius: var(--r-sm); font: 700 11px var(--font-mono); border: 1px solid var(--rule-strong); background: var(--raised); color: var(--text); }
+.mbadge.mvp { border-color: var(--gold-bright); color: var(--gold-bright); background: rgba(110,87,48,0.28); }
+.mbadge.ace { border-color: var(--accent); color: var(--accent); background: rgba(10,200,185,0.16); }
 
 @media (max-width: 360px) {
   .clock.specimen { font-size: 48px; }
@@ -1123,19 +1145,37 @@ button:disabled { cursor: default; }
       stPage_popular: "Most popular page",
       stPage_alternative: "Alternative page",
       stPage_client: "Client's recommended page",
+      stPage_local: "Your most played page",
       stSameAsClient: "Same as the client's recommended page",
       stShards: "Shards",
       stItemPath: "Item path",
+      stByStage: "By stage",
+      stBySlot: "By slot",
       stage_Starting: "Starting",
       stage_Core: "Core",
       stage_Boots: "Boots",
       stage_Situational: "Situational",
+      stage_Slot1: "Item 1",
+      stage_Slot2: "Item 2",
+      stage_Slot3: "Item 3",
+      stage_Slot4: "Item 4",
+      stage_Slot5: "Item 5",
       stage_Items: "Items",
       stSkillOrder: "Skill order",
       stMaxFirst: "Max first",
+      stAltSkill: "Alternative",
+      stYourGames: "Your games",
+      stAllRanks: "All ranks",
+      stEmeraldPlus: "Emerald+",
+      stDiamondPlus: "Diamond+",
+      stMasterPlus: "Master+",
+      stRankPos: (r, tot) => `Rank ${r}/${tot}`,
+      stAllQueues: "All",
       stQueueSolo: "Solo/Duo",
+      stQueueFlex: "Flex",
       stQueueArena: "Arena",
       stAllRoles: "All",
+      stByRole: "By role",
       stPatch: p => `Patch ${p}`,
       stTierHint: "Tap a champion to open its build.",
       stNoTier: "No champion listed for this role.",
@@ -1154,6 +1194,9 @@ button:disabled { cursor: default; }
       stNoGames: "No games in your recent history yet.",
       stWinShort: "WIN",
       stLossShort: "LOSS",
+      stRmkShort: "RMK",
+      stNotInTotals: "not in totals",
+      stAvgScore: "Avg",
       stRecord: (w, l) => `${w}W ${l}L`,
       stWinRate: "Win rate",
       stDpm: "DPM",
@@ -1355,19 +1398,37 @@ button:disabled { cursor: default; }
       stPage_popular: "Page la plus jouée",
       stPage_alternative: "Page alternative",
       stPage_client: "Page recommandée par le client",
+      stPage_local: "Votre page la plus jouée",
       stSameAsClient: "Identique à la page recommandée par le client",
       stShards: "Fragments",
       stItemPath: "Objets",
+      stByStage: "Par étape",
+      stBySlot: "Par emplacement",
       stage_Starting: "Départ",
       stage_Core: "Cœur",
       stage_Boots: "Bottes",
       stage_Situational: "Situationnels",
+      stage_Slot1: "Objet 1",
+      stage_Slot2: "Objet 2",
+      stage_Slot3: "Objet 3",
+      stage_Slot4: "Objet 4",
+      stage_Slot5: "Objet 5",
       stage_Items: "Objets",
       stSkillOrder: "Ordre des compétences",
       stMaxFirst: "Monter d'abord",
+      stAltSkill: "Alternative",
+      stYourGames: "Vos parties",
+      stAllRanks: "Tous rangs",
+      stEmeraldPlus: "Émeraude+",
+      stDiamondPlus: "Diamant+",
+      stMasterPlus: "Maître+",
+      stRankPos: (r, tot) => `Rang ${r}/${tot}`,
+      stAllQueues: "Toutes",
       stQueueSolo: "Solo/Duo",
+      stQueueFlex: "Flexible",
       stQueueArena: "Arène",
       stAllRoles: "Tous",
+      stByRole: "Par rôle",
       stPatch: p => `Patch ${p}`,
       stTierHint: "Touchez un champion pour ouvrir son build.",
       stNoTier: "Aucun champion classé pour ce rôle.",
@@ -1386,6 +1447,9 @@ button:disabled { cursor: default; }
       stNoGames: "Aucune partie dans votre historique récent.",
       stWinShort: "VICT.",
       stLossShort: "DÉF.",
+      stRmkShort: "RMK",
+      stNotInTotals: "hors totaux",
+      stAvgScore: "Moy.",
       stRecord: (w, l) => `${w}V ${l}D`,
       stWinRate: "Victoires",
       stDpm: "DPM",
@@ -1494,8 +1558,13 @@ button:disabled { cursor: default; }
     statsChamp: 0,
     statsPos: "",
     statsSearch: "",
+    buildQueue: "ranked_solo",
+    buildBracket: "emerald_plus",
+    itemView: "stage",
     tierQueue: "ranked_solo",
     tierRole: "ALL",
+    myQueue: "all",
+    myRole: "ALL",
     statsData: {},
     statsPending: "",
     statsSeq: 0,
@@ -2626,7 +2695,8 @@ button:disabled { cursor: default; }
   function statsKey(tab) {
     const lang = activeLang();
     if (tab === "tiers") return `tiers|${ui.tierQueue}|${ui.tierRole}|${lang}`;
-    if (tab === "mine") return `profile|${lang}`;
+    if (tab === "mine") return `profile|${ui.myQueue}|${ui.myRole}|${lang}`;
+    if (tab === "build") return `build|${ui.statsChamp}|${ui.statsPos}|${ui.buildQueue}|${ui.buildBracket}|${lang}`;
     return `${tab}|${ui.statsChamp}|${ui.statsPos}|${lang}`;
   }
   function statsUrl(tab) {
@@ -2636,9 +2706,16 @@ button:disabled { cursor: default; }
     if (tab === "build" || tab === "matchups") {
       if (ui.statsChamp > 0) p.set("champion", String(ui.statsChamp));
       if (ui.statsPos) p.set("position", ui.statsPos);
+      if (tab === "build") {
+        p.set("queue", ui.buildQueue);
+        p.set("bracket", ui.buildBracket);
+      }
     } else if (tab === "tiers") {
       p.set("queue", ui.tierQueue);
       if (ui.tierRole !== "ALL") p.set("role", ui.tierRole);
+    } else if (tab === "mine") {
+      if (ui.myQueue !== "all") p.set("queue", ui.myQueue);
+      if (ui.myRole !== "ALL") p.set("role", ui.myRole);
     }
     return `/api/stats/${STATS_VIEW[tab]}?${p}`;
   }
@@ -2786,11 +2863,25 @@ button:disabled { cursor: default; }
 
   function runePageHtml(p) {
     const shard = n => SHARD_NAMES[n.id] ? shardName(n.id) : n.name;
-    return `<div class="rp">
-        <div class="rp-head"><b class="grow">${esc(tk("stPage_", p.kind))}</b>${originTag(p.origin)}</div>
-        ${p.rates ? `<div class="meta mono" style="margin-top:2px">${esc(rateLine(p.rates))}</div>` : ""}
-        ${p.matches_client ? `<div class="meta" style="margin-top:2px">${esc(t("stSameAsClient"))}</div>` : ""}
-        ${p.keystone ? `<div class="rp-key">
+    const hasGrid = p.primary_rows && p.primary_rows.length > 0;
+    const renderNode = (n, sz, isKey) => {
+      const cls = n.active ? (isKey ? "rp-node key-on" : "rp-node on") : "rp-node dim";
+      return `<span class="${cls}" title="${esc(n.name)}">${pt("perk", n.id, esc(initials(n.name)), sz, "round")}</span>`;
+    };
+    const body = hasGrid
+      ? `<div class="rp-grid">
+          <div class="rp-col">
+            <span class="rp-style">${pt("style", p.primary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.primary.id, p.primary.name))}</span></span>
+            ${p.primary_rows.map((row, ri) => `<div class="rp-row">${row.map(n => renderNode(n, ri === 0 ? 32 : 24, ri === 0)).join("")}</div>`).join("")}
+            ${p.keystone ? `<b class="ellipsis" style="font-size:12px">${esc(p.keystone.name)}</b>` : ""}
+          </div>
+          <div class="rp-col">
+            <span class="rp-style">${pt("style", p.secondary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.secondary.id, p.secondary.name))}</span></span>
+            ${(p.secondary_rows || []).map(row => `<div class="rp-row">${row.map(n => renderNode(n, 22, false)).join("")}</div>`).join("")}
+            ${(p.shard_rows && p.shard_rows.length) ? `<div class="sub-k" style="margin-top:4px">${esc(t("stShards"))}</div>${p.shard_rows.map(row => `<div class="rp-row">${row.map(n => renderNode({ id: n.id, name: shard(n), active: n.active }, 18, false)).join("")}</div>`).join("")}` : ""}
+          </div>
+        </div>`
+      : `${p.keystone ? `<div class="rp-key">
           ${pt("perk", p.keystone.id, esc(initials(p.keystone.name)), 40, "round")}
           <div class="grow"><b class="ellipsis" style="display:block">${esc(p.keystone.name)}</b>
             <span class="meta">${esc(styleName(p.primary.id, p.primary.name))} + ${esc(styleName(p.secondary.id, p.secondary.name))}</span></div>
@@ -2799,7 +2890,12 @@ button:disabled { cursor: default; }
           <div class="stack"><span class="rp-style">${pt("style", p.primary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.primary.id, p.primary.name))}</span></span>${p.primary_perks.map(n => perkRow(n, 26)).join("")}</div>
           <div class="stack"><span class="rp-style">${pt("style", p.secondary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.secondary.id, p.secondary.name))}</span></span>${p.secondary_perks.map(n => perkRow(n, 26)).join("")}</div>
         </div>
-        ${p.shards.length ? `<div class="sub-k" style="margin-top:10px">${esc(t("stShards"))}</div><div class="shards" style="margin-top:0">${p.shards.map(n => `<span class="tag">${esc(shard(n))}</span>`).join("")}</div>` : ""}
+        ${p.shards.length ? `<div class="sub-k" style="margin-top:10px">${esc(t("stShards"))}</div><div class="shards" style="margin-top:0">${p.shards.map(n => `<span class="tag">${esc(shard(n))}</span>`).join("")}</div>` : ""}`;
+    return `<div class="rp">
+        <div class="rp-head"><b class="grow">${esc(tk("stPage_", p.kind))}</b>${originTag(p.origin)}</div>
+        ${p.rates ? `<div class="meta mono" style="margin-top:2px">${esc(rateLine(p.rates))}</div>` : ""}
+        ${p.matches_client ? `<div class="meta" style="margin-top:2px">${esc(t("stSameAsClient"))}</div>` : ""}
+        ${body}
       </div>`;
   }
 
@@ -2808,6 +2904,22 @@ button:disabled { cursor: default; }
     const online = v.build.origin === "Online";
     const credit = online ? creditLink(v.build) : "";
     const out = [pickerPanel(v)];
+    const queues = [["ranked_solo", t("stQueueSolo")], ["aram", "ARAM"], ["arena", t("stQueueArena")]];
+    const brackets = [["all", t("stAllRanks")], ["emerald_plus", t("stEmeraldPlus")], ["diamond_plus", t("stDiamondPlus")], ["master_plus", t("stMasterPlus")]];
+    out.push(`<section class="panel" data-key="st-build-controls">
+        <div class="st-seg" role="radiogroup">${queues.map(([k, l]) => `<button class="${ui.buildQueue === k ? "active" : ""}" role="radio" aria-checked="${ui.buildQueue === k}" data-action="st-build-queue" data-queue="${k}">${esc(l)}</button>`).join("")}</div>
+        ${ui.buildQueue === "ranked_solo" ? `<div class="st-seg" style="margin-top:8px" role="radiogroup">${brackets.map(([k, l]) => `<button class="${ui.buildBracket === k ? "active" : ""}" role="radio" aria-checked="${ui.buildBracket === k}" data-action="st-build-bracket" data-bracket="${k}">${esc(l)}</button>`).join("")}</div>` : ""}
+        ${v.tier_rank ? `<div class="row" style="gap:8px;margin-top:8px"><span class="tier-badge ${esc(v.tier_rank[0])}">${esc(v.tier_rank[0])}</span><span class="meta mono">${esc(t("stRankPos", v.tier_rank[1], v.tier_rank[2]))}</span></div>` : ""}
+      </section>`);
+    if (v.local_build) {
+      const lb = v.local_build;
+      const wr = lb.wins / Math.max(1, lb.games);
+      out.push(`<section class="panel">
+          ${blockHead(t("stYourGames"), lb.origin)}
+          <div class="meta mono" style="margin-top:-4px">${esc(t("stGamesN", lb.games))} · ${esc(t("stRecord", lb.wins, lb.games - lb.wins))} · ${esc(fmtPct(wr))} · ${esc(fmtDec(kdaRatio(lb.kills, lb.deaths, lb.assists)))} ${esc(t("kdaRatio"))}</div>
+          <div class="kit" style="margin-top:8px">${lb.keystone ? pt("perk", lb.keystone.id, esc(initials(lb.keystone.name)), 26, "round") : ""}${lb.spells ? lb.spells.map(s => pt("spell", s.id, spellFallbackGlyph(s.id, spellName(s.id, s.name)), 24)).join("") : ""}${lb.items.map(n => itemPt(n, 26)).join("")}</div>
+        </section>`);
+    }
     if (v.build.state !== "Ready") {
       out.push(`<section class="panel">${blockHead(t("stGlobalBuild"), null)}${blockState(v.build)}</section>`);
     }
@@ -2827,7 +2939,12 @@ button:disabled { cursor: default; }
           </div>`).join("")}</section>`);
     }
     if (v.items.length) {
-      out.push(`<section class="panel">${blockHead(t("stItemPath"), v.build.origin)}${v.items.map(st => {
+      const isSlot = st => st.stage && st.stage.startsWith("Slot");
+      const stageItems = v.items.filter(st => !isSlot(st));
+      const slotItems = v.items.filter(isSlot);
+      const shownItems = (ui.itemView === "slot" && slotItems.length) ? slotItems : stageItems;
+      const toggle = slotItems.length ? `<div class="st-seg" style="margin-bottom:8px" role="radiogroup"><button class="${ui.itemView !== "slot" ? "active" : ""}" data-action="st-item-view" data-view="stage">${esc(t("stByStage"))}</button><button class="${ui.itemView === "slot" ? "active" : ""}" data-action="st-item-view" data-view="slot">${esc(t("stBySlot"))}</button></div>` : "";
+      out.push(`<section class="panel">${blockHead(t("stItemPath"), v.build.origin)}${toggle}${shownItems.map(st => {
           const core = st.stage === "Core";
           const items = st.items.map(n => `<span class="it">${itemPt(n, 40)}<span class="meta">${esc(n.name)}</span></span>`);
           return `<div class="stage">
@@ -2844,10 +2961,12 @@ button:disabled { cursor: default; }
           return `<span class="sk ${on ? "on" : ""} ${on && L === "R" ? "r" : ""}">${on ? i + 1 : ""}</span>`;
         }).join("")}`).join("");
       const prio = sk.priority.length ? `<div class="prio" aria-label="${esc(t("stMaxFirst"))}">${sk.priority.map(L => `<span class="${L === "R" ? "r" : ""}">${L}</span>`).join(`<span class="chev">${CHEV_SVG}</span>`)}<span class="meta" style="font:600 12px var(--font-ui);margin-left:6px">${esc(t("stMaxFirst"))}</span></div>` : "";
+      const alts = (v.alt_skills || []).map(a => `<div class="prio" style="margin-top:8px">${a.priority.map(L => `<span>${L}</span>`).join(`<span class="chev">${CHEV_SVG}</span>`)}<span class="meta mono" style="margin-left:6px">${esc(t("stAltSkill"))}${a.rates ? " · " + esc(rateLine(a.rates)) : ""}</span></div>`).join("");
       out.push(`<section class="panel">${blockHead(t("stSkillOrder"), sk.origin)}
           ${sk.rates ? `<div class="meta mono">${esc(rateLine(sk.rates))}</div>` : ""}
           ${prio}
           <div class="skill-grid" aria-hidden="true">${grid}</div>
+          ${alts}
           ${sk.origin === "Online" ? `<div class="st-links">${credit}</div>` : ""}
         </section>`);
     }
@@ -2934,8 +3053,11 @@ button:disabled { cursor: default; }
         ${blockState(v.block)}
       </section>`;
     if (v.block.state !== "Ready") return head;
+    const rankCard = v.rank ? `<div class="rank-card">
+        <div><b>${esc(v.rank.tier)}${v.rank.division ? " " + esc(v.rank.division) : ""}</b><div class="meta mono">${esc(v.rank.lp)} LP</div></div>
+        <div style="text-align:right"><div class="mono" style="font-weight:700">${esc(fmtPct(v.rank.wins / Math.max(1, v.rank.wins + v.rank.losses)))}</div><div class="meta mono">${esc(t("stRecord", v.rank.wins, v.rank.losses))}</div></div>
+      </div>` : "";
     const games = v.games;
-    if (!games.length) return head + `<section class="panel"><div class="empty-note">${esc(t("stNoGames"))}</div></section>`;
     // Totals cover the summarised games (Summoner's Rift when there are any); ARAM, event
     // modes and remakes stay in the list below.
     const counted = games.filter(g => g.summarised);
@@ -2943,13 +3065,29 @@ button:disabled { cursor: default; }
     const sum = (f) => counted.reduce((n, g) => n + Number(f(g) || 0), 0);
     const minutes = Math.max(1, sum(g => g.duration_secs) / 60);
     const tile = (val, label) => `<div class="tile"><b>${esc(val)}</b><span>${esc(label)}</span></div>`;
-    const totals = `<div class="st-tiles">
+    const totals = counted.length ? `<div class="st-tiles">
         <div class="tile wide"><b>${esc(fmtPct(wins / Math.max(1, counted.length)))}</b><span>${esc(t("stWinRate"))} · ${esc(t("stRecord", wins, counted.length - wins))}</span></div>
         ${tile(fmtDec(kdaRatio(sum(g => g.kills), sum(g => g.deaths), sum(g => g.assists))), t("kdaRatio"))}
         ${tile(fmtDec(sum(g => g.cs) / minutes), t("csMin"))}
         ${tile(fmtNum(Math.round(sum(g => g.damage_to_champions) / minutes)), t("stDpm"))}
-      </div>`;
-    const champs = `<section class="panel" style="padding-bottom:8px">
+      </div>` : "";
+    const roles = (v.roles && v.roles.length) ? `<section class="panel">
+        ${blockHead(t("stByRole"), v.block.origin)}
+        <div class="role-grid">${v.roles.map(r => {
+          const rk = laneOf(r.position);
+          const l = laneInfo(rk);
+          const wr = r.wins / Math.max(1, r.games);
+          const on = ui.myRole === rk;
+          return `<button class="role-card ${on ? "active" : ""}" data-action="st-my-role" data-role="${on ? "ALL" : rk}">
+              ${laneSvg(rk, 20, l.color)}
+              <span class="grow">
+                <span class="row" style="justify-content:space-between"><b style="font-size:13px">${esc(l.label)}</b><span class="mono" style="font-size:12px;color:${wr >= 0.5 ? "var(--blue)" : "var(--red)"}">${esc(fmtPct(wr))}</span></span>
+                <span class="meta mono">${esc(t("stGamesN", r.games))} · ${esc(fmtDec(r.kda))} KDA</span>
+              </span>
+            </button>`;
+        }).join("")}</div>
+      </section>` : "";
+    const champs = v.champions.length ? `<section class="panel" style="padding-bottom:8px">
         ${blockHead(t("stByChampion"), v.block.origin)}
         ${v.champions.map(c => `
           <button class="st-row" data-key="mc-${c.champion.id}" data-action="st-open" data-id="${c.champion.id}" data-pos="" aria-label="${esc(t("stOpenBuild", c.champion.name))}">
@@ -2961,23 +3099,72 @@ button:disabled { cursor: default; }
             </span>
             <span class="st-fig"><b>${esc(fmtPct(c.wins / Math.max(1, c.games)))}</b><span>${esc(t("stGamesN", c.games))}</span></span>
           </button>`).join("")}
-      </section>`;
+      </section>` : "";
+
+    const qFilters = [["all", t("stAllQueues")], ["ranked_solo", t("stQueueSolo")], ["ranked_flex", t("stQueueFlex")], ["aram", "ARAM"], ["arena", t("stQueueArena")]];
+    const roleBtn = (k, inner) => `<button class="st-role ${ui.myRole === k ? "active" : ""}" role="radio" aria-checked="${ui.myRole === k}" data-action="st-my-role" data-role="${k}">${inner}</button>`;
+    const filters = `<div class="st-seg" style="margin-bottom:8px" role="radiogroup">${qFilters.map(([k, l]) => `<button class="${ui.myQueue === k ? "active" : ""}" data-action="st-my-queue" data-queue="${k}">${esc(l)}</button>`).join("")}</div>
+      <div class="st-roles six" style="margin-bottom:8px" role="radiogroup" aria-label="${esc(t("roles"))}">
+        ${roleBtn("ALL", `<span style="font-size:12px">${esc(t("stAllRoles"))}</span>`)}
+        ${ROLE_KEYS.map(k => { const l = laneInfo(k); return roleBtn(k, `${laneSvg(k, 17, l.color)}<span>${esc(l.label)}</span>`); }).join("")}
+      </div>`;
+
+    // Group visible games by UTC calendar day for session headers.
+    const dayOf = ms => ms > 0 ? Math.floor(ms / 86400000) : 0;
+    const sessionMeta = new Map();
+    for (const g of games) {
+      const dk = dayOf(g.started_at_ms);
+      if (!sessionMeta.has(dk)) sessionMeta.set(dk, { w: 0, l: 0, sSum: 0, sCnt: 0 });
+      const m = sessionMeta.get(dk);
+      if (!g.remake) { if (g.win) m.w++; else m.l++; }
+      if (g.performance_score != null) { m.sSum += g.performance_score; m.sCnt++; }
+    }
+    let lastDay = null;
+    const badgeHtml = (b) => {
+      if (!b) return "";
+      if (b === "Mvp") return `<span class="mbadge mvp">MVP</span>`;
+      if (b === "Ace") return `<span class="mbadge ace">ACE</span>`;
+      if (typeof b === "object" && b.Multikill) return `<span class="mbadge">${b.Multikill}K</span>`;
+      return "";
+    };
+    const gameRows = games.map((g, i) => {
+      const dk = dayOf(g.started_at_ms);
+      let sess = "";
+      if (dk !== lastDay) {
+        lastDay = dk;
+        const m = sessionMeta.get(dk);
+        const avg = m.sCnt > 0 ? ` · ${t("stAvgScore")} ${Math.round(m.sSum / m.sCnt)}` : "";
+        sess = `<div class="sess-head"><b>${esc(dayLabel(g.started_at_ms))}</b><span>${esc(t("stRecord", m.w, m.l))}${esc(avg)}</span></div>`;
+      }
+      const mins = Math.max(1, g.duration_secs / 60);
+      const pos = laneOf(g.position);
+      const resCls = g.remake ? "rmk" : (g.win ? "win" : "loss");
+      const resTxt = g.remake ? t("stRmkShort") : (g.win ? t("stWinShort") : t("stLossShort"));
+      const scCls = g.performance_score >= 80 ? "hi" : g.performance_score >= 65 ? "mid" : "";
+      const kp = g.kill_participation != null ? ` · ${Math.round(g.kill_participation * 100)}% KP` : "";
+      const vs = `${fmtDec((g.vision_score || 0) / mins)} VS/m`;
+      const kit = `<span class="kit">${g.keystone ? pt("perk", g.keystone.id, esc(initials(g.keystone.name)), 18, "round") : ""}${(g.spells || []).map(s => pt("spell", s.id, spellFallbackGlyph(s.id, spellName(s.id, s.name)), 18)).join("")}${(g.items || []).map(n => itemPt(n, 18)).join("")}</span>`;
+      return `${sess}<button class="st-row" style="${g.summarised ? "" : "opacity:0.78"}" data-key="mg-${i}" data-action="st-open" data-id="${g.champion.id}" data-pos="${pos}" aria-label="${esc(t("stOpenBuild", g.champion.name))}">
+          ${champPt(g.champion.id, g.champion.name, 38)}
+          <span class="grow">
+            <span class="row" style="gap:6px"><span class="res ${resCls}">${esc(resTxt)}</span><span class="st-nm ellipsis">${esc(g.champion.name)}</span>${g.opponent ? `<span class="meta mono">VS</span>${champPt(g.opponent.id, g.opponent.name, 18, "enemy")}` : ""}</span>
+            <span class="meta ellipsis" style="display:block;margin-top:2px">${pos ? esc(laneInfo(pos).label) + " · " : ""}${g.queue ? esc(tk("q_", g.queue)) + " · " : ""}${esc(fmtSec(g.duration_secs))}${g.summarised ? "" : " · " + esc(t("stNotInTotals"))}</span>
+            ${kit}
+          </span>
+          <span class="st-fig">
+            <b>${g.kills}/${g.deaths}/${g.assists}</b>
+            <span>${esc(fmtDec(g.cs / mins))} CS · ${esc(vs)}${esc(kp)}</span>
+            ${(g.performance_score != null || g.badge) ? `<span class="sc-pill" style="margin-top:3px">${badgeHtml(g.badge)}${g.performance_score != null ? `<span class="sc-num ${scCls}">${g.performance_score}</span>` : ""}</span>` : ""}
+          </span>
+        </button>`;
+    }).join("");
+
     const recent = `<section class="panel" style="padding-bottom:8px">
         ${blockHead(t("stRecent"), v.block.origin)}
-        ${games.map((g, i) => {
-          const mins = Math.max(1, g.duration_secs / 60);
-          const pos = laneOf(g.position);
-          return `<button class="st-row" data-key="mg-${i}" data-action="st-open" data-id="${g.champion.id}" data-pos="${pos}" aria-label="${esc(t("stOpenBuild", g.champion.name))}">
-              ${champPt(g.champion.id, g.champion.name, 38)}
-              <span class="grow">
-                <span class="row" style="gap:6px"><span class="res ${g.win ? "win" : "loss"}">${esc(g.win ? t("stWinShort") : t("stLossShort"))}</span><span class="st-nm ellipsis">${esc(g.champion.name)}</span></span>
-                <span class="meta ellipsis" style="display:block;margin-top:2px">${pos ? esc(laneInfo(pos).label) + " · " : ""}${g.queue ? esc(tk("q_", g.queue)) + " · " : ""}${esc(dayLabel(g.started_at_ms))}</span>
-              </span>
-              <span class="st-fig"><b>${g.kills}/${g.deaths}/${g.assists}</b><span>${esc(fmtDec(g.cs / mins))} CS · ${esc(fmtSec(g.duration_secs))}</span></span>
-            </button>`;
-        }).join("")}
+        ${filters}
+        ${gameRows || `<div class="empty-note">${esc(t("stNoGames"))}</div>`}
       </section>`;
-    return head + totals + champs + recent;
+    return head + (rankCard ? `<section class="panel">${rankCard}${totals}</section>` : totals) + roles + champs + recent;
   }
 
   function renderStats() {
@@ -3187,11 +3374,26 @@ button:disabled { cursor: default; }
     } else if (act === "st-role") {
       ui.statsPos = btn.dataset.role;
       renderState(ui.state);
+    } else if (act === "st-build-queue") {
+      ui.buildQueue = btn.dataset.queue;
+      renderState(ui.state);
+    } else if (act === "st-build-bracket") {
+      ui.buildBracket = btn.dataset.bracket;
+      renderState(ui.state);
+    } else if (act === "st-item-view") {
+      ui.itemView = btn.dataset.view;
+      renderState(ui.state);
     } else if (act === "st-queue") {
       ui.tierQueue = btn.dataset.queue;
       renderState(ui.state);
     } else if (act === "st-tier-role") {
       ui.tierRole = btn.dataset.role;
+      renderState(ui.state);
+    } else if (act === "st-my-queue") {
+      ui.myQueue = btn.dataset.queue;
+      renderState(ui.state);
+    } else if (act === "st-my-role") {
+      ui.myRole = btn.dataset.role;
       renderState(ui.state);
     } else if (act === "demo-phase") {
       sendCmd({ cmd: "demo_set_phase", phase: btn.dataset.phase });

@@ -1726,3 +1726,147 @@ msgstr "VOTRE BUILD"
 msgctxt "DraftHelperPanel"
 msgid "{0} · {1}"
 msgstr "{0} · {1}"
+
+msgctxt "EndScreen"
+msgid "Scoreboard"
+msgstr "Tableau"
+
+msgctxt "EndScreen"
+msgid "Damage & Gold"
+msgstr "Dégâts & Or"
+
+msgctxt "PlayerRow"
+msgid "Lvl {0} · {1} CS · {2}"
+msgstr "Niv. {0} · {1} CS · {2}"
+
+msgctxt "BuildTab"
+msgid "Champion profile & benchmarks"
+msgstr "Profil du champion & repères"
+
+msgctxt "BuildTab"
+msgid "Damage profile, combat traits and your personal averages"
+msgstr "Profil de dégâts, traits de combat et vos moyennes personnelles"
+
+msgctxt "BuildTab"
+msgid "Damage split"
+msgstr "Répartition des dégâts"
+
+msgctxt "BuildTab"
+msgid "{0}% Physical · {1}% Magic · {2}% True"
+msgstr "{0} % Physiques · {1} % Magiques · {2} % Bruts"
+
+msgctxt "BuildTab"
+msgid "CS / MIN"
+msgstr "CS / MIN"
+
+msgctxt "BuildTab"
+msgid "GOLD / MIN"
+msgstr "OR / MIN"
+
+msgctxt "BuildTab"
+msgid "VISION / MIN"
+msgstr "VISION / MIN"
+
+msgctxt "TierTab"
+msgid "Off-meta"
+msgstr "Hors-méta"
+
+msgctxt "TierTab"
+msgid "All ranks"
+msgstr "Tous rangs"
+
+msgctxt "TierTab"
+msgid "Emerald+"
+msgstr "Émeraude+"
+
+msgctxt "TierTab"
+msgid "Diamond+"
+msgstr "Diamant+"
+
+msgctxt "TierTab"
+msgid "Master+"
+msgstr "Maître+"
+
+msgctxt "TierTab"
+msgid "Filter champions"
+msgstr "Filtrer les champions"
+
+msgctxt "VerdictChip"
+msgid "Good lane"
+msgstr "Bonne lane"
+
+msgctxt "VerdictChip"
+msgid "Hard lane"
+msgstr "Lane dure"
+
+msgctxt "VerdictChip"
+msgid "Even"
+msgstr "Équilibré"
+
+msgctxt "MatchupRowView"
+msgid "You: {0}"
+msgstr "Vous : {0}"
+
+msgctxt "MatchupsTab"
+msgid "Search an opponent"
+msgstr "Chercher un adversaire"
+
+msgctxt "MatchupsTab"
+msgid "Top 8 only"
+msgstr "Top 8 seulement"
+
+msgctxt "MatchupsTab"
+msgid "Show all"
+msgstr "Tout afficher"
+
+msgctxt "MatchupsTab"
+msgid "Your matchups"
+msgstr "Vos matchups"
+
+msgctxt "MatchupsTab"
+msgid "Your personal record on {0} against lane opponents"
+msgstr "Votre bilan personnel sur {0} face aux adversaires de lane"
+
+msgctxt "StatsPage"
+msgid "Match inspector"
+msgstr "Inspecteur de partie"
+
+msgctxt "StatsPage"
+msgid "Score {0}"
+msgstr "Score {0}"
+
+msgctxt "StatsPage"
+msgid "vs {0}"
+msgstr "vs {0}"
+
+msgctxt "StatsPage"
+msgid "KDA"
+msgstr "KDA"
+
+msgctxt "StatsPage"
+msgid "RATIO"
+msgstr "RATIO"
+
+msgctxt "StatsPage"
+msgid "KP"
+msgstr "KP"
+
+msgctxt "StatsPage"
+msgid "CS / MIN"
+msgstr "CS / MIN"
+
+msgctxt "StatsPage"
+msgid "DPM"
+msgstr "DPM"
+
+msgctxt "StatsPage"
+msgid "Open champion build"
+msgstr "Ouvrir le build du champion"
+
+msgctxt "BuildBlock"
+msgid "Suggested picks"
+msgstr "Picks suggérés"
+
+msgctxt "BuildBlock"
+msgid "vs {0}"
+msgstr "vs {0}"

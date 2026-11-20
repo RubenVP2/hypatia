@@ -730,16 +730,21 @@ impl StatsSource for DemoStats {
         );
         let mut entries: Vec<TierEntry> = CHAMPIONS
             .iter()
-            .map(|c| TierEntry {
-                champion_id: c.id,
-                position: if lanes { c.position } else { Position::Fill },
-                tier: c.tier,
-                rates: Rates {
-                    win_rate: c.win,
-                    pick_rate: c.pick,
-                    ban_rate: c.ban,
-                    games: c.games,
-                },
+            .map(|c| {
+                let delta = ((c.id % 9) as f32 - 4.0) * 0.004;
+                TierEntry {
+                    champion_id: c.id,
+                    position: if lanes { c.position } else { Position::Fill },
+                    tier: c.tier,
+                    rates: Rates {
+                        win_rate: c.win,
+                        pick_rate: c.pick,
+                        ban_rate: c.ban,
+                        games: c.games,
+                    },
+                    win_rate_delta: Some(delta),
+                    lane_presence: lanes.then_some(0.82),
+                }
             })
             .collect();
         entries.sort_by(|a, b| {

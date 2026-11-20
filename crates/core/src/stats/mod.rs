@@ -560,6 +560,14 @@ impl HelperStats for ChampionStats {
         ChampionStats::matchups(self, query)
     }
 
+    fn tier_list(
+        &self,
+        queue: hypatia_shared::StatsQueue,
+        bracket: hypatia_shared::RankBracket,
+    ) -> StatsState<hypatia_shared::TierList> {
+        ChampionStats::tier_list(self, queue, bracket)
+    }
+
     fn player_profile(&self) -> StatsState<PlayerProfile> {
         ChampionStats::player_profile(self)
     }

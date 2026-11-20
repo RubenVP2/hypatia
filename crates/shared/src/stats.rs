@@ -180,11 +180,26 @@ pub struct ChampionBuild {
 /// A champion's standing in one role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Tier {
+    SPlus,
     S,
     A,
     B,
     C,
     D,
+}
+
+impl Tier {
+    /// Short display badge (`S+`, `S`, `A`, `B`, `C`, `D`).
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::SPlus => "S+",
+            Self::S => "S",
+            Self::A => "A",
+            Self::B => "B",
+            Self::C => "C",
+            Self::D => "D",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -193,6 +208,12 @@ pub struct TierEntry {
     pub position: Position,
     pub tier: Tier,
     pub rates: Rates,
+    /// Patch-over-patch win rate delta as a signed fraction (e.g. `+0.018` for `+1.8%`), when known.
+    #[serde(default)]
+    pub win_rate_delta: Option<f32>,
+    /// Share of this champion's games played in this role (`0.0..=1.0`), when known.
+    #[serde(default)]
+    pub lane_presence: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -205,6 +226,83 @@ pub struct TierList {
     /// Link the provider requires next to its data (Online only).
     #[serde(default)]
     pub attribution: Option<Attribution>,
+}
+
+/// Immediate lane-phase verdict derived from `gold_diff_15` or matchup win rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LaneVerdict {
+    Good,
+    Even,
+    Hard,
+}
+
+impl LaneVerdict {
+    pub fn from_matchup(win_rate: f32, gold_diff_15: Option<f32>) -> Self {
+        if let Some(gd) = gold_diff_15 {
+            if gd >= 200.0 {
+                return Self::Good;
+            }
+            if gd <= -200.0 {
+                return Self::Hard;
+            }
+        }
+        if win_rate >= 0.52 {
+            Self::Good
+        } else if win_rate <= 0.48 {
+            Self::Hard
+        } else {
+            Self::Even
+        }
+    }
+}
+
+/// Personal matchup record for the selected champion against a specific lane opponent,
+/// aggregated from the player's own local match history (`StatsOrigin::Local`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LocalMatchup {
+    pub opponent_id: i64,
+    pub games: u32,
+    pub wins: u32,
+    pub kda: f32,
+}
+
+/// Aggregates personal matchup records for `champion_id` from non-remake games with a known
+/// lane opponent, ordered by games played descending, then wins descending.
+pub fn aggregate_local_matchups(games: &[PlayerGame], champion_id: i64) -> Vec<LocalMatchup> {
+    let mut by_opp: std::collections::HashMap<i64, (u32, u32, u32, u32, u32)> =
+        std::collections::HashMap::new();
+    for g in games {
+        if g.is_remake() || g.champion_id != champion_id {
+            continue;
+        }
+        let Some(opp) = g.opponent_champion_id.filter(|&id| id > 0) else {
+            continue;
+        };
+        let entry = by_opp.entry(opp).or_default();
+        entry.0 += 1;
+        if g.win {
+            entry.1 += 1;
+        }
+        entry.2 += g.kills;
+        entry.3 += g.deaths;
+        entry.4 += g.assists;
+    }
+    let mut out: Vec<LocalMatchup> = by_opp
+        .into_iter()
+        .map(|(opponent_id, (games, wins, k, d, a))| LocalMatchup {
+            opponent_id,
+            games,
+            wins,
+            kda: (k + a) as f32 / d.max(1) as f32,
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.games
+            .cmp(&a.games)
+            .then_with(|| b.wins.cmp(&a.wins))
+            .then_with(|| a.opponent_id.cmp(&b.opponent_id))
+    });
+    out
 }
 
 /// How `champion_id` fares against `opponent_id` in the same role (lane matchup) or overall.
@@ -695,5 +793,55 @@ mod tests {
         assert_eq!(names.name("spell", 4, Lang::Fr), "Saut éclair");
         assert_eq!(names.name("item", 3089, Lang::Fr), "Coiffe de Rabadon");
         assert_eq!(names.name("item", 999_999, Lang::En), "Item 999999");
+    }
+
+    #[test]
+    fn tier_s_plus_orders_first_and_labels() {
+        assert!(Tier::SPlus < Tier::S);
+        assert!(Tier::S < Tier::A);
+        assert_eq!(Tier::SPlus.label(), "S+");
+        assert_eq!(Tier::D.label(), "D");
+    }
+
+    #[test]
+    fn lane_verdict_prefers_gold_diff_then_win_rate() {
+        assert_eq!(
+            LaneVerdict::from_matchup(0.49, Some(320.0)),
+            LaneVerdict::Good
+        );
+        assert_eq!(
+            LaneVerdict::from_matchup(0.51, Some(-250.0)),
+            LaneVerdict::Hard
+        );
+        assert_eq!(LaneVerdict::from_matchup(0.53, None), LaneVerdict::Good);
+        assert_eq!(LaneVerdict::from_matchup(0.50, None), LaneVerdict::Even);
+        assert_eq!(LaneVerdict::from_matchup(0.46, None), LaneVerdict::Hard);
+    }
+
+    #[test]
+    fn local_matchups_aggregate_non_remakes_by_opponent() {
+        let mut g1 = PlayerGame {
+            champion_id: 103,
+            opponent_champion_id: Some(238),
+            win: true,
+            duration_secs: 1800,
+            kills: 8,
+            deaths: 2,
+            assists: 6,
+            ..PlayerGame::default()
+        };
+        let mut g2 = g1.clone();
+        g2.win = false;
+        g2.kills = 2;
+        g2.deaths = 4;
+        g2.assists = 4;
+        let mut remake = g1.clone();
+        remake.duration_secs = 200;
+        g1.game_id = 1;
+        let out = aggregate_local_matchups(&[g1, g2, remake], 103);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].opponent_id, 238);
+        assert_eq!((out[0].games, out[0].wins), (2, 1));
+        assert!((out[0].kda - (20.0 / 6.0)).abs() < 1e-3);
     }
 }

@@ -184,9 +184,21 @@ pub struct ChampSelectSummary {
     pub recommended_rune_pages: Vec<RemoteRunePage>,
     #[serde(default)]
     pub editable_rune_page_id: Option<i64>,
+    /// True in ARAM / ARAM: Mayhem when the bench swap pool is active.
+    #[serde(default)]
+    pub bench_enabled: bool,
+    /// Champions currently available on the ARAM bench.
+    #[serde(default)]
+    pub bench_champions: Vec<ChampSelectBenchChampion>,
     /// Build, lane matchup and team comps for the player's own pick (champ-select helper).
     #[serde(default)]
     pub helper: ChampSelectHelper,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChampSelectBenchChampion {
+    pub champion_id: i64,
+    pub champion_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -228,6 +240,12 @@ pub struct LiveGamePlayerSummary {
     /// Skin number within the champion (`skinID`, 0 for the base skin).
     #[serde(default)]
     pub skin_id: i64,
+    /// Real-time CS per minute (`0.0` before 60s).
+    #[serde(default)]
+    pub cs_per_min: f32,
+    /// Signed CS lead/deficit against the direct opposing laner on Summoner's Rift (from 90s).
+    #[serde(default)]
+    pub cs_diff_vs_lane: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -244,6 +262,12 @@ pub struct LiveGameSummary {
     pub deaths: u32,
     pub assists: u32,
     pub creep_score: u32,
+    #[serde(default)]
+    pub self_cs_per_min: f32,
+    #[serde(default)]
+    pub lane_cs_diff: Option<i32>,
+    #[serde(default)]
+    pub personal_avg_cs_per_min: Option<f32>,
     pub recent_events: Vec<LiveGameEventSummary>,
     #[serde(default)]
     pub players: Vec<LiveGamePlayerSummary>,
@@ -264,6 +288,36 @@ pub struct EndOfGamePlayer {
     pub deaths: u32,
     pub assists: u32,
     pub creep_score: u32,
+    #[serde(default)]
+    pub items: Vec<i64>,
+    #[serde(default)]
+    pub keystone_id: i64,
+    #[serde(default)]
+    pub sub_style_id: i64,
+    #[serde(default)]
+    pub spell1_id: i64,
+    #[serde(default)]
+    pub spell2_id: i64,
+    #[serde(default)]
+    pub damage_to_champions: u32,
+    #[serde(default)]
+    pub damage_taken: u32,
+    #[serde(default)]
+    pub gold_earned: u32,
+    #[serde(default)]
+    pub vision_score: u32,
+    #[serde(default)]
+    pub kill_participation: f32,
+    #[serde(default)]
+    pub damage_share: f32,
+    #[serde(default)]
+    pub performance_score: u8,
+    #[serde(default)]
+    pub placement: u8,
+    #[serde(default)]
+    pub is_mvp: bool,
+    #[serde(default)]
+    pub is_ace: bool,
     pub is_self: bool,
 }
 
@@ -272,6 +326,14 @@ pub struct EndOfGamePlayer {
 pub struct EndOfGameTeam {
     pub is_player_team: bool,
     pub won: bool,
+    #[serde(default)]
+    pub total_kills: u32,
+    #[serde(default)]
+    pub total_gold: u32,
+    #[serde(default)]
+    pub total_damage: u32,
+    #[serde(default)]
+    pub total_vision: u32,
     pub players: Vec<EndOfGamePlayer>,
 }
 
@@ -533,13 +595,24 @@ pub fn project_match_with(
         .as_ref()
         .and_then(|cs| cs.editable_rune_page_id)
         .or_else(|| extract_rune_pages(inputs.rune_pages, lang).1);
-    let live_game = extract_live_game_summary(
+    let mut live_game = extract_live_game_summary(
         inputs.live_allgame,
         inputs.live_active,
         inputs.live_events,
         champions,
         lang,
     );
+    if let (Some(lg), Some(stats)) = (live_game.as_mut(), stats) {
+        if lg.active_champion_id > 0 {
+            if let Some(profile) = stats.player_profile().ready() {
+                lg.personal_avg_cs_per_min = profile
+                    .champions
+                    .iter()
+                    .find(|c| c.champion_id == lg.active_champion_id && c.games > 0)
+                    .map(|c| c.cs_per_min);
+            }
+        }
+    }
     let board = live_game
         .as_ref()
         .map(|lg| extract_live_board_localized(inputs.live_allgame, inputs.live_events, lg, lang));
@@ -1335,6 +1408,33 @@ fn extract_champ_select_summary(
     let recommended_rune_pages =
         recommended_pages_for_localized(champ_for_skins, assigned_position, lang);
 
+    let bench_enabled = cs
+        .get("benchEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let bench_champions: Vec<ChampSelectBenchChampion> = if bench_enabled {
+        cs.get("benchChampions")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|entry| {
+                        let cid = entry
+                            .get("championId")
+                            .and_then(|v| v.as_i64())
+                            .or_else(|| entry.as_i64())
+                            .filter(|&id| id > 0)?;
+                        Some(ChampSelectBenchChampion {
+                            champion_id: cid,
+                            champion_name: champions.resolve_champion_name_localized(cid, lang),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     Some(ChampSelectSummary {
         their_team,
         acting_cell_id,
@@ -1347,6 +1447,8 @@ fn extract_champ_select_summary(
         rune_pages,
         recommended_rune_pages,
         editable_rune_page_id,
+        bench_enabled,
+        bench_champions,
         helper: ChampSelectHelper::default(),
         sub_phase,
         time_left_sec,
@@ -1593,10 +1695,17 @@ fn extract_live_game_summary(
                 .unwrap_or_else(|| {
                     champions.resolve_champion_id_with_alias(&champ, &champion_alias)
                 });
+            let cs_per_min = if game_time_sec >= 60.0 {
+                p_cs as f32 / (game_time_sec as f32 / 60.0)
+            } else {
+                0.0
+            };
             let summary = LiveGamePlayerSummary {
                 is_dead,
                 respawn_timer_sec,
                 skin_id,
+                cs_per_min,
+                cs_diff_vs_lane: None,
                 riot_id: p_riot_id.to_string(),
                 champion_id,
                 // The Live Client names champions in the client's language; Hypatia names them
@@ -1743,6 +1852,34 @@ fn extract_live_game_summary(
         }
     }
 
+    if game_mode.eq_ignore_ascii_case("CLASSIC") && game_time_sec >= 90.0 {
+        let mut by_team_pos: HashMap<(bool, Position), u32> = HashMap::new();
+        for p in &players {
+            if let Some(pos) = Position::parse(&p.position).filter(|pos| *pos != Position::Fill) {
+                by_team_pos
+                    .entry((p.team == "ORDER", pos))
+                    .or_insert(p.creep_score);
+            }
+        }
+        for p in &mut players {
+            if let Some(pos) = Position::parse(&p.position).filter(|pos| *pos != Position::Fill) {
+                if let Some(&opp_cs) = by_team_pos.get(&(p.team != "ORDER", pos)) {
+                    p.cs_diff_vs_lane = Some(p.creep_score as i32 - opp_cs as i32);
+                }
+            }
+        }
+    }
+
+    let self_cs_per_min = if game_time_sec >= 60.0 {
+        creep_score as f32 / (game_time_sec as f32 / 60.0)
+    } else {
+        0.0
+    };
+    let lane_cs_diff = players
+        .iter()
+        .find(|p| p.is_self)
+        .and_then(|p| p.cs_diff_vs_lane);
+
     Some(LiveGameSummary {
         game_mode,
         map_name,
@@ -1755,6 +1892,9 @@ fn extract_live_game_summary(
         deaths,
         assists,
         creep_score,
+        self_cs_per_min,
+        lane_cs_diff,
+        personal_avg_cs_per_min: None,
         recent_events,
         players,
     })
@@ -1774,6 +1914,13 @@ fn skin_id_from_splash_path(path: &str) -> i64 {
         .next()
         .and_then(|file| file.split('.').next())
         .and_then(|id| id.parse().ok())
+        .unwrap_or(0)
+}
+
+fn eog_i64(stats: Option<&Value>, key: &str) -> i64 {
+    stats
+        .and_then(|s| s.get(key))
+        .and_then(|v| v.as_i64())
         .unwrap_or(0)
 }
 
@@ -1803,6 +1950,33 @@ fn eog_player(
         .unwrap_or(false)
         || (!local_puuid.is_empty() && puuid == local_puuid);
     let stats = p.get("stats");
+    let mut items: Vec<i64> = p
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_i64())
+                .filter(|&id| id > 0)
+                .take(6)
+                .collect()
+        })
+        .unwrap_or_default();
+    if items.is_empty() {
+        for slot in 0..6 {
+            let id = eog_i64(stats, &format!("ITEM{slot}"));
+            if id > 0 {
+                items.push(id);
+            }
+        }
+    }
+    let spell1_id = p
+        .get("spell1Id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or_else(|| eog_i64(stats, "SPELL1_ID"));
+    let spell2_id = p
+        .get("spell2Id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or_else(|| eog_i64(stats, "SPELL2_ID"));
     EndOfGamePlayer {
         champion_id,
         champion_name,
@@ -1813,8 +1987,39 @@ fn eog_player(
         deaths: eog_stat(stats, "NUM_DEATHS"),
         assists: eog_stat(stats, "ASSISTS"),
         creep_score: eog_stat(stats, "MINIONS_KILLED") + eog_stat(stats, "NEUTRAL_MINIONS_KILLED"),
+        items,
+        keystone_id: eog_i64(stats, "PERK0"),
+        sub_style_id: eog_i64(stats, "PERK_SUB_STYLE"),
+        spell1_id,
+        spell2_id,
+        damage_to_champions: eog_stat(stats, "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS"),
+        damage_taken: eog_stat(stats, "TOTAL_DAMAGE_TAKEN"),
+        gold_earned: eog_stat(stats, "GOLD_EARNED"),
+        vision_score: eog_stat(stats, "VISION_SCORE"),
+        kill_participation: 0.0,
+        damage_share: 0.0,
+        performance_score: 0,
+        placement: 0,
+        is_mvp: false,
+        is_ace: false,
         is_self,
     }
+}
+
+fn eog_performance_score(p: &EndOfGamePlayer, minutes: f32, won: bool) -> u8 {
+    let kda = (p.kills + p.assists) as f32 / p.deaths.max(1) as f32;
+    let cs_min = p.creep_score as f32 / minutes;
+    let vs_min = p.vision_score as f32 / minutes;
+    let mut score = 38.0;
+    score += (kda.min(6.0) / 6.0) * 20.0;
+    score += p.kill_participation.clamp(0.0, 1.0) * 16.0;
+    score += (p.damage_share.clamp(0.0, 0.45) / 0.45) * 12.0;
+    score += (cs_min.min(9.0) / 9.0) * 8.0;
+    score += (vs_min.min(2.0) / 2.0) * 4.0;
+    if won {
+        score += 4.0;
+    }
+    score.round().clamp(1.0, 100.0) as u8
 }
 
 fn extract_eog_summary(
@@ -1829,6 +2034,7 @@ fn extract_eog_summary(
         .unwrap_or("")
         .to_string();
     let game_length_sec = eog.get("gameLength").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+    let minutes = (game_length_sec as f32 / 60.0).max(1.0);
     let local = eog.get("localPlayer");
     let raw_champ_id = local
         .and_then(|l| l.get("championId"))
@@ -1876,7 +2082,7 @@ fn extract_eog_summary(
             teams
                 .iter()
                 .map(|t| {
-                    let players: Vec<EndOfGamePlayer> = t
+                    let mut players: Vec<EndOfGamePlayer> = t
                         .get("players")
                         .and_then(|v| v.as_array())
                         .map(|ps| {
@@ -1890,18 +2096,64 @@ fn extract_eog_summary(
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false)
                         || players.iter().any(|p| p.is_self);
+                    let won = t
+                        .get("isWinningTeam")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let total_kills: u32 = players.iter().map(|p| p.kills).sum();
+                    let total_gold: u32 = players.iter().map(|p| p.gold_earned).sum();
+                    let total_damage: u32 = players.iter().map(|p| p.damage_to_champions).sum();
+                    let total_vision: u32 = players.iter().map(|p| p.vision_score).sum();
+                    for p in &mut players {
+                        if total_kills > 0 {
+                            p.kill_participation =
+                                ((p.kills + p.assists) as f32 / total_kills as f32).min(1.0);
+                        }
+                        if total_damage > 0 {
+                            p.damage_share = p.damage_to_champions as f32 / total_damage as f32;
+                        }
+                        p.performance_score = eog_performance_score(p, minutes, won);
+                    }
+                    // Assign MVP (best score on winning team) or ACE (best score on losing team).
+                    if let Some((best_idx, _)) = players.iter().enumerate().max_by_key(|(_, p)| {
+                        (
+                            p.performance_score,
+                            p.kills + p.assists,
+                            p.damage_to_champions,
+                        )
+                    }) {
+                        if won {
+                            players[best_idx].is_mvp = true;
+                        } else {
+                            players[best_idx].is_ace = true;
+                        }
+                    }
                     EndOfGameTeam {
                         is_player_team,
-                        won: t
-                            .get("isWinningTeam")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false),
+                        won,
+                        total_kills,
+                        total_gold,
+                        total_damage,
+                        total_vision,
                         players,
                     }
                 })
                 .collect()
         })
         .unwrap_or_default();
+
+    // Assign 1..=10 overall placement by performance_score descending.
+    let mut ranked: Vec<(usize, usize, u8, u32)> = Vec::new();
+    for (ti, team) in teams.iter().enumerate() {
+        for (pi, p) in team.players.iter().enumerate() {
+            ranked.push((ti, pi, p.performance_score, p.damage_to_champions));
+        }
+    }
+    ranked.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| b.3.cmp(&a.3)));
+    for (rank_idx, (ti, pi, _, _)) in ranked.into_iter().enumerate() {
+        teams[ti].players[pi].placement = (rank_idx + 1) as u8;
+    }
+
     teams.sort_by_key(|t| !t.is_player_team);
     if result.is_empty() {
         if let Some(mine) = teams.iter().find(|t| t.is_player_team) {
@@ -2285,5 +2537,117 @@ mod tests {
         assert_eq!(p.rune_pages[1].name, "Ahri Burst");
         assert_eq!(p.rune_pages[1].keystone_name, "Électrocution");
         assert!(!p.recommended_rune_pages.is_empty());
+    }
+
+    #[test]
+    fn projects_aram_bench_live_cs_diff_and_enriched_end_of_game() {
+        let cs = json!({
+            "localPlayerCellId": 0,
+            "benchEnabled": true,
+            "benchChampions": [{"championId": 103}, {"championId": 222}],
+            "myTeam": [{"cellId": 0, "championId": 81, "summonerId": 1, "puuid": "p-self"}]
+        });
+        let snap = project_match(
+            &MatchInputs {
+                champ_select: Some(&cs),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let p = snap.champ_select.unwrap();
+        assert!(p.bench_enabled);
+        assert_eq!(p.bench_champions.len(), 2);
+        assert_eq!(p.bench_champions[0].champion_id, 103);
+
+        let all_game = json!({
+            "activePlayer": {
+                "riotId": "Me#EUW",
+                "level": 11,
+                "currentGold": 1200.0
+            },
+            "allPlayers": [
+                {"riotId": "Me#EUW", "championName": "Ahri", "team": "ORDER", "position": "MIDDLE", "level": 11, "scores": {"kills": 4, "deaths": 1, "assists": 3, "creepScore": 150}},
+                {"riotId": "Enemy#EUW", "championName": "Syndra", "team": "CHAOS", "position": "MIDDLE", "level": 10, "scores": {"kills": 1, "deaths": 4, "assists": 1, "creepScore": 120}}
+            ],
+            "gameData": {"gameMode": "CLASSIC", "mapName": "Map11", "gameTime": 1200.0}
+        });
+        let live_snap = project_match(
+            &MatchInputs {
+                live_allgame: Some(&all_game),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let lg = live_snap.live_game.unwrap();
+        assert!((lg.self_cs_per_min - 7.5).abs() < 1e-3);
+        assert_eq!(lg.lane_cs_diff, Some(30));
+        assert_eq!(lg.players[0].cs_diff_vs_lane, Some(30));
+        assert_eq!(lg.players[1].cs_diff_vs_lane, Some(-30));
+
+        let eog = json!({
+            "gameResult": "Win",
+            "gameLength": 1800,
+            "localPlayer": {
+                "puuid": "p-self",
+                "championId": 103,
+                "stats": {"CHAMPIONS_KILLED": 10, "NUM_DEATHS": 2, "ASSISTS": 8, "GOLD_EARNED": 14000, "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 28000}
+            },
+            "teams": [
+                {
+                    "isPlayerTeam": true,
+                    "isWinningTeam": true,
+                    "players": [
+                        {
+                            "puuid": "p-self",
+                            "championId": 103,
+                            "selectedPosition": "MIDDLE",
+                            "spell1Id": 4,
+                            "spell2Id": 14,
+                            "items": [3118, 4645, 3089],
+                            "stats": {"LEVEL": 16, "CHAMPIONS_KILLED": 10, "NUM_DEATHS": 2, "ASSISTS": 8, "MINIONS_KILLED": 200, "NEUTRAL_MINIONS_KILLED": 10, "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 28000, "TOTAL_DAMAGE_TAKEN": 12000, "GOLD_EARNED": 14000, "VISION_SCORE": 24, "PERK0": 8112, "PERK_SUB_STYLE": 8200}
+                        },
+                        {
+                            "puuid": "p-ally",
+                            "championId": 222,
+                            "selectedPosition": "BOTTOM",
+                            "stats": {"LEVEL": 15, "CHAMPIONS_KILLED": 5, "NUM_DEATHS": 4, "ASSISTS": 5, "MINIONS_KILLED": 180, "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 12000, "GOLD_EARNED": 11000, "VISION_SCORE": 14}
+                        }
+                    ]
+                },
+                {
+                    "isPlayerTeam": false,
+                    "isWinningTeam": false,
+                    "players": [
+                        {
+                            "puuid": "p-enemy",
+                            "championId": 134,
+                            "selectedPosition": "MIDDLE",
+                            "stats": {"LEVEL": 15, "CHAMPIONS_KILLED": 6, "NUM_DEATHS": 5, "ASSISTS": 2, "MINIONS_KILLED": 190, "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 20000, "GOLD_EARNED": 11500, "VISION_SCORE": 18}
+                        }
+                    ]
+                }
+            ]
+        });
+        let eog_snap = project_match(
+            &MatchInputs {
+                end_of_game: Some(&eog),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let summary = eog_snap.end_of_game.unwrap();
+        assert_eq!(summary.teams[0].total_kills, 15);
+        assert_eq!(summary.teams[0].total_damage, 40_000);
+        let me = &summary.teams[0].players[0];
+        assert_eq!(me.items, vec![3118, 4645, 3089]);
+        assert_eq!(me.keystone_id, 8112);
+        assert!(me.is_mvp);
+        assert_eq!(me.placement, 1);
+        assert!((me.damage_share - 0.7).abs() < 1e-3);
+        let enemy = &summary.teams[1].players[0];
+        assert!(enemy.is_ace);
     }
 }

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"POT-Creation-Date: 2026-11-20 10:31+0000\n"
+"POT-Creation-Date: 2026-11-20 13:33+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -12,1080 +12,1095 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: ui/app.slint:250
+#: ui/app.slint:252
 msgctxt "RosterRow"
 msgid "no pick yet"
 msgstr ""
 
-#: ui/app.slint:251
+#: ui/app.slint:253
 msgctxt "RosterRow"
 msgid ", you"
 msgstr ""
 
-#: ui/app.slint:252
+#: ui/app.slint:254
 msgctxt "RosterRow"
 msgid ", acting now"
 msgstr ""
 
-#: ui/app.slint:253
+#: ui/app.slint:255
 msgctxt "RosterRow"
 msgid ", hovering"
 msgstr ""
 
-#: ui/app.slint:330
+#: ui/app.slint:332
 msgctxt "RosterRow"
 msgid "Waiting for pick"
 msgstr ""
 
-#: ui/app.slint:345
+#: ui/app.slint:347
 msgctxt "RosterRow"
 msgid "YOUR TURN"
 msgstr ""
 
-#: ui/app.slint:346
+#: ui/app.slint:348
 msgctxt "RosterRow"
 msgid "ACTING NOW"
 msgstr ""
 
-#: ui/app.slint:431
+#: ui/app.slint:433
 msgctxt "RosterRow"
 msgid "You · "
 msgstr ""
 
-#: ui/app.slint:433
+#: ui/app.slint:435
 msgctxt "RosterRow"
 msgid " (Premade)"
 msgstr ""
 
-#: ui/app.slint:500 ui/app.slint:631
+#: ui/app.slint:502 ui/app.slint:633
 msgctxt "ChampSelectScreen"
 msgid "ALLIES DRAFT"
 msgstr ""
 
-#: ui/app.slint:509
+#: ui/app.slint:511
 msgctxt "ChampSelectScreen"
 msgid "Solo/Duo Anonymized"
 msgstr ""
 
-#: ui/app.slint:555
+#: ui/app.slint:557
 msgctxt "ChampSelectScreen"
 msgid "ENEMY TEAM"
 msgstr ""
 
-#: ui/app.slint:557
+#: ui/app.slint:559
 msgctxt "ChampSelectScreen"
 msgid "{0} to pick"
 msgstr ""
 
-#: ui/app.slint:591
+#: ui/app.slint:593
 msgctxt "ChampSelectScreen"
 msgid "BANS"
 msgstr ""
 
-#: ui/app.slint:596
+#: ui/app.slint:598
 msgctxt "ChampSelectScreen"
 msgid "Blue"
 msgstr ""
 
-#: ui/app.slint:609
+#: ui/app.slint:611
 msgctxt "ChampSelectScreen"
 msgid "Red"
 msgstr ""
 
-#: ui/app.slint:619
+#: ui/app.slint:621
 msgctxt "ChampSelectScreen"
 msgid "No champions banned yet"
 msgstr ""
 
-#: ui/app.slint:658
+#: ui/app.slint:660
 msgctxt "ChampSelectScreen"
 msgid "ENEMY PICKS & BANS"
 msgstr ""
 
-#: ui/app.slint:672
+#: ui/app.slint:674
 msgctxt "ChampSelectScreen"
 msgid "Blue:"
 msgstr ""
 
-#: ui/app.slint:684
+#: ui/app.slint:686
 msgctxt "ChampSelectScreen"
 msgid "Red:"
 msgstr ""
 
-#: ui/app.slint:758
+#: ui/app.slint:760
 msgctxt "LiveHud"
 msgid "Score: allies {0}, enemies {1}, game time {2}"
 msgstr ""
 
-#: ui/app.slint:818
+#: ui/app.slint:820
 msgctxt "LiveHud"
 msgid "RESPAWN"
 msgstr ""
 
-#: ui/app.slint:870
+#: ui/app.slint:872
 msgctxt "RiftWatchList"
 msgid "ENEMIES LAST SEEN"
 msgstr ""
 
-#: ui/app.slint:873
+#: ui/app.slint:875
 msgctxt "RiftWatchList"
 msgid ""
 "Riot's live data has no positions: only towers, inhibitors and epic monsters "
 "place an enemy."
 msgstr ""
 
-#: ui/app.slint:883
+#: ui/app.slint:885
 msgctxt "RiftWatchList"
 msgid "NEXT EPIC MONSTERS"
 msgstr ""
 
-#: ui/app.slint:932 ui/app.slint:945
+#: ui/app.slint:934 ui/app.slint:947
 msgctxt "LiveScreen"
 msgid "ALLIES"
 msgstr ""
 
-#: ui/app.slint:938 ui/app.slint:947
+#: ui/app.slint:940 ui/app.slint:949
 msgctxt "LiveScreen"
 msgid "ENEMIES"
 msgstr ""
 
-#: ui/app.slint:999 ui/app.slint:1036
+#: ui/app.slint:1001 ui/app.slint:1038
 msgctxt "LiveScreen"
 msgid "OBJECTIVES & FEED"
 msgstr ""
 
-#: ui/app.slint:1003
+#: ui/app.slint:1005
 msgctxt "LiveScreen"
 msgid "Blue"
 msgstr ""
 
-#: ui/app.slint:1015
+#: ui/app.slint:1017
 msgctxt "LiveScreen"
 msgid "Red"
 msgstr ""
 
-#: ui/app.slint:1037
+#: ui/app.slint:1039
 msgctxt "LiveScreen"
 msgid "No blue objectives"
 msgstr ""
 
-#: ui/app.slint:1038
+#: ui/app.slint:1040
 msgctxt "LiveScreen"
 msgid "No red objectives"
 msgstr ""
 
-#: ui/app.slint:1134 ui/app.slint:1277
+#: ui/app.slint:1136 ui/app.slint:1279
 msgctxt "WaitScreen"
 msgid "PARTY ROSTER"
 msgstr ""
 
-#: ui/app.slint:1135 ui/app.slint:1278
+#: ui/app.slint:1137 ui/app.slint:1280
 msgctxt "WaitScreen"
 msgid "YOUR ACCOUNT"
 msgstr ""
 
-#: ui/app.slint:1150 ui/app.slint:1310
+#: ui/app.slint:1152 ui/app.slint:1312
 msgctxt "WaitScreen"
 msgid " · Leader"
 msgstr ""
 
-#: ui/app.slint:1236
+#: ui/app.slint:1238
 msgctxt "WaitScreen"
 msgid "GET STARTED"
 msgstr ""
 
-#: ui/app.slint:1242
+#: ui/app.slint:1244
 msgctxt "WaitScreen"
 msgid ""
 "Demo mode: simulated matches, nothing comes from your account. Switch phases "
 "from the left rail."
 msgstr ""
 
-#: ui/app.slint:1243
+#: ui/app.slint:1245
 msgctxt "WaitScreen"
 msgid ""
 "Hypatia only reads what League already shows on this PC. Nothing leaves your "
 "machine."
 msgstr ""
 
-#: ui/app.slint:1252
+#: ui/app.slint:1254
 msgctxt "WaitScreen"
 msgid "Try Demo Mode"
 msgstr ""
 
-#: ui/app.slint:1257
+#: ui/app.slint:1259
 msgctxt "WaitScreen"
 msgid "Pair Phone QR"
 msgstr ""
 
-#: ui/app.slint:1261
+#: ui/app.slint:1263
 msgctxt "WaitScreen"
 msgid "Observatory"
 msgstr ""
 
-#: ui/app.slint:1506
+#: ui/app.slint:1508
 msgctxt "TelemetryInspector"
 msgid "Payload Inspector"
 msgstr ""
 
-#: ui/app.slint:1514
+#: ui/app.slint:1516
 msgctxt "TelemetryInspector"
 msgid "Select any stream row to inspect redacted JSON or state diffs"
 msgstr ""
 
-#: ui/app.slint:1533
+#: ui/app.slint:1535
 msgctxt "TelemetryInspector"
 msgid "Prev"
 msgstr ""
 
-#: ui/app.slint:1538
+#: ui/app.slint:1540
 msgctxt "TelemetryInspector"
 msgid "Mask"
 msgstr ""
 
-#: ui/app.slint:1538
+#: ui/app.slint:1540
 msgctxt "TelemetryInspector"
 msgid "Reveal"
 msgstr ""
 
-#: ui/app.slint:1558
+#: ui/app.slint:1560
 msgctxt "TelemetryInspector"
 msgid "Event payload"
 msgstr ""
 
-#: ui/app.slint:1570
+#: ui/app.slint:1572
 msgctxt "TelemetryInspector"
 msgid ""
 "// No event selected yet.\n// Click any item above to view its live payload "
 "or structural JSON diff."
 msgstr ""
 
-#: ui/app.slint:1595
+#: ui/app.slint:1597
 msgctxt "TelemetryEventsList"
 msgid "No events captured for this filter."
 msgstr ""
 
-#: ui/app.slint:1618
+#: ui/app.slint:1620
 msgctxt "TelemetryEndpointRow"
 msgid "Use GET {0} {1}"
 msgstr ""
 
-#: ui/app.slint:1663
+#: ui/app.slint:1665
 msgctxt "TelemetryEndpointRow"
 msgid "Use GET"
 msgstr ""
 
-#: ui/app.slint:1695
+#: ui/app.slint:1697
 msgctxt "TelemetryEndpointsList"
 msgid "No API endpoints matched filter."
 msgstr ""
 
-#: ui/app.slint:1725
+#: ui/app.slint:1727
 msgctxt "TelemetrySystemView"
 msgid "RIOT PROCESSES ({0})"
 msgstr ""
 
-#: ui/app.slint:1727
+#: ui/app.slint:1729
 msgctxt "TelemetrySystemView"
 msgid "No active Riot or League processes detected."
 msgstr ""
 
-#: ui/app.slint:1760
+#: ui/app.slint:1762
 msgctxt "TelemetrySystemView"
 msgid "LISTENING SOCKETS ({0})"
 msgstr ""
 
-#: ui/app.slint:1789
+#: ui/app.slint:1791
 msgctxt "TelemetrySystemView"
 msgid "ACTIVE CONNECTIONS ({0})"
 msgstr ""
 
-#: ui/app.slint:1867
+#: ui/app.slint:1869
 msgctxt "TelemetryPanel"
 msgid "OBSERVATORY"
 msgstr ""
 
-#: ui/app.slint:1904
+#: ui/app.slint:1906
 msgctxt "TelemetryPanel"
 msgid "Full View"
 msgstr ""
 
-#: ui/app.slint:1904
+#: ui/app.slint:1906
 msgctxt "TelemetryPanel"
 msgid "Split View"
 msgstr ""
 
-#: ui/app.slint:1909
+#: ui/app.slint:1911
 msgctxt "TelemetryPanel"
 msgid "Hide"
 msgstr ""
 
-#: ui/app.slint:1926
+#: ui/app.slint:1928
 msgctxt "TelemetryPanel"
 msgid "Live Stream"
 msgstr ""
 
-#: ui/app.slint:1931
+#: ui/app.slint:1933
 msgctxt "TelemetryPanel"
 msgid "API Catalog ({0})"
 msgstr ""
 
-#: ui/app.slint:1936
+#: ui/app.slint:1938
 msgctxt "TelemetryPanel"
 msgid "System"
 msgstr ""
 
-#: ui/app.slint:1949
+#: ui/app.slint:1951
 msgctxt "TelemetryPanel"
 msgid "All"
 msgstr ""
 
-#: ui/app.slint:1952
+#: ui/app.slint:1954
 msgctxt "TelemetryPanel"
 msgid "Game"
 msgstr ""
 
-#: ui/app.slint:1955
+#: ui/app.slint:1957
 msgctxt "TelemetryPanel"
 msgid "Resume"
 msgstr ""
 
-#: ui/app.slint:1959
+#: ui/app.slint:1961
 msgctxt "TelemetryPanel"
 msgid "Clear"
 msgstr ""
 
-#: ui/app.slint:1964
+#: ui/app.slint:1966
 msgctxt "TelemetryPanel"
 msgid "All types"
 msgstr ""
 
-#: ui/app.slint:1965
+#: ui/app.slint:1967
 msgctxt "TelemetryPanel"
 msgid "Update"
 msgstr ""
 
-#: ui/app.slint:1966
+#: ui/app.slint:1968
 msgctxt "TelemetryPanel"
 msgid "Create"
 msgstr ""
 
-#: ui/app.slint:1967
+#: ui/app.slint:1969
 msgctxt "TelemetryPanel"
 msgid "Delete"
 msgstr ""
 
-#: ui/app.slint:1968
+#: ui/app.slint:1970
 msgctxt "TelemetryPanel"
 msgid "Call"
 msgstr ""
 
-#: ui/app.slint:2015
+#: ui/app.slint:2017
 msgctxt "TelemetryPanel"
 msgid "GET request path"
 msgstr ""
 
-#: ui/app.slint:2044
+#: ui/app.slint:2046
 msgctxt "TelemetryPanel"
 msgid "Filter APIs (summoner, lobby, champ-select...)"
 msgstr ""
 
-#: ui/app.slint:2054
+#: ui/app.slint:2056
 msgctxt "TelemetryPanel"
 msgid "Filter APIs"
 msgstr ""
 
-#: ui/app.slint:2101
+#: ui/app.slint:2103
 msgctxt "TelemetryPanel"
 msgid "Call response"
 msgstr ""
 
-#: ui/app.slint:2237 ui/app.slint:2250
+#: ui/app.slint:2238
+msgctxt "EndScreen"
+msgid "Scoreboard"
+msgstr ""
+
+#: ui/app.slint:2243
+msgctxt "EndScreen"
+msgid "Damage & Gold"
+msgstr ""
+
+#: ui/app.slint:2257 ui/app.slint:2296
 msgctxt "EndScreen"
 msgid "ALLIES"
 msgstr ""
 
-#: ui/app.slint:2243 ui/app.slint:2252
+#: ui/app.slint:2276 ui/app.slint:2311
 msgctxt "EndScreen"
 msgid "ENEMIES"
 msgstr ""
 
-#: ui/app.slint:2412
+#: ui/app.slint:2482
 msgctxt "MainWindow"
 msgid "LOL COMPANION"
 msgstr ""
 
-#: ui/app.slint:2424
+#: ui/app.slint:2494
 msgctxt "MainWindow"
 msgid "WORKSPACE"
 msgstr ""
 
-#: ui/app.slint:2427
+#: ui/app.slint:2497
 msgctxt "MainWindow"
 msgid "Companion"
 msgstr ""
 
-#: ui/app.slint:2440
+#: ui/app.slint:2510
 msgctxt "MainWindow"
 msgid "Stats"
 msgstr ""
 
-#: ui/app.slint:2453
+#: ui/app.slint:2523
 msgctxt "MainWindow"
 msgid "Observatory"
 msgstr ""
 
-#: ui/app.slint:2456
+#: ui/app.slint:2526
 msgctxt "MainWindow"
 msgid "SPLIT"
 msgstr ""
 
-#: ui/app.slint:2456
+#: ui/app.slint:2526
 msgctxt "MainWindow"
 msgid "FULL"
 msgstr ""
 
-#: ui/app.slint:2464
+#: ui/app.slint:2534
 msgctxt "MainWindow"
 msgid "Mobile Remote"
 msgstr ""
 
-#: ui/app.slint:2490
+#: ui/app.slint:2560
 msgctxt "MainWindow"
 msgid "Demo Mode"
 msgstr ""
 
-#: ui/app.slint:2493
+#: ui/app.slint:2563
 msgctxt "MainWindow"
 msgid "ON"
 msgstr ""
 
-#: ui/app.slint:2503
+#: ui/app.slint:2573
 msgctxt "MainWindow"
 msgid "Lobby"
 msgstr ""
 
-#: ui/app.slint:2509
+#: ui/app.slint:2579
 msgctxt "MainWindow"
 msgid "Queue"
 msgstr ""
 
-#: ui/app.slint:2518
+#: ui/app.slint:2588
 msgctxt "MainWindow"
 msgid "Ready"
 msgstr ""
 
-#: ui/app.slint:2524
+#: ui/app.slint:2594
 msgctxt "MainWindow"
 msgid "Champ"
 msgstr ""
 
-#: ui/app.slint:2533
+#: ui/app.slint:2603
 msgctxt "MainWindow"
 msgid "Live"
 msgstr ""
 
-#: ui/app.slint:2539
+#: ui/app.slint:2609
 msgctxt "MainWindow"
 msgid "End"
 msgstr ""
 
-#: ui/app.slint:2550
+#: ui/app.slint:2620
 msgctxt "MainWindow"
 msgid "RIOT SOURCES"
 msgstr ""
 
-#: ui/app.slint:2554
+#: ui/app.slint:2624
 msgctxt "MainWindow"
 msgid "LCU API"
 msgstr ""
 
-#: ui/app.slint:2555 ui/app.slint:2560
+#: ui/app.slint:2625 ui/app.slint:2630
 msgctxt "MainWindow"
 msgid "ready"
 msgstr ""
 
-#: ui/app.slint:2555 ui/app.slint:2560
+#: ui/app.slint:2625 ui/app.slint:2630
 msgctxt "MainWindow"
 msgid "offline"
 msgstr ""
 
-#: ui/app.slint:2559
+#: ui/app.slint:2629
 msgctxt "MainWindow"
 msgid "Riot Client"
 msgstr ""
 
-#: ui/app.slint:2564
+#: ui/app.slint:2634
 msgctxt "MainWindow"
 msgid "Live Game"
 msgstr ""
 
-#: ui/app.slint:2565
+#: ui/app.slint:2635
 msgctxt "MainWindow"
 msgid "idle"
 msgstr ""
 
-#: ui/app.slint:2594
+#: ui/app.slint:2664
 msgctxt "MainWindow"
 msgid "Dark"
 msgstr ""
 
-#: ui/app.slint:2600
+#: ui/app.slint:2670
 msgctxt "MainWindow"
 msgid "Light"
 msgstr ""
 
-#: ui/app.slint:2669
+#: ui/app.slint:2739
 msgctxt "MainWindow"
 msgid "DEMO"
 msgstr ""
 
-#: ui/app.slint:2682
+#: ui/app.slint:2752
 msgctxt "MainWindow"
 msgid "Mobile connected ({0})"
 msgstr ""
 
-#: ui/app.slint:2683
+#: ui/app.slint:2753
 msgctxt "MainWindow"
 msgid "Mobile Remote ready"
 msgstr ""
 
-#: ui/app.slint:2782
+#: ui/app.slint:2852
 msgctxt "MainWindow"
 msgid "MOBILE REMOTE PAIRING"
 msgstr ""
 
-#: ui/app.slint:2784
+#: ui/app.slint:2854
 msgctxt "MainWindow"
 msgid "{n} phone connected on LAN"
 msgid_plural "{n} phones connected on LAN"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/app.slint:2785
+#: ui/app.slint:2855
 msgctxt "MainWindow"
 msgid "Waiting for QR scan on same Wi-Fi"
 msgstr ""
 
-#: ui/app.slint:2824
+#: ui/app.slint:2894
 msgctxt "MainWindow"
 msgid ""
 "Scan the QR code to accept queues, lock picks & bans, swap roles/champions, "
 "switch runes, and view live objectives from your phone."
 msgstr ""
 
-#: ui/app.slint:2834
+#: ui/app.slint:2904
 msgctxt "MainWindow"
 msgid "New QR code"
 msgstr ""
 
-#: ui/app.slint:2839
+#: ui/app.slint:2909
 msgctxt "MainWindow"
 msgid "Confirm stop"
 msgstr ""
 
-#: ui/app.slint:2840
+#: ui/app.slint:2910
 msgctxt "MainWindow"
 msgid "Stop server"
 msgstr ""
 
-#: ui/app.slint:2857
+#: ui/app.slint:2927
 msgctxt "MainWindow"
 msgid "DIRECT PAIRING URL"
 msgstr ""
 
-#: ui/app.slint:2879
+#: ui/app.slint:2949
 msgctxt "MainWindow"
 msgid "Pairing URL"
 msgstr ""
 
-#: ui/app.slint:2889
+#: ui/app.slint:2959
 msgctxt "MainWindow"
 msgid "Copied"
 msgstr ""
 
-#: ui/app.slint:2889
+#: ui/app.slint:2959
 msgctxt "MainWindow"
 msgid "Copy"
 msgstr ""
 
-#: ui/app.slint:2904
+#: ui/app.slint:2974
 msgctxt "MainWindow"
 msgid "PERFORMANCE & FEATURES"
 msgstr ""
 
-#: ui/app.slint:2905
+#: ui/app.slint:2975
 msgctxt "MainWindow"
 msgid ""
 "Adapt Hypatia to your PC: pick a preset or fine-tune what runs in the "
 "background."
 msgstr ""
 
-#: ui/app.slint:2925
+#: ui/app.slint:2995
 msgctxt "MainWindow"
 msgid "THIS APP RIGHT NOW"
 msgstr ""
 
-#: ui/app.slint:2965
+#: ui/app.slint:3035
 msgctxt "MainWindow"
 msgid "MEMORY"
 msgstr ""
 
-#: ui/app.slint:2996
+#: ui/app.slint:3066
 msgctxt "MainWindow"
 msgid "CPU"
 msgstr ""
 
-#: ui/app.slint:3027
+#: ui/app.slint:3097
 msgctxt "MainWindow"
 msgid "Disk: {0}"
 msgstr ""
 
-#: ui/app.slint:3035
+#: ui/app.slint:3105
 msgctxt "MainWindow"
 msgid "ASSET CACHE"
 msgstr ""
 
-#: ui/app.slint:3074
+#: ui/app.slint:3144
 msgctxt "MainWindow"
 msgid "Clear RAM cache"
 msgstr ""
 
-#: ui/app.slint:3078
+#: ui/app.slint:3148
 msgctxt "MainWindow"
 msgid "Clear disk cache"
 msgstr ""
 
-#: ui/app.slint:3090
+#: ui/app.slint:3160
 msgctxt "MainWindow"
 msgid "PERFORMANCE PROFILE"
 msgstr ""
 
-#: ui/app.slint:3096
+#: ui/app.slint:3166
 msgctxt "MainWindow"
 msgid "Auto"
 msgstr ""
 
-#: ui/app.slint:3101
+#: ui/app.slint:3171
 msgctxt "MainWindow"
 msgid "Ultra-light"
 msgstr ""
 
-#: ui/app.slint:3106 ui/app.slint:3193
+#: ui/app.slint:3176 ui/app.slint:3263
 msgctxt "MainWindow"
 msgid "Eco"
 msgstr ""
 
-#: ui/app.slint:3111
+#: ui/app.slint:3181
 msgctxt "MainWindow"
 msgid "Balanced"
 msgstr ""
 
-#: ui/app.slint:3124
+#: ui/app.slint:3194
 msgctxt "MainWindow"
 msgid "Custom"
 msgstr ""
 
-#: ui/app.slint:3135
+#: ui/app.slint:3205
 msgctxt "MainWindow"
 msgid "Recommended for this PC: {0}"
 msgstr ""
 
-#: ui/app.slint:3158
+#: ui/app.slint:3228
 msgctxt "MainWindow"
 msgid "ADVANCED CONTROLS"
 msgstr ""
 
-#: ui/app.slint:3160
+#: ui/app.slint:3230
 msgctxt "MainWindow"
 msgid ""
 "Adjust individual polling rates, image memory limits, sleep behavior, and "
 "background connections."
 msgstr ""
 
-#: ui/app.slint:3169
+#: ui/app.slint:3239
 msgctxt "MainWindow"
 msgid "Hide"
 msgstr ""
 
-#: ui/app.slint:3169
+#: ui/app.slint:3239
 msgctxt "MainWindow"
 msgid "Show"
 msgstr ""
 
-#: ui/app.slint:3180
+#: ui/app.slint:3250
 msgctxt "MainWindow"
 msgid "POLLING & SLEEP"
 msgstr ""
 
-#: ui/app.slint:3183
+#: ui/app.slint:3253
 msgctxt "MainWindow"
 msgid "Live game polling"
 msgstr ""
 
-#: ui/app.slint:3184
+#: ui/app.slint:3254
 msgctxt "MainWindow"
 msgid "How often Live Client Data (:2999) refreshes while a match is running."
 msgstr ""
 
-#: ui/app.slint:3191
+#: ui/app.slint:3261
 msgctxt "MainWindow"
 msgid "Riot client detection"
 msgstr ""
 
-#: ui/app.slint:3192
+#: ui/app.slint:3262
 msgctxt "MainWindow"
 msgid "How often Hypatia scans for League / Riot processes and lockfiles."
 msgstr ""
 
-#: ui/app.slint:3193
+#: ui/app.slint:3263
 msgctxt "MainWindow"
 msgid "Normal"
 msgstr ""
 
-#: ui/app.slint:3193
+#: ui/app.slint:3263
 msgctxt "MainWindow"
 msgid "Slow"
 msgstr ""
 
-#: ui/app.slint:3198
+#: ui/app.slint:3268
 msgctxt "MainWindow"
 msgid "Interface & clock ticks"
 msgstr ""
 
-#: ui/app.slint:3199
+#: ui/app.slint:3269
 msgctxt "MainWindow"
 msgid "How often timers and UI updates refresh (250 ms smooth or 1 s low CPU)."
 msgstr ""
 
-#: ui/app.slint:3205
+#: ui/app.slint:3275
 msgctxt "MainWindow"
 msgid "Sleep when minimized"
 msgstr ""
 
-#: ui/app.slint:3206
+#: ui/app.slint:3276
 msgctxt "MainWindow"
 msgid ""
 "Pauses interface rebuilds and slows clock timers while the main window is "
 "minimized."
 msgstr ""
 
-#: ui/app.slint:3212
+#: ui/app.slint:3282
 msgctxt "MainWindow"
 msgid "VISUALS & ASSET CACHE"
 msgstr ""
 
-#: ui/app.slint:3215
+#: ui/app.slint:3285
 msgctxt "MainWindow"
 msgid "Game icons"
 msgstr ""
 
-#: ui/app.slint:3216
+#: ui/app.slint:3286
 msgctxt "MainWindow"
 msgid ""
 "Fetches and shows champion portraits, spells and profile icons. Otherwise: "
 "initials."
 msgstr ""
 
-#: ui/app.slint:3221
+#: ui/app.slint:3291
 msgctxt "MainWindow"
 msgid "Client artwork"
 msgstr ""
 
-#: ui/app.slint:3222
+#: ui/app.slint:3292
 msgctxt "MainWindow"
 msgid ""
 "Shows cached champion splash art and Summoner's Rift artwork from the League "
 "client behind headers and the map."
 msgstr ""
 
-#: ui/app.slint:3228
+#: ui/app.slint:3298
 msgctxt "MainWindow"
 msgid "Image memory budget"
 msgstr ""
 
-#: ui/app.slint:3229
+#: ui/app.slint:3299
 msgctxt "MainWindow"
 msgid "Maximum decoded textures and cached blobs kept in RAM (16, 64, or 256)."
 msgstr ""
 
-#: ui/app.slint:3236
+#: ui/app.slint:3306
 msgctxt "MainWindow"
 msgid "Reduce motion"
 msgstr ""
 
-#: ui/app.slint:3237
+#: ui/app.slint:3307
 msgctxt "MainWindow"
 msgid ""
 "Turns every animation off. The Windows animation setting is honoured either "
 "way."
 msgstr ""
 
-#: ui/app.slint:3242
+#: ui/app.slint:3312
 msgctxt "MainWindow"
 msgid "Preload showcase art on connect"
 msgstr ""
 
-#: ui/app.slint:3243
+#: ui/app.slint:3313
 msgctxt "MainWindow"
 msgid ""
 "Pre-caches ~36 sample icons and splashes when League connects for instant "
 "previews."
 msgstr ""
 
-#: ui/app.slint:3250
+#: ui/app.slint:3320
 msgctxt "MainWindow"
 msgid "CONNECTIONS"
 msgstr ""
 
-#: ui/app.slint:3253
+#: ui/app.slint:3323
 msgctxt "MainWindow"
 msgid "Live game board"
 msgstr ""
 
-#: ui/app.slint:3254
+#: ui/app.slint:3324
 msgctxt "MainWindow"
 msgid "Reads live scoreboard, towers, and objectives while you play."
 msgstr ""
 
-#: ui/app.slint:3259
+#: ui/app.slint:3329
 msgctxt "MainWindow"
 msgid "Riot Client connection"
 msgstr ""
 
-#: ui/app.slint:3260
+#: ui/app.slint:3330
 msgctxt "MainWindow"
 msgid "Keeps a second WebSocket open to the Riot Client (chat presence)."
 msgstr ""
 
-#: ui/app.slint:3265
+#: ui/app.slint:3335
 msgctxt "MainWindow"
 msgid "Mobile Remote at launch"
 msgstr ""
 
-#: ui/app.slint:3266
+#: ui/app.slint:3336
 msgctxt "MainWindow"
 msgid "Starts the local pairing server. Off: no port is opened on your network."
 msgstr ""
 
-#: ui/app.slint:3271
+#: ui/app.slint:3341
 msgctxt "MainWindow"
 msgid "Online stats"
 msgstr ""
 
-#: ui/app.slint:3272
+#: ui/app.slint:3342
 msgctxt "MainWindow"
 msgid ""
 "Global builds, tier lists and matchups from MetaBot.GG. Sends only champion, "
 "role, queue and patch, never who you are."
 msgstr ""
 
-#: ui/app.slint:3279
+#: ui/app.slint:3349
 msgctxt "MainWindow"
 msgid "OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)"
 msgstr ""
 
-#: ui/app.slint:3283
+#: ui/app.slint:3353
 msgctxt "MainWindow"
 msgid "System footprint"
 msgstr ""
 
-#: ui/app.slint:3284
+#: ui/app.slint:3354
 msgctxt "MainWindow"
 msgid "Samples Riot process CPU / RAM and lists their ports and connections."
 msgstr ""
 
-#: ui/app.slint:3289
+#: ui/app.slint:3359
 msgctxt "MainWindow"
 msgid "Endpoint catalog"
 msgstr ""
 
-#: ui/app.slint:3290
+#: ui/app.slint:3360
 msgctxt "MainWindow"
 msgid "Imports the clients' Swagger / help listing (several thousand entries)."
 msgstr ""
 
-#: ui/app.slint:3295
+#: ui/app.slint:3365
 msgctxt "MainWindow"
 msgid "Replay API probe"
 msgstr ""
 
-#: ui/app.slint:3296
+#: ui/app.slint:3366
 msgctxt "MainWindow"
 msgid "Queries /replay/game every 5 seconds during a game."
 msgstr ""
 
-#: ui/parts.slint:438
+#: ui/parts.slint:446
 msgctxt "ReadyMedallion"
 msgid "Match accepted"
 msgstr ""
 
-#: ui/parts.slint:439
+#: ui/parts.slint:447
 msgctxt "ReadyMedallion"
 msgid "Match declined"
 msgstr ""
 
-#: ui/parts.slint:439
+#: ui/parts.slint:447
 msgctxt "ReadyMedallion"
 msgid "Match found, {0} left"
 msgstr ""
 
-#: ui/parts.slint:581
+#: ui/parts.slint:589
 msgctxt "ResultCrest"
 msgid "Victory crest"
 msgstr ""
 
-#: ui/parts.slint:581
+#: ui/parts.slint:589
 msgctxt "ResultCrest"
 msgid "Defeat crest"
 msgstr ""
 
-#: ui/parts.slint:637
+#: ui/parts.slint:645
 msgctxt "EnemySlot"
 msgid "Enemy not picked yet"
 msgstr ""
 
-#: ui/parts.slint:801
+#: ui/parts.slint:809
 msgctxt "ClockReadout"
 msgid "Time: {0}"
 msgstr ""
 
-#: ui/parts.slint:1063
+#: ui/parts.slint:1071
 msgctxt "PhaseLine"
 msgid "Current phase: {0}"
 msgstr ""
 
-#: ui/parts.slint:1064
+#: ui/parts.slint:1072
 msgctxt "PhaseLine"
 msgid "Lobby"
 msgstr ""
 
-#: ui/parts.slint:1064
+#: ui/parts.slint:1072
 msgctxt "PhaseLine"
 msgid "Queue"
 msgstr ""
 
-#: ui/parts.slint:1064
+#: ui/parts.slint:1072
 msgctxt "PhaseLine"
 msgid "Champ Select"
 msgstr ""
 
-#: ui/parts.slint:1065
+#: ui/parts.slint:1073
 msgctxt "PhaseLine"
 msgid "Live Game"
 msgstr ""
 
-#: ui/parts.slint:1065
+#: ui/parts.slint:1073
 msgctxt "PhaseLine"
 msgid "Results"
 msgstr ""
 
-#: ui/parts.slint:1065
+#: ui/parts.slint:1073
 msgctxt "PhaseLine"
 msgid "Waiting"
 msgstr ""
 
-#: ui/parts.slint:1066
+#: ui/parts.slint:1074
 msgctxt "PhaseLine"
 msgid "LOBBY"
 msgstr ""
 
-#: ui/parts.slint:1066
+#: ui/parts.slint:1074
 msgctxt "PhaseLine"
 msgid "QUEUE"
 msgstr ""
 
-#: ui/parts.slint:1066
+#: ui/parts.slint:1074
 msgctxt "PhaseLine"
 msgid "CHAMPIONS"
 msgstr ""
 
-#: ui/parts.slint:1066
+#: ui/parts.slint:1074
 msgctxt "PhaseLine"
 msgid "LIVE"
 msgstr ""
 
-#: ui/parts.slint:1066
+#: ui/parts.slint:1074
 msgctxt "PhaseLine"
 msgid "RESULTS"
 msgstr ""
 
-#: ui/parts.slint:1199
+#: ui/parts.slint:1207
 msgctxt "LineMap"
 msgid "Three-lane map"
 msgstr ""
 
-#: ui/parts.slint:1481
+#: ui/parts.slint:1489
 msgctxt "LineMap"
 msgid "{0} is up"
 msgstr ""
 
-#: ui/parts.slint:1482
+#: ui/parts.slint:1490
 msgctxt "LineMap"
 msgid "{0} in {1}"
 msgstr ""
 
-#: ui/parts.slint:1484
+#: ui/parts.slint:1492
 msgctxt "LineMap"
 msgid "UP"
 msgstr ""
 
-#: ui/parts.slint:1503
+#: ui/parts.slint:1511
 msgctxt "LineMap"
 msgid "{0}: {1}, {2}"
 msgstr ""
 
-#: ui/parts.slint:1593
+#: ui/parts.slint:1601
 msgctxt "SightingRow"
 msgid "{0}: {1}, {2}"
 msgstr ""
 
-#: ui/parts.slint:1652
+#: ui/parts.slint:1660
 msgctxt "PitRow"
 msgid "{0} is up"
 msgstr ""
 
-#: ui/parts.slint:1653
+#: ui/parts.slint:1661
 msgctxt "PitRow"
 msgid "{0} in {1}"
 msgstr ""
 
-#: ui/parts.slint:1686
+#: ui/parts.slint:1694
 msgctxt "PitRow"
 msgid "UP"
 msgstr ""
 
-#: ui/parts.slint:1730
+#: ui/parts.slint:1738
 msgctxt "ObjectiveRow"
 msgid "No objectives yet"
 msgstr ""
 
-#: ui/parts.slint:1886
+#: ui/parts.slint:1895
 msgctxt "PlayerRow"
 msgid "{0}, you"
 msgstr ""
 
-#: ui/parts.slint:1888
+#: ui/parts.slint:1897
 msgctxt "PlayerRow"
 msgid ", dead, respawn in {0}"
 msgstr ""
 
-#: ui/parts.slint:1934
+#: ui/parts.slint:1946
 msgctxt "PlayerRow"
 msgid "{0} (you)"
 msgstr ""
 
-#: ui/parts.slint:1942
+#: ui/parts.slint:1981
 msgctxt "PlayerRow"
 msgid "Respawn {0}"
 msgstr ""
 
-#: ui/parts.slint:1943
+#: ui/parts.slint:1983
+msgctxt "PlayerRow"
+msgid "Lvl {0} · {1} CS · {2}"
+msgstr ""
+
+#: ui/parts.slint:1984
 msgctxt "PlayerRow"
 msgid "Lvl {0} · {1} CS"
 msgstr ""
 
-#: ui/parts.slint:2151
+#: ui/parts.slint:2215
 msgctxt "ModalSheet"
 msgid "Close"
 msgstr ""
@@ -1095,47 +1110,47 @@ msgctxt "Theme"
 msgid "Fill"
 msgstr ""
 
-#: ui/stats.slint:337
+#: ui/stats.slint:386
 msgctxt "OriginChip"
 msgid "LOCAL"
 msgstr ""
 
-#: ui/stats.slint:338
+#: ui/stats.slint:387
 msgctxt "OriginChip"
 msgid "RIOT CLIENT"
 msgstr ""
 
-#: ui/stats.slint:338
+#: ui/stats.slint:387
 msgctxt "OriginChip"
 msgid "ONLINE"
 msgstr ""
 
-#: ui/stats.slint:338
+#: ui/stats.slint:387
 msgctxt "OriginChip"
 msgid "DEMO"
 msgstr ""
 
-#: ui/stats.slint:398
+#: ui/stats.slint:447
 msgctxt "SourceLink"
 msgid "Data: {0}"
 msgstr ""
 
-#: ui/stats.slint:399
+#: ui/stats.slint:448
 msgctxt "SourceLink"
 msgid "Open the {0} page"
 msgstr ""
 
-#: ui/stats.slint:449
+#: ui/stats.slint:498
 msgctxt "Skeleton"
 msgid "Loading"
 msgstr ""
 
-#: ui/stats.slint:490
+#: ui/stats.slint:539
 msgctxt "OnlineOffCard"
 msgid "Online stats are off"
 msgstr ""
 
-#: ui/stats.slint:499
+#: ui/stats.slint:548
 msgctxt "OnlineOffCard"
 msgid ""
 "Global win rates, builds, tier lists and matchups come from MetaBot.GG. "
@@ -1143,654 +1158,819 @@ msgid ""
 "Never your summoner name, your account or anything from your client."
 msgstr ""
 
-#: ui/stats.slint:505
+#: ui/stats.slint:554
 msgctxt "OnlineOffCard"
 msgid ""
 "Your own games and the client's recommended pages stay local either way. You "
 "can switch it off again in Performance."
 msgstr ""
 
-#: ui/stats.slint:514
+#: ui/stats.slint:563
 msgctxt "OnlineOffCard"
 msgid "Turn on Online stats"
 msgstr ""
 
-#: ui/stats.slint:546
+#: ui/stats.slint:595
 msgctxt "BlockState"
 msgid "League of Legends is not running. Start the client to read this from it."
 msgstr ""
 
-#: ui/stats.slint:548
+#: ui/stats.slint:597
 msgctxt "BlockState"
 msgid "No data for this yet: a new champion, a rare role or too few games."
 msgstr ""
 
-#: ui/stats.slint:699
+#: ui/stats.slint:748
 msgctxt "ChampionPicker"
 msgid "Choose a champion"
 msgstr ""
 
-#: ui/stats.slint:709
+#: ui/stats.slint:758
 msgctxt "ChampionPicker"
 msgid "Search by name, or pick one of your champions below."
 msgstr ""
 
-#: ui/stats.slint:739 ui/stats.slint:750 ui/stats.slint:769 ui/stats.slint:780
+#: ui/stats.slint:788 ui/stats.slint:799 ui/stats.slint:818 ui/stats.slint:829
 msgctxt "ChampionPicker"
 msgid "Search a champion"
 msgstr ""
 
-#: ui/stats.slint:793
+#: ui/stats.slint:842
 msgctxt "ChampionPicker"
 msgid "Matches"
 msgstr ""
 
-#: ui/stats.slint:793
+#: ui/stats.slint:842
 msgctxt "ChampionPicker"
 msgid "No champion by that name."
 msgstr ""
 
-#: ui/stats.slint:794
+#: ui/stats.slint:843
 msgctxt "ChampionPicker"
 msgid "Your most played"
 msgstr ""
 
-#: ui/stats.slint:885
+#: ui/stats.slint:934
 msgctxt "RuneTreeGrid"
 msgid "Shards"
 msgstr ""
 
-#: ui/stats.slint:911
+#: ui/stats.slint:960
 msgctxt "RunePageCard"
 msgid "Most popular page"
 msgstr ""
 
-#: ui/stats.slint:913
+#: ui/stats.slint:962
 msgctxt "RunePageCard"
 msgid "Alternative page"
 msgstr ""
 
-#: ui/stats.slint:915
+#: ui/stats.slint:964
 msgctxt "RunePageCard"
 msgid "Client's recommended page"
 msgstr ""
 
-#: ui/stats.slint:916
+#: ui/stats.slint:965
 msgctxt "RunePageCard"
 msgid "Your most played page"
 msgstr ""
 
-#: ui/stats.slint:918
+#: ui/stats.slint:967
 msgctxt "RunePageCard"
 msgid "Same as the client's recommended page"
 msgstr ""
 
-#: ui/stats.slint:948
+#: ui/stats.slint:997
 msgctxt "RunePageCard"
 msgid "Shards"
 msgstr ""
 
-#: ui/stats.slint:962
+#: ui/stats.slint:1011
 msgctxt "StageLabel"
 msgid "Starting"
 msgstr ""
 
-#: ui/stats.slint:964
+#: ui/stats.slint:1013
 msgctxt "StageLabel"
 msgid "Core"
 msgstr ""
 
-#: ui/stats.slint:966
+#: ui/stats.slint:1015
 msgctxt "StageLabel"
 msgid "Boots"
 msgstr ""
 
-#: ui/stats.slint:968
+#: ui/stats.slint:1017
 msgctxt "StageLabel"
 msgid "Situational"
 msgstr ""
 
-#: ui/stats.slint:970
+#: ui/stats.slint:1019
 msgctxt "StageLabel"
 msgid "Item 1"
 msgstr ""
 
-#: ui/stats.slint:972
+#: ui/stats.slint:1021
 msgctxt "StageLabel"
 msgid "Item 2"
 msgstr ""
 
-#: ui/stats.slint:974
+#: ui/stats.slint:1023
 msgctxt "StageLabel"
 msgid "Item 3"
 msgstr ""
 
-#: ui/stats.slint:976
+#: ui/stats.slint:1025
 msgctxt "StageLabel"
 msgid "Item 4"
 msgstr ""
 
-#: ui/stats.slint:977
+#: ui/stats.slint:1026
 msgctxt "StageLabel"
 msgid "Item 5"
 msgstr ""
 
-#: ui/stats.slint:977
+#: ui/stats.slint:1026
 msgctxt "StageLabel"
 msgid "Items"
 msgstr ""
 
-#: ui/stats.slint:1149
+#: ui/stats.slint:1200
 msgctxt "TierBadge"
 msgid "Tier {0}"
 msgstr ""
 
-#: ui/stats.slint:1179
+#: ui/stats.slint:1230
 msgctxt "BuildTab"
 msgid "Ranked Solo/Duo"
 msgstr ""
 
-#: ui/stats.slint:1189
+#: ui/stats.slint:1240
 msgctxt "BuildTab"
 msgid "Arena"
 msgstr ""
 
-#: ui/stats.slint:1197 ui/stats.slint:1222
+#: ui/stats.slint:1248 ui/stats.slint:1273
 msgctxt "BuildTab"
 msgid "All ranks"
 msgstr ""
 
-#: ui/stats.slint:1202 ui/stats.slint:1227
+#: ui/stats.slint:1253 ui/stats.slint:1278
 msgctxt "BuildTab"
 msgid "Emerald+"
 msgstr ""
 
-#: ui/stats.slint:1207 ui/stats.slint:1232
+#: ui/stats.slint:1258 ui/stats.slint:1283
 msgctxt "BuildTab"
 msgid "Diamond+"
 msgstr ""
 
-#: ui/stats.slint:1212 ui/stats.slint:1237
+#: ui/stats.slint:1263 ui/stats.slint:1288
 msgctxt "BuildTab"
 msgid "Master+"
 msgstr ""
 
-#: ui/stats.slint:1251
+#: ui/stats.slint:1302
 msgctxt "BuildTab"
 msgid "Global build"
 msgstr ""
 
-#: ui/stats.slint:1252
+#: ui/stats.slint:1303
 msgctxt "BuildTab"
 msgid "Win rates, item path and skill order"
 msgstr ""
 
-#: ui/stats.slint:1277 ui/stats.slint:1311
+#: ui/stats.slint:1328 ui/stats.slint:1362
 msgctxt "BuildTab"
 msgid "WIN RATE"
 msgstr ""
 
-#: ui/stats.slint:1278
+#: ui/stats.slint:1329
 msgctxt "BuildTab"
 msgid "PICK RATE"
 msgstr ""
 
-#: ui/stats.slint:1279
+#: ui/stats.slint:1330
 msgctxt "BuildTab"
 msgid "BAN RATE"
 msgstr ""
 
-#: ui/stats.slint:1280
+#: ui/stats.slint:1331
 msgctxt "BuildTab"
 msgid "GAMES"
 msgstr ""
 
-#: ui/stats.slint:1303
+#: ui/stats.slint:1354
 msgctxt "BuildTab"
 msgid "Your games"
 msgstr ""
 
-#: ui/stats.slint:1312
+#: ui/stats.slint:1363 ui/stats.slint:1663
 msgctxt "BuildTab"
 msgid "KDA"
 msgstr ""
 
-#: ui/stats.slint:1313
+#: ui/stats.slint:1364
 msgctxt "BuildTab"
 msgid "CS/MIN"
 msgstr ""
 
-#: ui/stats.slint:1314
+#: ui/stats.slint:1365 ui/stats.slint:1665
 msgctxt "BuildTab"
 msgid "DPM"
 msgstr ""
 
-#: ui/stats.slint:1376
+#: ui/stats.slint:1427
 msgctxt "BuildTab"
 msgid "Client's recommended page"
 msgstr ""
 
-#: ui/stats.slint:1392
+#: ui/stats.slint:1443
 msgctxt "BuildTab"
 msgid "Summoner spells"
 msgstr ""
 
-#: ui/stats.slint:1433
+#: ui/stats.slint:1484
 msgctxt "BuildTab"
 msgid "Item path"
 msgstr ""
 
-#: ui/stats.slint:1434
+#: ui/stats.slint:1485
 msgctxt "BuildTab"
 msgid "Share of games and win rate for each stage"
 msgstr ""
 
-#: ui/stats.slint:1443
+#: ui/stats.slint:1494
 msgctxt "BuildTab"
 msgid "By stage"
 msgstr ""
 
-#: ui/stats.slint:1448
+#: ui/stats.slint:1499
 msgctxt "BuildTab"
 msgid "By slot"
 msgstr ""
 
-#: ui/stats.slint:1484
+#: ui/stats.slint:1535
 msgctxt "BuildTab"
 msgid "Skill order"
 msgstr ""
 
-#: ui/stats.slint:1493
+#: ui/stats.slint:1544
 msgctxt "BuildTab"
 msgid "Max first"
 msgstr ""
 
-#: ui/stats.slint:1509
+#: ui/stats.slint:1560
 msgctxt "BuildTab"
 msgid "Alternative"
 msgstr ""
 
-#: ui/stats.slint:1552
+#: ui/stats.slint:1586
+msgctxt "BuildTab"
+msgid "Champion profile & benchmarks"
+msgstr ""
+
+#: ui/stats.slint:1587
+msgctxt "BuildTab"
+msgid "Damage profile, combat traits and your personal averages"
+msgstr ""
+
+#: ui/stats.slint:1596
+msgctxt "BuildTab"
+msgid "Damage split"
+msgstr ""
+
+#: ui/stats.slint:1604
+msgctxt "BuildTab"
+msgid "{0}% Physical · {1}% Magic · {2}% True"
+msgstr ""
+
+#: ui/stats.slint:1664
+msgctxt "BuildTab"
+msgid "CS / MIN"
+msgstr ""
+
+#: ui/stats.slint:1666
+msgctxt "BuildTab"
+msgid "GOLD / MIN"
+msgstr ""
+
+#: ui/stats.slint:1667
+msgctxt "BuildTab"
+msgid "VISION / MIN"
+msgstr ""
+
+#: ui/stats.slint:1730
 msgctxt "TierRowView"
 msgid "{0}, {1}, open its build"
 msgstr ""
 
-#: ui/stats.slint:1611
+#: ui/stats.slint:1809
 msgctxt "TierTab"
 msgid "Ranked Solo/Duo"
 msgstr ""
 
-#: ui/stats.slint:1621
+#: ui/stats.slint:1819
 msgctxt "TierTab"
 msgid "Arena"
 msgstr ""
 
-#: ui/stats.slint:1630
+#: ui/stats.slint:1825
+msgctxt "TierTab"
+msgid "Off-meta"
+msgstr ""
+
+#: ui/stats.slint:1834
 msgctxt "TierTab"
 msgid "All roles"
 msgstr ""
 
-#: ui/stats.slint:1649
+#: ui/stats.slint:1851
+msgctxt "TierTab"
+msgid "All ranks"
+msgstr ""
+
+#: ui/stats.slint:1856
+msgctxt "TierTab"
+msgid "Emerald+"
+msgstr ""
+
+#: ui/stats.slint:1861
+msgctxt "TierTab"
+msgid "Diamond+"
+msgstr ""
+
+#: ui/stats.slint:1866
+msgctxt "TierTab"
+msgid "Master+"
+msgstr ""
+
+#: ui/stats.slint:1895 ui/stats.slint:1906
+msgctxt "TierTab"
+msgid "Filter champions"
+msgstr ""
+
+#: ui/stats.slint:1923
 msgctxt "TierTab"
 msgid "Tier list"
 msgstr ""
 
-#: ui/stats.slint:1650
+#: ui/stats.slint:1924
 msgctxt "TierTab"
 msgid "Patch {0} · click a champion to open its build"
 msgstr ""
 
-#: ui/stats.slint:1661
+#: ui/stats.slint:1935
 msgctxt "TierTab"
 msgid "No champion listed for this role."
 msgstr ""
 
-#: ui/stats.slint:1673
+#: ui/stats.slint:1949
 msgctxt "TierTab"
 msgid "TIER"
 msgstr ""
 
-#: ui/stats.slint:1674
+#: ui/stats.slint:1955
 msgctxt "TierTab"
 msgid "CHAMPION"
 msgstr ""
 
-#: ui/stats.slint:1676
+#: ui/stats.slint:1959
 msgctxt "TierTab"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:1677
+#: ui/stats.slint:1966
 msgctxt "TierTab"
 msgid "PICK"
 msgstr ""
 
-#: ui/stats.slint:1678
+#: ui/stats.slint:1973
 msgctxt "TierTab"
 msgid "BAN"
 msgstr ""
 
-#: ui/stats.slint:1679
+#: ui/stats.slint:1980
 msgctxt "TierTab"
 msgid "GAMES"
 msgstr ""
 
-#: ui/stats.slint:1779
+#: ui/stats.slint:2035
+msgctxt "VerdictChip"
+msgid "Good lane"
+msgstr ""
+
+#: ui/stats.slint:2036
+msgctxt "VerdictChip"
+msgid "Hard lane"
+msgstr ""
+
+#: ui/stats.slint:2036
+msgctxt "VerdictChip"
+msgid "Even"
+msgstr ""
+
+#: ui/stats.slint:2102
+msgctxt "MatchupRowView"
+msgid "You: {0}"
+msgstr ""
+
+#: ui/stats.slint:2130
 msgctxt "MatchupColumn"
 msgid "None in this sample."
 msgstr ""
 
-#: ui/stats.slint:1803
+#: ui/stats.slint:2176 ui/stats.slint:2187
+msgctxt "MatchupsTab"
+msgid "Search an opponent"
+msgstr ""
+
+#: ui/stats.slint:2195
+msgctxt "MatchupsTab"
+msgid "Top 8 only"
+msgstr ""
+
+#: ui/stats.slint:2195
+msgctxt "MatchupsTab"
+msgid "Show all"
+msgstr ""
+
+#: ui/stats.slint:2207
+msgctxt "MatchupsTab"
+msgid "Your matchups"
+msgstr ""
+
+#: ui/stats.slint:2208
+msgctxt "MatchupsTab"
+msgid "Your personal record on {0} against lane opponents"
+msgstr ""
+
+#: ui/stats.slint:2273
 msgctxt "MatchupsTab"
 msgid "Matchups"
 msgstr ""
 
-#: ui/stats.slint:1815 ui/stats.slint:1829
+#: ui/stats.slint:2285 ui/stats.slint:2299
 msgctxt "MatchupsTab"
 msgid "Hardest matchups"
 msgstr ""
 
-#: ui/stats.slint:1816 ui/stats.slint:1830
+#: ui/stats.slint:2286 ui/stats.slint:2300
 msgctxt "MatchupsTab"
 msgid "Lowest win rate for {0}"
 msgstr ""
 
-#: ui/stats.slint:1821 ui/stats.slint:1834
+#: ui/stats.slint:2291 ui/stats.slint:2304
 msgctxt "MatchupsTab"
 msgid "Easiest matchups"
 msgstr ""
 
-#: ui/stats.slint:1822 ui/stats.slint:1835
+#: ui/stats.slint:2292 ui/stats.slint:2305
 msgctxt "MatchupsTab"
 msgid "Highest win rate for {0}"
 msgstr ""
 
-#: ui/stats.slint:1853
+#: ui/stats.slint:2323
 msgctxt "ResultChip"
 msgid "RMK"
 msgstr ""
 
-#: ui/stats.slint:1853
+#: ui/stats.slint:2323
 msgctxt "ResultChip"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:1853
+#: ui/stats.slint:2323
 msgctxt "ResultChip"
 msgid "LOSS"
 msgstr ""
 
-#: ui/stats.slint:2007
+#: ui/stats.slint:2477
 msgctxt "GameRowView"
 msgid "RMK"
 msgstr ""
 
-#: ui/stats.slint:2007
+#: ui/stats.slint:2477
 msgctxt "GameRowView"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:2007
+#: ui/stats.slint:2477
 msgctxt "GameRowView"
 msgid "LOSS"
 msgstr ""
 
-#: ui/stats.slint:2069
+#: ui/stats.slint:2539
 msgctxt "GameRowView"
 msgid "not in totals"
 msgstr ""
 
-#: ui/stats.slint:2172
+#: ui/stats.slint:2642
 msgctxt "ChampionSummaryRow"
 msgid "{0}, open its build"
 msgstr ""
 
-#: ui/stats.slint:2246
+#: ui/stats.slint:2717
 msgctxt "MyStatsTab"
 msgid "Your last games"
 msgstr ""
 
-#: ui/stats.slint:2247
+#: ui/stats.slint:2718
 msgctxt "MyStatsTab"
 msgid "Read from your client's match history. It never leaves this machine."
 msgstr ""
 
-#: ui/stats.slint:2253
+#: ui/stats.slint:2724
 msgctxt "MyStatsTab"
 msgid "Reload history"
 msgstr ""
 
-#: ui/stats.slint:2290
+#: ui/stats.slint:2761
 msgctxt "MyStatsTab"
 msgid "GAMES"
 msgstr ""
 
-#: ui/stats.slint:2291
+#: ui/stats.slint:2762
 msgctxt "MyStatsTab"
 msgid "WIN RATE"
 msgstr ""
 
-#: ui/stats.slint:2292 ui/stats.slint:2342 ui/stats.slint:2423
+#: ui/stats.slint:2763 ui/stats.slint:2813 ui/stats.slint:2894
 msgctxt "MyStatsTab"
 msgid "KDA"
 msgstr ""
 
-#: ui/stats.slint:2293 ui/stats.slint:2344
+#: ui/stats.slint:2764 ui/stats.slint:2815
 msgctxt "MyStatsTab"
 msgid "CS/MIN"
 msgstr ""
 
-#: ui/stats.slint:2294 ui/stats.slint:2343 ui/stats.slint:2425
+#: ui/stats.slint:2765 ui/stats.slint:2814 ui/stats.slint:2896
 msgctxt "MyStatsTab"
 msgid "DPM"
 msgstr ""
 
-#: ui/stats.slint:2301
+#: ui/stats.slint:2772
 msgctxt "MyStatsTab"
 msgid "By role"
 msgstr ""
 
-#: ui/stats.slint:2329
+#: ui/stats.slint:2800
 msgctxt "MyStatsTab"
 msgid "By champion"
 msgstr ""
 
-#: ui/stats.slint:2330
+#: ui/stats.slint:2801
 msgctxt "MyStatsTab"
 msgid "Most used runes and items on each. Click one to open its build."
 msgstr ""
 
-#: ui/stats.slint:2340 ui/stats.slint:2421
+#: ui/stats.slint:2811 ui/stats.slint:2892
 msgctxt "MyStatsTab"
 msgid "CHAMPION"
 msgstr ""
 
-#: ui/stats.slint:2341
+#: ui/stats.slint:2812
 msgctxt "MyStatsTab"
 msgid "WIN"
 msgstr ""
 
-#: ui/stats.slint:2345
+#: ui/stats.slint:2816
 msgctxt "MyStatsTab"
 msgid "RUNES & ITEMS"
 msgstr ""
 
-#: ui/stats.slint:2361
+#: ui/stats.slint:2832
 msgctxt "MyStatsTab"
 msgid "Recent games"
 msgstr ""
 
-#: ui/stats.slint:2362
+#: ui/stats.slint:2833
 msgctxt "MyStatsTab"
 msgid "All queues listed; totals above count valid Summoner's Rift games."
 msgstr ""
 
-#: ui/stats.slint:2370
+#: ui/stats.slint:2841
 msgctxt "MyStatsTab"
 msgid "All queues"
 msgstr ""
 
-#: ui/stats.slint:2375
+#: ui/stats.slint:2846
 msgctxt "MyStatsTab"
 msgid "Ranked Solo/Duo"
 msgstr ""
 
-#: ui/stats.slint:2380
+#: ui/stats.slint:2851
 msgctxt "MyStatsTab"
 msgid "Ranked Flex"
 msgstr ""
 
-#: ui/stats.slint:2390
+#: ui/stats.slint:2861
 msgctxt "MyStatsTab"
 msgid "Arena"
 msgstr ""
 
-#: ui/stats.slint:2399
+#: ui/stats.slint:2870
 msgctxt "MyStatsTab"
 msgid "All roles"
 msgstr ""
 
-#: ui/stats.slint:2410
+#: ui/stats.slint:2881
 msgctxt "MyStatsTab"
 msgid "No games in your recent history yet."
 msgstr ""
 
-#: ui/stats.slint:2419
+#: ui/stats.slint:2890
 msgctxt "MyStatsTab"
 msgid "RESULT"
 msgstr ""
 
-#: ui/stats.slint:2422
+#: ui/stats.slint:2893
 msgctxt "MyStatsTab"
 msgid "KDA / KP"
 msgstr ""
 
-#: ui/stats.slint:2424
+#: ui/stats.slint:2895
 msgctxt "MyStatsTab"
 msgid "CS / VS"
 msgstr ""
 
-#: ui/stats.slint:2426
+#: ui/stats.slint:2897
 msgctxt "MyStatsTab"
 msgid "SCORE"
 msgstr ""
 
-#: ui/stats.slint:2474
+#: ui/stats.slint:2951
 msgctxt "StatsPage"
 msgid "CHAMPION STATS"
 msgstr ""
 
-#: ui/stats.slint:2483
+#: ui/stats.slint:2960
 msgctxt "StatsPage"
 msgid "Your client and your games, plus global numbers from MetaBot.GG."
 msgstr ""
 
-#: ui/stats.slint:2484
+#: ui/stats.slint:2961
 msgctxt "StatsPage"
 msgid "From your client and your own games. Online stats are off."
 msgstr ""
 
-#: ui/stats.slint:2492
+#: ui/stats.slint:2969
 msgctxt "StatsPage"
 msgid "Open on dpm.lol"
 msgstr ""
 
-#: ui/stats.slint:2493
+#: ui/stats.slint:2970
 msgctxt "StatsPage"
 msgid "Open this page on dpm.lol in your browser"
 msgstr ""
 
-#: ui/stats.slint:2502
+#: ui/stats.slint:2979
 msgctxt "StatsPage"
 msgid "Champion Build"
 msgstr ""
 
-#: ui/stats.slint:2507
+#: ui/stats.slint:2984
 msgctxt "StatsPage"
 msgid "Tier List"
 msgstr ""
 
-#: ui/stats.slint:2512
+#: ui/stats.slint:2989
 msgctxt "StatsPage"
 msgid "Matchups"
 msgstr ""
 
-#: ui/stats.slint:2517
+#: ui/stats.slint:2994
 msgctxt "StatsPage"
 msgid "My Stats"
 msgstr ""
 
-#: ui/helper.slint:93
+#: ui/stats.slint:3014
+msgctxt "StatsPage"
+msgid "Match inspector"
+msgstr ""
+
+#: ui/stats.slint:3049
+msgctxt "StatsPage"
+msgid "Score {0}"
+msgstr ""
+
+#: ui/stats.slint:3060
+msgctxt "StatsPage"
+msgid "vs {0}"
+msgstr ""
+
+#: ui/stats.slint:3077
+msgctxt "StatsPage"
+msgid "KDA"
+msgstr ""
+
+#: ui/stats.slint:3078
+msgctxt "StatsPage"
+msgid "RATIO"
+msgstr ""
+
+#: ui/stats.slint:3079
+msgctxt "StatsPage"
+msgid "KP"
+msgstr ""
+
+#: ui/stats.slint:3080
+msgctxt "StatsPage"
+msgid "CS / MIN"
+msgstr ""
+
+#: ui/stats.slint:3081
+msgctxt "StatsPage"
+msgid "DPM"
+msgstr ""
+
+#: ui/stats.slint:3116
+msgctxt "StatsPage"
+msgid "Open champion build"
+msgstr ""
+
+#: ui/helper.slint:104
 msgctxt "OriginChip"
 msgid "Source: {0}"
 msgstr ""
 
-#: ui/helper.slint:154
+#: ui/helper.slint:165
 msgctxt "DamageBar"
 msgid "{0}: {1}% physical, {2}% magic, {3}% true damage"
 msgstr ""
 
-#: ui/helper.slint:155
+#: ui/helper.slint:166
 msgctxt "DamageBar"
 msgid "{0}: no champion yet"
 msgstr ""
 
-#: ui/helper.slint:168
+#: ui/helper.slint:179
 msgctxt "DamageBar"
 msgid "{0}% AD · {1}% AP"
 msgstr ""
 
-#: ui/helper.slint:265
+#: ui/helper.slint:282
+msgctxt "BuildBlock"
+msgid "Suggested picks"
+msgstr ""
+
+#: ui/helper.slint:330
 msgctxt "BuildBlock"
 msgid "Runes"
 msgstr ""
 
-#: ui/helper.slint:295 ui/helper.slint:325
+#: ui/helper.slint:360 ui/helper.slint:390
 msgctxt "BuildBlock"
 msgid "{0} + {1}"
 msgstr ""
 
-#: ui/helper.slint:314
+#: ui/helper.slint:379
 msgctxt "BuildBlock"
 msgid "Spells"
 msgstr ""
 
-#: ui/helper.slint:336
+#: ui/helper.slint:401
 msgctxt "BuildBlock"
 msgid "Core items"
 msgstr ""
 
-#: ui/helper.slint:418
+#: ui/helper.slint:443
+msgctxt "BuildBlock"
+msgid "vs {0}"
+msgstr ""
+
+#: ui/helper.slint:510
 msgctxt "CompBlock"
 msgid "Your team"
 msgstr ""
 
-#: ui/helper.slint:421
+#: ui/helper.slint:513
 msgctxt "CompBlock"
 msgid "Enemy team"
 msgstr ""
 
-#: ui/helper.slint:428
+#: ui/helper.slint:520
 msgctxt "CompBlock"
 msgid "Physical"
 msgstr ""
 
-#: ui/helper.slint:429
+#: ui/helper.slint:521
 msgctxt "CompBlock"
 msgid "Magic"
 msgstr ""
 
-#: ui/helper.slint:430
+#: ui/helper.slint:522
 msgctxt "CompBlock"
 msgid "True"
 msgstr ""
 
-#: ui/helper.slint:473
+#: ui/helper.slint:565
 msgctxt "DraftHelperPanel"
 msgid "YOUR BUILD"
 msgstr ""
 
-#: ui/helper.slint:475
+#: ui/helper.slint:567
 msgctxt "DraftHelperPanel"
 msgid "{0} · {1}"
 msgstr ""

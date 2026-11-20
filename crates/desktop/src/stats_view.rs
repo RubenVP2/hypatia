@@ -11,26 +11,27 @@ use std::sync::Arc;
 use hypatia_core::stats::profile::group_sessions;
 use hypatia_core::AppState;
 use hypatia_shared::{
-    builtin_champion_roles, builtin_rune_style_slots, default_stats_position as default_position,
-    normalize_champion_key, summarised_games, ChampionBuild, ChampionLookup, GameData,
-    GameDataNames as Names, ItemStage, Lang, MatchBadge, MatchupList, PlayerGame, PlayerProfile,
-    Position, RankBracket, Rates, RuneSetup, Skill, StatsOrigin, StatsQuery, StatsQueue,
-    StatsState, StatsUnavailable, SummonerSummary, Tier, TierList, STAT_SHARD_ROWS,
+    aggregate_local_matchups, builtin_champion_roles, builtin_rune_style_slots, champion_traits,
+    comp_trait_label, default_stats_position as default_position, normalize_champion_key,
+    summarised_games, ChampionBuild, ChampionLookup, GameData, GameDataNames as Names, ItemStage,
+    LaneVerdict, Lang, MatchBadge, MatchupList, PlayerGame, PlayerProfile, Position, RankBracket,
+    Rates, RuneSetup, Skill, StatsOrigin, StatsQuery, StatsQueue, StatsState, StatsUnavailable,
+    SummonerSummary, Tier, TierList, STAT_SHARD_ROWS,
 };
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::icons::DesktopAssetLoader;
 use crate::links;
 use crate::{
-    MainWindow, StatsBlock, StatsBridge, StatsChampOption, StatsChampionSummary, StatsGameRow,
-    StatsIcon, StatsItemStage, StatsLocalBuild, StatsMatchupRow, StatsRankedCard, StatsRates,
-    StatsRoleSummary, StatsRuneNode, StatsRunePage, StatsRuneRow, StatsSkillOrder,
-    StatsSkillVariant, StatsSpellRow, StatsTierRow, StatsTotals,
+    MainWindow, StatsBlock, StatsBridge, StatsChampOption, StatsChampProfile, StatsChampionSummary,
+    StatsGameRow, StatsIcon, StatsItemStage, StatsLocalBuild, StatsLocalMatchupRow,
+    StatsMatchupRow, StatsRankedCard, StatsRates, StatsRoleSummary, StatsRuneNode, StatsRunePage,
+    StatsRuneRow, StatsSkillOrder, StatsSkillVariant, StatsSpellRow, StatsTierRow, StatsTotals,
 };
 
 /// Champions shown in the picker: search matches, or the player's most played.
 const PICKS: usize = 8;
-/// Opponents per matchup column.
+/// Opponents per matchup column when collapsed.
 const MATCHUPS: usize = 8;
 
 pub const TAB_BUILD: i32 = 0;
@@ -52,8 +53,18 @@ struct Selection {
     item_view: i32,
     /// 0 Ranked Solo/Duo, 1 ARAM, 2 Arena.
     tier_queue: i32,
+    /// Tier List bracket: 0 All, 1 Emerald+, 2 Diamond+, 3 Master+.
+    tier_bracket: i32,
     /// -1 all roles, else a desktop lane index.
     tier_role: i32,
+    /// Tier List sort column: 0 Tier, 1 Win, 2 Pick, 3 Ban, 4 Games.
+    tier_sort_col: i32,
+    tier_sort_desc: bool,
+    tier_search: String,
+    tier_off_meta: bool,
+    /// Matchups search filter and full-list expansion.
+    matchup_search: String,
+    matchup_show_all: bool,
     /// My Stats queue filter: -1 All, 0 Ranked Solo, 1 Flex, 2 ARAM, 3 Arena.
     my_queue: i32,
     /// My Stats role filter: -1 All, 0..4 desktop lane index.
@@ -71,7 +82,14 @@ impl Default for Selection {
             build_bracket: 1,
             item_view: 0,
             tier_queue: 0,
+            tier_bracket: 1,
             tier_role: -1,
+            tier_sort_col: 0,
+            tier_sort_desc: false,
+            tier_search: String::new(),
+            tier_off_meta: false,
+            matchup_search: String::new(),
+            matchup_show_all: false,
             my_queue: -1,
             my_role: -1,
             search: String::new(),
@@ -125,8 +143,39 @@ impl StatsView {
         self.selection.tier_queue = queue.clamp(0, 2);
     }
 
+    pub fn select_tier_bracket(&mut self, bracket: i32) {
+        self.selection.tier_bracket = bracket.clamp(0, 3);
+    }
+
     pub fn select_tier_role(&mut self, role: i32) {
         self.selection.tier_role = role.clamp(-1, 4);
+    }
+
+    pub fn sort_tier_column(&mut self, col: i32) {
+        let col = col.clamp(0, 4);
+        if self.selection.tier_sort_col == col {
+            self.selection.tier_sort_desc = !self.selection.tier_sort_desc;
+        } else {
+            self.selection.tier_sort_col = col;
+            // Tier defaults ascending (S+ first); numeric metrics default descending.
+            self.selection.tier_sort_desc = col != 0;
+        }
+    }
+
+    pub fn tier_search_edited(&mut self, text: &str) {
+        self.selection.tier_search = text.to_string();
+    }
+
+    pub fn toggle_tier_off_meta(&mut self) {
+        self.selection.tier_off_meta = !self.selection.tier_off_meta;
+    }
+
+    pub fn matchup_search_edited(&mut self, text: &str) {
+        self.selection.matchup_search = text.to_string();
+    }
+
+    pub fn toggle_matchup_show_all(&mut self) {
+        self.selection.matchup_show_all = !self.selection.matchup_show_all;
     }
 
     pub fn select_my_queue(&mut self, queue: i32) {
@@ -271,7 +320,7 @@ impl StatsView {
             tiers: (tab == TAB_TIERS).then(|| {
                 stats.tier_list(
                     tier_queue(self.selection.tier_queue),
-                    RankBracket::default(),
+                    rank_bracket(self.selection.tier_bracket),
                 )
             }),
             matchups: (tab == TAB_MATCHUPS && has_champion).then(|| stats.matchups(&query)),
@@ -300,7 +349,18 @@ impl StatsView {
         bridge.set_build_bracket(sel.build_bracket);
         bridge.set_item_view(sel.item_view);
         bridge.set_tier_queue(sel.tier_queue);
+        bridge.set_tier_bracket(sel.tier_bracket);
         bridge.set_tier_role(sel.tier_role);
+        bridge.set_tier_sort_col(sel.tier_sort_col);
+        bridge.set_tier_sort_desc(sel.tier_sort_desc);
+        bridge.set_tier_off_meta(sel.tier_off_meta);
+        if bridge.get_tier_search().as_str() != sel.tier_search {
+            bridge.set_tier_search(sel.tier_search.as_str().into());
+        }
+        bridge.set_matchup_show_all(sel.matchup_show_all);
+        if bridge.get_matchup_search().as_str() != sel.matchup_search {
+            bridge.set_matchup_search(sel.matchup_search.as_str().into());
+        }
         bridge.set_my_queue(sel.my_queue);
         bridge.set_my_role(sel.my_role);
         if bridge.get_search().as_str() != sel.search {
@@ -372,7 +432,21 @@ pub fn wire(bridge: &StatsBridge<'_>) {
     bridge.on_search_edited(|text| with_ui(|ui| ui.update_stats(|s, _| s.search_edited(&text))));
     bridge.on_search_accepted(|| with_ui(|ui| ui.update_stats(|s, app| s.search_accepted(app))));
     bridge.on_select_tier_queue(|q| with_ui(|ui| ui.update_stats(|s, _| s.select_tier_queue(q))));
+    bridge
+        .on_select_tier_bracket(|b| with_ui(|ui| ui.update_stats(|s, _| s.select_tier_bracket(b))));
     bridge.on_select_tier_role(|r| with_ui(|ui| ui.update_stats(|s, _| s.select_tier_role(r))));
+    bridge.on_sort_tier_column(|c| with_ui(|ui| ui.update_stats(|s, _| s.sort_tier_column(c))));
+    bridge.on_tier_search_edited(|text| {
+        with_ui(|ui| ui.update_stats(|s, _| s.tier_search_edited(&text)))
+    });
+    bridge
+        .on_toggle_tier_off_meta(|| with_ui(|ui| ui.update_stats(|s, _| s.toggle_tier_off_meta())));
+    bridge.on_matchup_search_edited(|text| {
+        with_ui(|ui| ui.update_stats(|s, _| s.matchup_search_edited(&text)))
+    });
+    bridge.on_toggle_matchup_show_all(|| {
+        with_ui(|ui| ui.update_stats(|s, _| s.toggle_matchup_show_all()))
+    });
     bridge.on_select_my_queue(|q| with_ui(|ui| ui.update_stats(|s, _| s.select_my_queue(q))));
     bridge.on_select_my_role(|r| with_ui(|ui| ui.update_stats(|s, _| s.select_my_role(r))));
     bridge.on_open_build(|id, lane| {
@@ -531,7 +605,7 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
     }
     bridge.set_rune_pages(model(pages));
 
-    // Summoner spells: top 2 global pairs, and the client's when it differs.
+    // Summoner spells: top 2 global pairs, client's when it differs, else local player's most-used.
     let mut spells = Vec::new();
     if let Some(b) = build {
         for (pair, rates) in b.spells.iter().take(2) {
@@ -549,10 +623,23 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
             ));
         }
     }
+    if spells.is_empty() {
+        if let Some((origin, c)) = local_champ {
+            if let Some(pair) = c.spells {
+                spells.push(ctx.spell_row(
+                    pair.first,
+                    pair.second,
+                    origin,
+                    games_label(c.games, lang),
+                ));
+            }
+        }
+    }
     bridge.set_spells(model(spells));
 
     let mut stage_items = Vec::new();
     let mut slot_items = Vec::new();
+    let mut items_origin = build.map_or(0, |b| origin_index(b.origin));
     if let Some(b) = build {
         for blk in b.items.iter().filter(|blk| !blk.item_ids.is_empty()) {
             let row = StatsItemStage {
@@ -572,6 +659,26 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
             }
         }
     }
+    // Seamless fallback: if online/global items are absent, surface the player's own most-built items.
+    if stage_items.is_empty() && slot_items.is_empty() {
+        if let Some((origin, c)) = local_champ {
+            if !c.items.is_empty() {
+                items_origin = origin_index(origin);
+                stage_items.push(StatsItemStage {
+                    stage: stage_index(Some(ItemStage::Core)),
+                    items: model(
+                        c.items
+                            .iter()
+                            .take(6)
+                            .map(|&id| ctx.icon("item", id))
+                            .collect(),
+                    ),
+                    rates: games_label(c.games, lang).into(),
+                });
+            }
+        }
+    }
+    bridge.set_items_origin(items_origin);
     bridge.set_items(model(stage_items));
     bridge.set_slot_items(model(slot_items));
 
@@ -613,6 +720,53 @@ fn push_build(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         })
         .unwrap_or_default();
     bridge.set_alt_skills(model(alt_skills));
+
+    // Champion Profile & Benchmarks (offline damage split + traits + local player averages).
+    let champ_profile = match champion_traits(inputs.selection.champion_id) {
+        Some(ct) => {
+            let traits: Vec<SharedString> = ct
+                .traits()
+                .into_iter()
+                .map(|t| SharedString::from(comp_trait_label(t, lang)))
+                .collect();
+            let (has_local, local_origin, kda, cs_min, dpm, gpm, vs_min) = match local_champ {
+                Some((origin, c)) => (
+                    true,
+                    origin_index(origin),
+                    decimal(kda_ratio(c.kills, c.deaths, c.assists), lang),
+                    decimal(c.cs_per_min, lang),
+                    thousands(c.dpm.round() as u32, lang),
+                    thousands(c.gold_per_min.round() as u32, lang),
+                    decimal(c.vision_per_min, lang),
+                ),
+                None => (
+                    false,
+                    0,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ),
+            };
+            StatsChampProfile {
+                has: true,
+                physical: f32::from(ct.physical) / 100.0,
+                magic: f32::from(ct.magic) / 100.0,
+                true_damage: f32::from(ct.true_damage) / 100.0,
+                traits: model(traits),
+                has_local,
+                local_origin,
+                kda: kda.into(),
+                cs_min: cs_min.into(),
+                dpm: dpm.into(),
+                gpm: gpm.into(),
+                vs_min: vs_min.into(),
+            }
+        }
+        None => StatsChampProfile::default(),
+    };
+    bridge.set_champ_profile(champ_profile);
 }
 
 fn push_tiers(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
@@ -628,24 +782,69 @@ fn push_tiers(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
     };
     bridge.set_tier_patch(list.patch.as_str().into());
     let lanes = sel.tier_queue == 0;
-    let rows: Vec<StatsTierRow> = list
+    let search_key = normalize_champion_key(&sel.tier_search);
+    let mut filtered: Vec<(&hypatia_shared::TierEntry, StatsChampOption)> = list
         .entries
         .iter()
         .filter(|e| !lanes || sel.tier_role < 0 || e.position.desktop_index() == sel.tier_role)
+        .filter(|e| sel.tier_off_meta || e.rates.pick_rate == 0.0 || e.rates.pick_rate >= 0.005)
+        .filter_map(|e| {
+            let champ = ctx.champion(e.champion_id);
+            if !search_key.is_empty() && !normalize_champion_key(&champ.name).contains(&search_key)
+            {
+                return None;
+            }
+            Some((e, champ))
+        })
+        .collect();
+
+    filtered.sort_by(|(a, _), (b, _)| {
+        let ord = match sel.tier_sort_col {
+            1 => a.rates.win_rate.total_cmp(&b.rates.win_rate),
+            2 => a.rates.pick_rate.total_cmp(&b.rates.pick_rate),
+            3 => a.rates.ban_rate.total_cmp(&b.rates.ban_rate),
+            4 => a.rates.games.cmp(&b.rates.games),
+            _ => a
+                .tier
+                .cmp(&b.tier)
+                .then_with(|| b.rates.win_rate.total_cmp(&a.rates.win_rate)),
+        };
+        if sel.tier_sort_desc {
+            ord.reverse()
+        } else {
+            ord
+        }
+    });
+
+    let rows: Vec<StatsTierRow> = filtered
+        .into_iter()
         .enumerate()
-        .map(|(i, e)| StatsTierRow {
-            rank: i as i32 + 1,
-            tier: tier_index(e.tier),
-            champion: ctx.champion(e.champion_id),
-            lane: if lanes {
-                e.position.desktop_index()
-            } else {
-                -1
-            },
-            win: percent(e.rates.win_rate, lang).into(),
-            pick: percent(e.rates.pick_rate, lang).into(),
-            ban: percent(e.rates.ban_rate, lang).into(),
-            games: thousands(e.rates.games, lang).into(),
+        .map(|(i, (e, champion))| {
+            let (win_delta, win_delta_dir) = match e.win_rate_delta {
+                Some(d) if d.abs() >= 0.0005 => {
+                    let sign = if d > 0.0 { "+" } else { "−" };
+                    let text = format!("{sign}{}", percent(d.abs(), lang));
+                    let dir = if d > 0.0 { 1 } else { -1 };
+                    (text, dir)
+                }
+                _ => (String::new(), 0),
+            };
+            StatsTierRow {
+                rank: i as i32 + 1,
+                tier: tier_index(e.tier),
+                champion,
+                lane: if lanes {
+                    e.position.desktop_index()
+                } else {
+                    -1
+                },
+                win: percent(e.rates.win_rate, lang).into(),
+                win_delta: win_delta.into(),
+                win_delta_dir,
+                pick: percent(e.rates.pick_rate, lang).into(),
+                ban: percent(e.rates.ban_rate, lang).into(),
+                games: thousands(e.rates.games, lang).into(),
+            }
         })
         .collect();
     bridge.set_tiers(model(rows));
@@ -653,30 +852,96 @@ fn push_tiers(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
 
 fn push_matchups(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
     let lang = ctx.lang;
+    let sel = &inputs.selection;
     let empty = StatsState::Loading;
     let state = inputs.matchups.as_ref().unwrap_or(&empty);
     bridge.set_matchup_block(block(state, |m| (m.origin, m.attribution.clone())));
+
+    let search_key = normalize_champion_key(&sel.matchup_search);
+    let show_all = sel.matchup_show_all || !search_key.is_empty();
+
+    let profile = inputs.profile.as_ref().and_then(|p| p.ready());
+    let local_list = profile
+        .map(|p| aggregate_local_matchups(&p.games, sel.champion_id))
+        .unwrap_or_default();
+    let local_by_opp: std::collections::HashMap<i64, hypatia_shared::LocalMatchup> = local_list
+        .iter()
+        .cloned()
+        .map(|m| (m.opponent_id, m))
+        .collect();
+    bridge.set_local_matchups_origin(profile.map_or(0, |p| origin_index(p.origin)));
+    let local_rows: Vec<StatsLocalMatchupRow> = local_list
+        .into_iter()
+        .filter_map(|m| {
+            let opponent = ctx.champion(m.opponent_id);
+            if !search_key.is_empty()
+                && !normalize_champion_key(&opponent.name).contains(&search_key)
+            {
+                return None;
+            }
+            let win_value = m.wins as f32 / m.games.max(1) as f32;
+            Some(StatsLocalMatchupRow {
+                opponent,
+                record: record_label(m.wins, m.games.saturating_sub(m.wins), lang).into(),
+                win_rate: percent(win_value, lang).into(),
+                kda: format!("{} KDA", decimal(m.kda, lang)).into(),
+                win_value,
+            })
+        })
+        .collect();
+    bridge.set_local_matchups(model(local_rows));
+
     let entries = state
         .ready()
         .map(|m| m.entries.as_slice())
         .unwrap_or_default();
-    let mut row = |m: &hypatia_shared::Matchup| StatsMatchupRow {
-        opponent: ctx.champion(m.opponent_id),
-        win: percent(m.rates.win_rate, lang).into(),
-        win_value: m.rates.win_rate,
-        games: games_label(m.rates.games, lang).into(),
-        gold: m
-            .gold_diff_15
-            .map(|g| gold_label(g, lang))
-            .unwrap_or_default()
-            .into(),
+    let mut hardest_all: Vec<_> = entries.iter().filter(|m| m.rates.win_rate < 0.5).collect();
+    hardest_all.sort_by(|a, b| a.rates.win_rate.total_cmp(&b.rates.win_rate));
+    let mut easiest_all: Vec<_> = entries.iter().filter(|m| m.rates.win_rate >= 0.5).collect();
+    easiest_all.sort_by(|a, b| b.rates.win_rate.total_cmp(&a.rates.win_rate));
+
+    let has_more = hardest_all.len() > MATCHUPS || easiest_all.len() > MATCHUPS;
+    bridge.set_matchup_has_more(has_more);
+
+    let mut row = |m: &hypatia_shared::Matchup| {
+        let opponent = ctx.champion(m.opponent_id);
+        if !search_key.is_empty() && !normalize_champion_key(&opponent.name).contains(&search_key) {
+            return None;
+        }
+        let verdict = match LaneVerdict::from_matchup(m.rates.win_rate, m.gold_diff_15) {
+            LaneVerdict::Good => 0,
+            LaneVerdict::Even => 1,
+            LaneVerdict::Hard => 2,
+        };
+        let local_record = local_by_opp
+            .get(&m.opponent_id)
+            .map(|l| record_label(l.wins, l.games.saturating_sub(l.wins), lang))
+            .unwrap_or_default();
+        Some(StatsMatchupRow {
+            opponent,
+            win: percent(m.rates.win_rate, lang).into(),
+            win_value: m.rates.win_rate,
+            games: games_label(m.rates.games, lang).into(),
+            gold: m
+                .gold_diff_15
+                .map(|g| gold_label(g, lang))
+                .unwrap_or_default()
+                .into(),
+            verdict,
+            local_record: local_record.into(),
+        })
     };
-    let mut hardest: Vec<_> = entries.iter().filter(|m| m.rates.win_rate < 0.5).collect();
-    hardest.sort_by(|a, b| a.rates.win_rate.total_cmp(&b.rates.win_rate));
-    let mut easiest: Vec<_> = entries.iter().filter(|m| m.rates.win_rate >= 0.5).collect();
-    easiest.sort_by(|a, b| b.rates.win_rate.total_cmp(&a.rates.win_rate));
-    let hardest: Vec<_> = hardest.into_iter().take(MATCHUPS).map(&mut row).collect();
-    let easiest: Vec<_> = easiest.into_iter().take(MATCHUPS).map(&mut row).collect();
+    let limit = if show_all { usize::MAX } else { MATCHUPS };
+    let hardest: Vec<_> = hardest_all
+        .into_iter()
+        .filter_map(&mut row)
+        .take(limit)
+        .collect();
+    let easiest: Vec<_> = easiest_all
+        .into_iter()
+        .filter_map(&mut row)
+        .take(limit)
+        .collect();
     bridge.set_hardest(model(hardest));
     bridge.set_easiest(model(easiest));
 }
@@ -1250,11 +1515,12 @@ fn badge_index(badge: Option<MatchBadge>) -> i32 {
 
 fn tier_index(tier: Tier) -> i32 {
     match tier {
-        Tier::S => 0,
-        Tier::A => 1,
-        Tier::B => 2,
-        Tier::C => 3,
-        Tier::D => 4,
+        Tier::SPlus => 0,
+        Tier::S => 1,
+        Tier::A => 2,
+        Tier::B => 3,
+        Tier::C => 4,
+        Tier::D => 5,
     }
 }
 

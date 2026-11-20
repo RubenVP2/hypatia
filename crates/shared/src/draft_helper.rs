@@ -20,19 +20,22 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::champions::{
-    is_champion_placeholder, keystone_name_from_id_localized, rune_style_name_localized,
-    spell_name_from_id_localized, ChampionLookup, Position,
+    builtin_champion_roles, is_champion_placeholder, keystone_name_from_id_localized,
+    rune_style_name_localized, spell_name_from_id_localized, ChampionLookup, Position,
 };
-use crate::comp::{comp_advice, lane_opponents, team_profile};
+use crate::comp::{champion_traits, comp_advice, lane_opponents, team_profile};
 use crate::i18n::Lang;
 use crate::stats::{
     Attribution, ChampionBuild, CompTrait, GameData, GameDataEntry, ItemStage, MatchupList,
-    PlayerProfile, Rates, StatsOrigin, StatsQuery, StatsQueue, StatsState, StatsUnavailable,
+    PlayerProfile, RankBracket, Rates, StatsOrigin, StatsQuery, StatsQueue, StatsState,
+    StatsUnavailable, Tier, TierList,
 };
 use crate::summary::ChampSelectSummary;
 
 /// Core items the helper shows.
 pub const HELPER_ITEMS: usize = 3;
+/// Pre-lock pick suggestions the helper shows.
+pub const HELPER_SUGGESTIONS: usize = 5;
 
 /// Champion Stats as the helper reads them. Every call is non-blocking: `Loading` means the
 /// data lands later and the projection is computed again then.
@@ -44,6 +47,10 @@ pub trait HelperStats {
     fn online_build(&self, query: &StatsQuery) -> StatsState<ChampionBuild>;
     /// Global matchups of `query.champion_id` from the online provider.
     fn matchups(&self, query: &StatsQuery) -> StatsState<MatchupList>;
+    /// Role tier list for pre-lock pick suggestions (origin `Online`, or `Demo`).
+    fn tier_list(&self, _queue: StatsQueue, _bracket: RankBracket) -> StatsState<TierList> {
+        StatsState::Unavailable(StatsUnavailable::NoData)
+    }
     /// The player's own recent games (origin `Local`, or `Demo`).
     fn player_profile(&self) -> StatsState<PlayerProfile>;
     /// Client names for items, runes, rune styles and spells.
@@ -55,6 +62,21 @@ pub trait HelperStats {
 pub struct HelperEntry {
     pub id: i64,
     pub name: String,
+}
+
+/// Pre-lock pick suggestion tailored to the player's role, personal pool, team comp gaps, and
+/// role meta tier.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelperPickSuggestion {
+    pub champion_id: i64,
+    pub champion_name: String,
+    pub tier: Option<Tier>,
+    pub meta_win_rate: Option<f32>,
+    pub personal_games: u32,
+    pub personal_win_rate: Option<f32>,
+    pub counter_win_rate: Option<f32>,
+    pub fills_trait: Option<CompTrait>,
+    pub origin: StatsOrigin,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -145,10 +167,19 @@ pub struct ChampSelectHelper {
     pub position: Option<Position>,
     /// The champion's global win rate, when Online (or Demo) data has it.
     pub win_rate: Option<f32>,
+    /// True in augment-only modes (e.g. ARAM: Mayhem) where runes are not used.
+    #[serde(default)]
+    pub hide_runes: bool,
     pub runes: Option<HelperRunes>,
     pub spells: Option<HelperSpells>,
     pub items: Option<HelperItems>,
     pub lane: Option<HelperLane>,
+    /// Revealed enemy champions available for manual lane opponent override.
+    #[serde(default)]
+    pub enemy_choices: Vec<HelperEntry>,
+    /// Pre-lock pick suggestions (up to [`HELPER_SUGGESTIONS`]).
+    #[serde(default)]
+    pub suggested_picks: Vec<HelperPickSuggestion>,
     pub my_comp: HelperComp,
     pub their_comp: HelperComp,
     /// At most [`crate::comp::MAX_TIPS`], most important first.
@@ -166,6 +197,10 @@ impl ChampSelectHelper {
             || online(self.spells.as_ref().map(|s| s.origin))
             || online(self.items.as_ref().map(|i| i.origin))
             || online(self.lane.as_ref().and_then(|l| l.origin))
+            || self
+                .suggested_picks
+                .iter()
+                .any(|s| s.origin == StatsOrigin::Online)
     }
 }
 
@@ -500,11 +535,28 @@ pub fn project_champ_select_helper(
         .map(|e| e.champion_id)
         .collect();
 
+    let hide_runes = queue_id == 2400 || cs.queue_type.to_ascii_uppercase().contains("MAYHEM");
+    let enemy_choices: Vec<HelperEntry> = cs
+        .their_team
+        .iter()
+        .filter(|e| e.champion_id > 0 && !is_champion_placeholder(&e.champion_name))
+        .map(|e| HelperEntry {
+            id: e.champion_id,
+            name: if e.champion_name.trim().is_empty() {
+                champions.resolve_champion_name_localized(e.champion_id, lang)
+            } else {
+                e.champion_name.clone()
+            },
+        })
+        .collect();
+
     let mut helper = ChampSelectHelper {
         champion_id,
         champion_name,
         locked,
         position,
+        hide_runes,
+        enemy_choices,
         my_comp: comp(&ally_ids, lang),
         their_comp: comp(&enemy_ids, lang),
         tips: comp_advice(&ally_ids, &enemy_ids, lang),
@@ -537,6 +589,13 @@ pub fn project_champ_select_helper(
     let Some(stats) = stats else {
         return helper;
     };
+
+    // Pre-lock pick suggestions combining player's pool, role meta tier, and team comp gaps.
+    if !locked {
+        helper.suggested_picks =
+            build_pick_suggestions(cs, queue, position, &helper.my_comp, champions, stats, lang);
+    }
+
     if champion_id <= 0 {
         helper.online = if stats.online_enabled() {
             HelperOnline::Ready
@@ -579,19 +638,24 @@ pub fn project_champ_select_helper(
     };
     helper.win_rate = online_build.and_then(|b| rate(&b.rates));
 
-    helper.runes = recommended
-        .and_then(|b| runes_from(b, &names))
-        .or_else(|| online_build.and_then(|b| runes_from(b, &names)));
+    if !hide_runes {
+        helper.runes = recommended
+            .and_then(|b| runes_from(b, &names))
+            .or_else(|| online_build.and_then(|b| runes_from(b, &names)));
+    }
     helper.spells = recommended
         .and_then(|b| spells_from(b, &names))
         .or_else(|| online_build.and_then(|b| spells_from(b, &names)));
     helper.items = online_build.and_then(|b| items_from(b, &names));
 
-    if helper.runes.is_none() || helper.spells.is_none() || helper.items.is_none() {
+    if (!hide_runes && helper.runes.is_none()) || helper.spells.is_none() || helper.items.is_none()
+    {
         let profile = stats.player_profile();
         if let Some(profile) = profile.ready() {
             let (runes, spells, items) = local_build(profile, champion_id, &names);
-            helper.runes = helper.runes.take().or(runes);
+            if !hide_runes {
+                helper.runes = helper.runes.take().or(runes);
+            }
             helper.spells = helper.spells.take().or(spells);
             helper.items = helper.items.take().or(items);
         }
@@ -627,6 +691,168 @@ pub fn project_champ_select_helper(
         };
     }
     helper
+}
+
+/// Computes up to [`HELPER_SUGGESTIONS`] pre-lock pick suggestions combining the player's own
+/// champion pool (`Local`), role meta tier (`Online` / `Demo`), and team comp gap fills.
+fn build_pick_suggestions(
+    cs: &ChampSelectSummary,
+    queue: StatsQueue,
+    position: Option<Position>,
+    my_comp: &HelperComp,
+    champions: &dyn ChampionLookup,
+    stats: &dyn HelperStats,
+    lang: Lang,
+) -> Vec<HelperPickSuggestion> {
+    use std::collections::{HashMap, HashSet};
+
+    // Exclude already picked (other than self) and banned champions.
+    let mut unavailable: HashSet<i64> = HashSet::new();
+    for a in &cs.my_team {
+        if !a.is_self && a.champion_id > 0 {
+            unavailable.insert(a.champion_id);
+        }
+    }
+    for e in &cs.their_team {
+        if e.champion_id > 0 {
+            unavailable.insert(e.champion_id);
+        }
+    }
+    for &id in cs
+        .my_team_ban_ids
+        .iter()
+        .chain(cs.their_team_ban_ids.iter())
+    {
+        if id > 0 {
+            unavailable.insert(id);
+        }
+    }
+
+    let lacks_frontline = my_comp
+        .traits
+        .iter()
+        .any(|t| t.kind == CompTrait::LacksFrontline);
+    let lacks_engage = my_comp
+        .traits
+        .iter()
+        .any(|t| t.kind == CompTrait::LacksEngage);
+    let fills_gap = |champ_id: i64| -> Option<CompTrait> {
+        let ct = champion_traits(champ_id)?;
+        if lacks_frontline && ct.has(CompTrait::Frontline) {
+            return Some(CompTrait::Frontline);
+        }
+        if lacks_engage && ct.has(CompTrait::Engage) {
+            return Some(CompTrait::Engage);
+        }
+        None
+    };
+
+    let plays_role = |champ_id: i64| -> bool {
+        let Some(pos) = position.filter(|_| queue.on_summoners_rift()) else {
+            return true;
+        };
+        builtin_champion_roles(champ_id)
+            .iter()
+            .filter_map(|r| Position::parse(r))
+            .any(|p| p == pos)
+    };
+
+    let mut by_id: HashMap<i64, HelperPickSuggestion> = HashMap::new();
+
+    if let StatsState::Ready(profile) = stats.player_profile() {
+        for c in &profile.champions {
+            if c.champion_id <= 0
+                || unavailable.contains(&c.champion_id)
+                || !plays_role(c.champion_id)
+            {
+                continue;
+            }
+            let wr = (c.games > 0).then(|| c.wins as f32 / c.games as f32);
+            by_id.insert(
+                c.champion_id,
+                HelperPickSuggestion {
+                    champion_id: c.champion_id,
+                    champion_name: champions.resolve_champion_name_localized(c.champion_id, lang),
+                    tier: None,
+                    meta_win_rate: None,
+                    personal_games: c.games,
+                    personal_win_rate: wr,
+                    counter_win_rate: None,
+                    fills_trait: fills_gap(c.champion_id),
+                    origin: profile.origin,
+                },
+            );
+        }
+    }
+
+    if let StatsState::Ready(tiers) = stats.tier_list(queue, RankBracket::default()) {
+        for e in &tiers.entries {
+            if e.champion_id <= 0 || unavailable.contains(&e.champion_id) {
+                continue;
+            }
+            if queue.on_summoners_rift() {
+                if let Some(pos) = position {
+                    if e.position != pos {
+                        continue;
+                    }
+                }
+            }
+            let meta_wr = (e.rates.win_rate > 0.0).then_some(e.rates.win_rate);
+            if let Some(existing) = by_id.get_mut(&e.champion_id) {
+                existing.tier = Some(e.tier);
+                existing.meta_win_rate = meta_wr;
+            } else if matches!(e.tier, Tier::SPlus | Tier::S | Tier::A) {
+                by_id.insert(
+                    e.champion_id,
+                    HelperPickSuggestion {
+                        champion_id: e.champion_id,
+                        champion_name: champions
+                            .resolve_champion_name_localized(e.champion_id, lang),
+                        tier: Some(e.tier),
+                        meta_win_rate: meta_wr,
+                        personal_games: 0,
+                        personal_win_rate: None,
+                        counter_win_rate: None,
+                        fills_trait: fills_gap(e.champion_id),
+                        origin: tiers.origin,
+                    },
+                );
+            }
+        }
+    }
+
+    let score = |s: &HelperPickSuggestion| -> f32 {
+        let mut pts = 0.0;
+        if s.personal_games > 0 {
+            pts += 40.0 + (s.personal_games.min(20) as f32);
+            if let Some(wr) = s.personal_win_rate {
+                pts += (wr - 0.5) * 30.0;
+            }
+        }
+        pts += match s.tier {
+            Some(Tier::SPlus) => 30.0,
+            Some(Tier::S) => 24.0,
+            Some(Tier::A) => 16.0,
+            Some(Tier::B) => 8.0,
+            _ => 0.0,
+        };
+        if let Some(wr) = s.meta_win_rate {
+            pts += (wr - 0.5) * 40.0;
+        }
+        if s.fills_trait.is_some() {
+            pts += 15.0;
+        }
+        pts
+    };
+
+    let mut out: Vec<HelperPickSuggestion> = by_id.into_values().collect();
+    out.sort_by(|a, b| {
+        score(b)
+            .total_cmp(&score(a))
+            .then_with(|| a.champion_id.cmp(&b.champion_id))
+    });
+    out.truncate(HELPER_SUGGESTIONS);
+    out
 }
 
 #[cfg(test)]
@@ -1207,5 +1433,68 @@ mod tests {
         assert_eq!(helper_queue(1700, ""), StatsQueue::Arena);
         assert_eq!(helper_queue(440, ""), StatsQueue::RankedSolo);
         assert_eq!(helper_queue(0, ""), StatsQueue::RankedSolo);
+    }
+
+    #[test]
+    fn aram_mayhem_hides_runes_and_exposes_enemy_choices() {
+        let cs = draft(true);
+        let stats = FakeStats {
+            online: true,
+            recommended: StatsState::Ready(client_build()),
+            build: StatsState::Ready(online_build()),
+            ..FakeStats::default()
+        };
+        let snap = project_in(2400, &cs, Some(&stats), Lang::En);
+        let h = helper(&snap);
+        assert!(h.hide_runes);
+        assert!(h.runes.is_none());
+        assert!(h.spells.is_some());
+        assert_eq!(h.enemy_choices.len(), 3);
+        assert_eq!(h.enemy_choices[0].id, 122);
+    }
+
+    #[test]
+    fn pre_lock_suggests_picks_from_pool_and_excludes_picked_or_banned() {
+        let mut cs = draft(true);
+        // Self has not locked yet (action in progress, championId = 0).
+        cs["myTeam"][2]["championId"] = json!(0);
+        cs["bans"] = json!({"myTeamBans": [], "theirTeamBans": [157]});
+        cs["actions"] = json!([[
+            {"id": 1, "actorCellId": 2, "type": "pick", "championId": 0, "completed": false, "isInProgress": true}
+        ]]);
+        let profile = PlayerProfile {
+            origin: StatsOrigin::Local,
+            champions: vec![
+                PlayerChampionStats {
+                    champion_id: 157, // banned -> must be excluded
+                    games: 12,
+                    wins: 8,
+                    ..PlayerChampionStats::default()
+                },
+                PlayerChampionStats {
+                    champion_id: 103, // Ahri -> eligible mid comfort pick
+                    games: 10,
+                    wins: 7,
+                    ..PlayerChampionStats::default()
+                },
+                PlayerChampionStats {
+                    champion_id: 61, // Orianna -> eligible mid comfort pick
+                    games: 8,
+                    wins: 5,
+                    ..PlayerChampionStats::default()
+                },
+            ],
+            ..PlayerProfile::default()
+        };
+        let stats = FakeStats {
+            profile: StatsState::Ready(profile),
+            ..FakeStats::default()
+        };
+        let snap = project(&cs, Some(&stats), Lang::En);
+        let h = helper(&snap);
+        assert!(!h.locked);
+        assert!(!h.suggested_picks.is_empty());
+        assert!(h.suggested_picks.iter().all(|p| p.champion_id != 157));
+        assert!(h.suggested_picks.iter().any(|p| p.champion_id == 103));
     }
 }

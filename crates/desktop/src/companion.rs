@@ -8,10 +8,10 @@ use std::time::Instant;
 use hypatia_core::art::{self, ClientArt as ArtPiece};
 use hypatia_core::AppState;
 use hypatia_shared::{
-    spell_name_from_id_localized, stats_origin_label, ChampSelectHelper, ChampSelectSummary,
-    EndOfGamePlayer, EndOfGameSummary, HelperComp, HelperEntry, HelperOnline, Lane, Lang,
-    LiveBoard, LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId, SourceStatus,
-    StatsOrigin, SummarySnapshot, SummonerSummary,
+    comp_trait_label, spell_name_from_id_localized, stats_origin_label, ChampSelectHelper,
+    ChampSelectSummary, EndOfGamePlayer, EndOfGameSummary, HelperComp, HelperEntry, HelperOnline,
+    Lane, Lang, LiveBoard, LiveGameSummary, MapPlace, ObjectiveKind, Pit, Position, SourceId,
+    SourceStatus, StatsOrigin, SummarySnapshot, SummonerSummary,
 };
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
@@ -21,8 +21,8 @@ use crate::labels::{
 };
 use crate::{
     AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine,
-    HelperChip, HelperIcon, HelperTeam, HelperView, LiveView, MainWindow, MapAlly, ObjectiveChip,
-    PartyRow, PitClock, PlayerLine, Screen, StatLine, TowerDot, WaitView,
+    HelperChip, HelperIcon, HelperSuggestion, HelperTeam, HelperView, LiveView, MainWindow,
+    MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine, TowerDot, WaitView,
 };
 
 fn objective_kind_index(kind: ObjectiveKind) -> i32 {
@@ -722,6 +722,48 @@ pub fn build_helper_view(
                 .map(|t| SharedString::from(t.as_str()))
                 .collect::<Vec<_>>(),
         )),
+        suggestions: ModelRc::new(VecModel::from(
+            h.suggested_picks
+                .iter()
+                .map(|s| {
+                    let mut parts = Vec::new();
+                    if s.personal_games > 0 {
+                        if let Some(wr) = s.personal_win_rate {
+                            parts.push(format!(
+                                "{}g {}",
+                                s.personal_games,
+                                format_percent(wr, lang)
+                            ));
+                        } else {
+                            parts.push(format!("{}g", s.personal_games));
+                        }
+                    } else if let Some(wr) = s.meta_win_rate {
+                        parts.push(format_percent(wr, lang));
+                    }
+                    if let Some(tr) = s.fills_trait {
+                        parts.push(comp_trait_label(tr, lang).to_string());
+                    }
+                    HelperSuggestion {
+                        champion: helper_icon(
+                            icons,
+                            "champion",
+                            &HelperEntry {
+                                id: s.champion_id,
+                                name: s.champion_name.clone(),
+                            },
+                        ),
+                        tier: SharedString::from(s.tier.map(|t| t.label()).unwrap_or("")),
+                        detail: SharedString::from(parts.join(" · ")),
+                    }
+                })
+                .collect::<Vec<_>>(),
+        )),
+        enemy_choices: ModelRc::new(VecModel::from(
+            h.enemy_choices
+                .iter()
+                .map(|e| helper_icon(icons, "champion", e))
+                .collect::<Vec<_>>(),
+        )),
         ..HelperView::default()
     };
     if let Some(r) = &h.runes {
@@ -877,6 +919,22 @@ pub fn build_live_view(
             }
         }
         let skin = if cid > 0 { cid * 1000 + p.skin_id } else { 0 };
+        let mut sub_parts = Vec::new();
+        if p.cs_per_min > 0.0 {
+            sub_parts.push(format!(
+                "{} CS/m",
+                format_decimal(f64::from(p.cs_per_min), lang)
+            ));
+        }
+        if let Some(diff) = p.cs_diff_vs_lane {
+            if diff > 0 {
+                sub_parts.push(format!("+{diff}"));
+            } else if diff < 0 {
+                sub_parts.push(format!("−{}", diff.abs()));
+            } else {
+                sub_parts.push("±0".to_string());
+            }
+        }
         let row = PlayerLine {
             lane,
             champion: SharedString::from(p.champion_name.as_str()),
@@ -886,6 +944,11 @@ pub fn build_live_view(
             level: p.level as i32,
             kda: SharedString::from(kda_str),
             cs: p.creep_score as i32,
+            sub_detail: SharedString::from(sub_parts.join(" · ")),
+            badge: SharedString::default(),
+            score: SharedString::default(),
+            bar_ratio: 0.0,
+            bar_label: SharedString::default(),
             is_self: p.is_self,
             dead: p.is_dead,
             respawn: SharedString::from(format!("{}s", p.respawn_timer_sec.ceil() as i32)),
@@ -913,6 +976,26 @@ pub fn build_live_view(
 
     let mut my_objectives = Vec::new();
     let mut enemy_objectives = Vec::new();
+    for buff in &b.active_buffs {
+        let mine = buff.by_order == b.my_team_is_order;
+        let name = match buff.kind {
+            ObjectiveKind::Baron => "Baron",
+            ObjectiveKind::Elder => lang.pick("Elder", "Ancestral"),
+            _ => continue,
+        };
+        let rem = format_mm_ss(buff.remaining_sec);
+        let chip = ObjectiveChip {
+            kind: objective_kind_index(buff.kind),
+            weight: buff.kind.weight() as i32 + 1,
+            label: SharedString::from(format!("{name} {rem} · {}/5", buff.holders_alive)),
+            mine,
+        };
+        if mine {
+            my_objectives.push(chip);
+        } else {
+            enemy_objectives.push(chip);
+        }
+    }
     for obj in &b.objectives {
         let mine = obj.by_order == b.my_team_is_order;
         let chip = ObjectiveChip {
@@ -961,6 +1044,28 @@ pub fn build_live_view(
             format!("{} · {}", lg.active_champion, self_kda),
         )
     } else {
+        let mut extra = String::new();
+        if lg.self_cs_per_min > 0.0 {
+            extra.push_str(&format!(
+                " ({} CS/m",
+                format_decimal(f64::from(lg.self_cs_per_min), lang)
+            ));
+            if let Some(diff) = lg.lane_cs_diff {
+                if diff > 0 {
+                    extra.push_str(&format!(" · +{diff} CS"));
+                } else if diff < 0 {
+                    extra.push_str(&format!(" · −{} CS", diff.abs()));
+                }
+            }
+            if let Some(avg) = lg.personal_avg_cs_per_min.filter(|&a| a > 0.0) {
+                extra.push_str(&format!(
+                    " · {} {}",
+                    lang.pick("avg", "moy."),
+                    format_decimal(f64::from(avg), lang)
+                ));
+            }
+            extra.push(')');
+        }
         (
             if lang.is_fr() {
                 format!("Vous jouez {} · Niveau {}", lg.active_champion, lg.level)
@@ -969,12 +1074,12 @@ pub fn build_live_view(
             },
             if lang.is_fr() {
                 format!(
-                    "Vous {} · {} CS · {} or",
+                    "Vous {} · {} CS{extra} · {} or",
                     self_kda, lg.creep_score, lg.current_gold
                 )
             } else {
                 format!(
-                    "You {} · {} CS · {} gold",
+                    "You {} · {} CS{extra} · {} gold",
                     self_kda, lg.creep_score, lg.current_gold
                 )
             },
@@ -1077,11 +1182,62 @@ pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang:
         tiles.push(tile("VISION", eog.vision_score.to_string()));
     }
 
+    let max_dmg = eog
+        .teams
+        .iter()
+        .flat_map(|t| t.players.iter())
+        .map(|p| p.damage_to_champions)
+        .max()
+        .unwrap_or(1)
+        .max(1);
+
     let mut rows = |players: &[EndOfGamePlayer]| -> Vec<PlayerLine> {
         let mut lines: Vec<PlayerLine> = players
             .iter()
             .map(|p| {
                 let pcid = p.champion_id;
+                let mut sub = Vec::new();
+                if p.kill_participation > 0.0 {
+                    sub.push(format!(
+                        "{}% KP",
+                        (p.kill_participation * 100.0).round() as u32
+                    ));
+                }
+                if p.gold_earned > 0 {
+                    sub.push(format!(
+                        "{} {}",
+                        format_thousands(p.gold_earned, lang),
+                        lang.pick("g", "or")
+                    ));
+                }
+                if p.damage_to_champions > 0 {
+                    sub.push(format!(
+                        "{} {}",
+                        format_thousands(p.damage_to_champions, lang),
+                        lang.pick("dmg", "dég.")
+                    ));
+                }
+                let badge = if p.is_mvp {
+                    "MVP"
+                } else if p.is_ace {
+                    "ACE"
+                } else {
+                    ""
+                };
+                let score = if p.performance_score > 0 {
+                    format!("{} · #{}", p.performance_score, p.placement)
+                } else {
+                    String::new()
+                };
+                let bar_ratio = p.damage_to_champions as f32 / max_dmg as f32;
+                let bar_label = format!(
+                    "{} {} ({}%) · {} {}",
+                    format_thousands(p.damage_to_champions, lang),
+                    lang.pick("dmg", "dég."),
+                    (p.damage_share * 100.0).round() as u32,
+                    format_thousands(p.gold_earned, lang),
+                    lang.pick("gold", "or")
+                );
                 PlayerLine {
                     lane: Position::parse(&p.position).map_or(-1, Position::desktop_index),
                     champion: SharedString::from(p.champion_name.as_str()),
@@ -1091,6 +1247,11 @@ pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang:
                     level: p.level as i32,
                     kda: SharedString::from(format!("{} / {} / {}", p.kills, p.deaths, p.assists)),
                     cs: p.creep_score as i32,
+                    sub_detail: SharedString::from(sub.join(" · ")),
+                    badge: SharedString::from(badge),
+                    score: SharedString::from(score),
+                    bar_ratio,
+                    bar_label: SharedString::from(bar_label),
                     is_self: p.is_self,
                     dead: false,
                     respawn: SharedString::default(),
@@ -1101,18 +1262,24 @@ pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang:
         lines.sort_by_key(|l| if l.lane < 0 { i32::MAX } else { l.lane });
         lines
     };
-    let allies = eog
-        .teams
-        .iter()
-        .find(|t| t.is_player_team)
-        .map(|t| rows(&t.players))
-        .unwrap_or_default();
-    let enemies = eog
-        .teams
-        .iter()
-        .find(|t| !t.is_player_team)
-        .map(|t| rows(&t.players))
-        .unwrap_or_default();
+    let team_totals = |t: &hypatia_shared::EndOfGameTeam| -> SharedString {
+        if t.total_kills == 0 && t.total_gold == 0 {
+            return SharedString::default();
+        }
+        SharedString::from(format!(
+            "{} {} · {} {} · {} {}",
+            t.total_kills,
+            lang.pick("kills", "élim."),
+            format_thousands(t.total_gold, lang),
+            lang.pick("g", "or"),
+            format_thousands(t.total_damage, lang),
+            lang.pick("dmg", "dég.")
+        ))
+    };
+    let ally_team = eog.teams.iter().find(|t| t.is_player_team);
+    let enemy_team = eog.teams.iter().find(|t| !t.is_player_team);
+    let allies = ally_team.map(|t| rows(&t.players)).unwrap_or_default();
+    let enemies = enemy_team.map(|t| rows(&t.players)).unwrap_or_default();
 
     EndView {
         title: SharedString::from(if victory {
@@ -1131,6 +1298,8 @@ pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang:
         victory,
         splash_icon: icons.resolve_skin_art("splash", eog.skin_id, cid),
         tiles: ModelRc::new(VecModel::from(tiles)),
+        ally_totals: ally_team.map(team_totals).unwrap_or_default(),
+        enemy_totals: enemy_team.map(team_totals).unwrap_or_default(),
         allies: ModelRc::new(VecModel::from(allies)),
         enemies: ModelRc::new(VecModel::from(enemies)),
     }
@@ -1860,6 +2029,8 @@ mod tests {
             deaths: 0,
             assists: 0,
             creep_score: 0,
+            cs_per_min: 0.0,
+            cs_diff_vs_lane: None,
             is_self: team == "ORDER",
             is_dead: false,
             respawn_timer_sec: 0.0,
@@ -1877,6 +2048,9 @@ mod tests {
             deaths: 0,
             assists: 0,
             creep_score: 0,
+            self_cs_per_min: 0.0,
+            lane_cs_diff: None,
+            personal_avg_cs_per_min: None,
             recent_events: vec![],
             players: vec![
                 player("Ahri", "ORDER"),

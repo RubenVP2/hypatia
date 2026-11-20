@@ -106,13 +106,29 @@ pub struct SpellPair {
     pub second: i64,
 }
 
-/// A build path stage: starting items, core items, boots, situational options.
+/// A build path stage: starting items, core items, boots, situational options, or slot-by-slot
+/// purchase choices (`Slot1`..`Slot5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ItemStage {
     Starting,
     Core,
     Boots,
     Situational,
+    Slot1,
+    Slot2,
+    Slot3,
+    Slot4,
+    Slot5,
+}
+
+impl ItemStage {
+    /// Whether this stage represents an individual purchase slot (`Item 1`..`Item 5`).
+    pub fn is_slot(self) -> bool {
+        matches!(
+            self,
+            Self::Slot1 | Self::Slot2 | Self::Slot3 | Self::Slot4 | Self::Slot5
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -150,6 +166,12 @@ pub struct ChampionBuild {
     pub spells: Vec<(SpellPair, Rates)>,
     pub items: Vec<ItemBlock>,
     pub skills: Vec<SkillOrder>,
+    /// Role pickrate share across Summoner's Rift positions (e.g. `[(Mid, 0.86), (Support, 0.14)]`).
+    #[serde(default)]
+    pub role_distribution: Vec<(Position, f32)>,
+    /// Tier standing and rank within the role (e.g. `(Tier::S, 4, 41)`).
+    #[serde(default)]
+    pub tier_rank: Option<(Tier, u32, u32)>,
     /// Link the provider requires next to its data (Online only).
     #[serde(default)]
     pub attribution: Option<Attribution>,
@@ -158,11 +180,26 @@ pub struct ChampionBuild {
 /// A champion's standing in one role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Tier {
+    SPlus,
     S,
     A,
     B,
     C,
     D,
+}
+
+impl Tier {
+    /// Short display badge (`S+`, `S`, `A`, `B`, `C`, `D`).
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::SPlus => "S+",
+            Self::S => "S",
+            Self::A => "A",
+            Self::B => "B",
+            Self::C => "C",
+            Self::D => "D",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -171,6 +208,12 @@ pub struct TierEntry {
     pub position: Position,
     pub tier: Tier,
     pub rates: Rates,
+    /// Patch-over-patch win rate delta as a signed fraction (e.g. `+0.018` for `+1.8%`), when known.
+    #[serde(default)]
+    pub win_rate_delta: Option<f32>,
+    /// Share of this champion's games played in this role (`0.0..=1.0`), when known.
+    #[serde(default)]
+    pub lane_presence: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -183,6 +226,83 @@ pub struct TierList {
     /// Link the provider requires next to its data (Online only).
     #[serde(default)]
     pub attribution: Option<Attribution>,
+}
+
+/// Immediate lane-phase verdict derived from `gold_diff_15` or matchup win rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LaneVerdict {
+    Good,
+    Even,
+    Hard,
+}
+
+impl LaneVerdict {
+    pub fn from_matchup(win_rate: f32, gold_diff_15: Option<f32>) -> Self {
+        if let Some(gd) = gold_diff_15 {
+            if gd >= 200.0 {
+                return Self::Good;
+            }
+            if gd <= -200.0 {
+                return Self::Hard;
+            }
+        }
+        if win_rate >= 0.52 {
+            Self::Good
+        } else if win_rate <= 0.48 {
+            Self::Hard
+        } else {
+            Self::Even
+        }
+    }
+}
+
+/// Personal matchup record for the selected champion against a specific lane opponent,
+/// aggregated from the player's own local match history (`StatsOrigin::Local`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LocalMatchup {
+    pub opponent_id: i64,
+    pub games: u32,
+    pub wins: u32,
+    pub kda: f32,
+}
+
+/// Aggregates personal matchup records for `champion_id` from non-remake games with a known
+/// lane opponent, ordered by games played descending, then wins descending.
+pub fn aggregate_local_matchups(games: &[PlayerGame], champion_id: i64) -> Vec<LocalMatchup> {
+    let mut by_opp: std::collections::HashMap<i64, (u32, u32, u32, u32, u32)> =
+        std::collections::HashMap::new();
+    for g in games {
+        if g.is_remake() || g.champion_id != champion_id {
+            continue;
+        }
+        let Some(opp) = g.opponent_champion_id.filter(|&id| id > 0) else {
+            continue;
+        };
+        let entry = by_opp.entry(opp).or_default();
+        entry.0 += 1;
+        if g.win {
+            entry.1 += 1;
+        }
+        entry.2 += g.kills;
+        entry.3 += g.deaths;
+        entry.4 += g.assists;
+    }
+    let mut out: Vec<LocalMatchup> = by_opp
+        .into_iter()
+        .map(|(opponent_id, (games, wins, k, d, a))| LocalMatchup {
+            opponent_id,
+            games,
+            wins,
+            kda: (k + a) as f32 / d.max(1) as f32,
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.games
+            .cmp(&a.games)
+            .then_with(|| b.wins.cmp(&a.wins))
+            .then_with(|| a.opponent_id.cmp(&b.opponent_id))
+    });
+    out
 }
 
 /// How `champion_id` fares against `opponent_id` in the same role (lane matchup) or overall.
@@ -244,6 +364,17 @@ pub enum CompTrait {
     AllMagic,
 }
 
+/// Recognition badge for standout performance in a single match (computed locally).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MatchBadge {
+    /// Best performance score on the winning team.
+    Mvp,
+    /// Best performance score on the losing team.
+    Ace,
+    /// Multi-kill achievement (`3` = Triple, `4` = Quadra, `5` = Penta).
+    Multikill(u8),
+}
+
 /// Per-champion summary of the player's own games (My Stats).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlayerChampionStats {
@@ -258,9 +389,34 @@ pub struct PlayerChampionStats {
     pub cs_per_min: f32,
     pub gold_per_min: f32,
     pub vision_per_min: f32,
-    /// The player's most played rune page and final items on this champion.
+    /// The player's most played rune page, summoner spells, and final items on this champion.
     pub runes: Option<RuneSetup>,
+    #[serde(default)]
+    pub spells: Option<SpellPair>,
     pub items: Vec<i64>,
+}
+
+/// Per-role summary of the player's Summoner's Rift games (My Stats).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoleSummary {
+    pub position: Position,
+    pub games: u32,
+    pub wins: u32,
+    pub kda: f32,
+    pub cs_per_min: f32,
+    pub dpm: f32,
+}
+
+/// One day/session bucket of recent games in My Stats.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionGroup {
+    /// UTC calendar day (`started_at_ms.div_euclid(86_400_000)`).
+    pub day_key: i64,
+    pub wins: u32,
+    pub losses: u32,
+    pub avg_score: Option<f32>,
+    /// Indices into the input game slice belonging to this session.
+    pub game_indices: Vec<usize>,
 }
 
 /// One past game of the player, from local match history.
@@ -284,6 +440,27 @@ pub struct PlayerGame {
     pub items: Vec<i64>,
     pub runes: Option<RuneSetup>,
     pub spells: SpellPair,
+    /// Direct enemy lane opponent's champion ID on Summoner's Rift, when full match data is known.
+    #[serde(default)]
+    pub opponent_champion_id: Option<i64>,
+    /// Kill participation as a fraction in `0.0..=1.0` (`(kills + assists) / team_kills`).
+    #[serde(default)]
+    pub kill_participation: Option<f32>,
+    /// Share of team champion damage in `0.0..=1.0`.
+    #[serde(default)]
+    pub damage_share: Option<f32>,
+    /// Share of team gold in `0.0..=1.0`.
+    #[serde(default)]
+    pub gold_share: Option<f32>,
+    /// Deterministic local `0..=100` performance rating.
+    #[serde(default)]
+    pub performance_score: Option<u8>,
+    /// `1..=10` rank among all participants when full match data is available.
+    #[serde(default)]
+    pub placement: Option<u8>,
+    /// Standout match badge (`MVP`, `ACE`, or multi-kill).
+    #[serde(default)]
+    pub badge: Option<MatchBadge>,
 }
 
 /// Games shorter than this are remakes: listed, but left out of every average.
@@ -294,13 +471,18 @@ impl PlayerGame {
     pub fn on_summoners_rift(&self) -> bool {
         self.queue.is_some_and(StatsQueue::on_summoners_rift)
     }
+
+    /// Whether the match ended early as a remake (`duration_secs < REMAKE_SECS`).
+    pub fn is_remake(&self) -> bool {
+        self.duration_secs < REMAKE_SECS
+    }
 }
 
 /// The games My Stats totals and per-champion summaries are built from: Summoner's Rift games
 /// when there are any, so ARAM and event modes (with very different damage and farm) do not
 /// skew the rates; otherwise every game. Remakes never count. Order is kept.
 pub fn summarised_games(games: &[PlayerGame]) -> Vec<&PlayerGame> {
-    let played = || games.iter().filter(|g| g.duration_secs >= REMAKE_SECS);
+    let played = || games.iter().filter(|g| !g.is_remake());
     if played().any(PlayerGame::on_summoners_rift) {
         played().filter(|g| g.on_summoners_rift()).collect()
     } else {
@@ -352,12 +534,69 @@ mod summary_tests {
     }
 }
 
-/// The My Stats profile: recent games and the per-champion summary derived from them.
+/// The My Stats profile: recent games and the per-champion & per-role summaries derived from them.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlayerProfile {
     pub origin: StatsOrigin,
     pub games: Vec<PlayerGame>,
     pub champions: Vec<PlayerChampionStats>,
+    #[serde(default)]
+    pub roles: Vec<RoleSummary>,
+}
+
+/// Spatial slot layout of one rune tree (row 0 = keystones, rows 1..=3 = regular perk rows).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RuneStyleSlots {
+    pub style_id: i64,
+    pub rows: Vec<Vec<i64>>,
+}
+
+/// Standard 3x3 stat shard grid (Offense, Flex, Defense).
+pub const STAT_SHARD_ROWS: [[i64; 3]; 3] =
+    [[5008, 5005, 5007], [5008, 5010, 5001], [5011, 5013, 5001]];
+
+/// Built-in spatial slot layout for the five rune trees, used as fallback when the client's
+/// `perkstyles.json` has not been loaded (offline or `--demo`).
+pub fn builtin_rune_style_slots(style_id: i64) -> Option<Vec<Vec<i64>>> {
+    let rows: &[&[i64]] = match style_id {
+        // Precision
+        8000 => &[
+            &[8005, 8008, 8021, 8010],
+            &[9101, 9111, 8009],
+            &[9104, 9105, 9103],
+            &[8014, 8017, 8299],
+        ],
+        // Domination
+        8100 => &[
+            &[8112, 8128, 9923],
+            &[8126, 8139, 8143],
+            &[8137, 8140, 8141],
+            &[8135, 8105, 8106],
+        ],
+        // Sorcery
+        8200 => &[
+            &[8214, 8229, 8230],
+            &[8224, 8226, 8275],
+            &[8210, 8234, 8233],
+            &[8237, 8232, 8236],
+        ],
+        // Inspiration
+        8300 => &[
+            &[8351, 8360, 8369],
+            &[8306, 8304, 8321],
+            &[8313, 8352, 8345],
+            &[8347, 8410, 8316],
+        ],
+        // Resolve
+        8400 => &[
+            &[8437, 8439, 8465],
+            &[8446, 8463, 8401],
+            &[8429, 8444, 8473],
+            &[8451, 8453, 8242],
+        ],
+        _ => return None,
+    };
+    Some(rows.iter().map(|r| r.to_vec()).collect())
 }
 
 /// Static game data the stats views need to draw names and icons, from the local client
@@ -380,6 +619,21 @@ pub struct GameData {
     /// Item ids the client files under `Boots`, every tier.
     #[serde(default)]
     pub boots: Vec<i64>,
+    /// Spatial row/slot layout of each rune style, parsed from `perkstyles.json`.
+    #[serde(default)]
+    pub perk_style_slots: Vec<RuneStyleSlots>,
+}
+
+impl GameData {
+    /// Returns the spatial rows (keystone + 3 perk rows) for `style_id`, falling back to the
+    /// built-in layout when the client's `perkstyles.json` is unavailable.
+    pub fn style_rows(&self, style_id: i64) -> Option<Vec<Vec<i64>>> {
+        self.perk_style_slots
+            .iter()
+            .find(|s| s.style_id == style_id && !s.rows.is_empty())
+            .map(|s| s.rows.clone())
+            .or_else(|| builtin_rune_style_slots(style_id))
+    }
 }
 
 /// Why a stats lookup produced nothing.
@@ -539,5 +793,55 @@ mod tests {
         assert_eq!(names.name("spell", 4, Lang::Fr), "Saut éclair");
         assert_eq!(names.name("item", 3089, Lang::Fr), "Coiffe de Rabadon");
         assert_eq!(names.name("item", 999_999, Lang::En), "Item 999999");
+    }
+
+    #[test]
+    fn tier_s_plus_orders_first_and_labels() {
+        assert!(Tier::SPlus < Tier::S);
+        assert!(Tier::S < Tier::A);
+        assert_eq!(Tier::SPlus.label(), "S+");
+        assert_eq!(Tier::D.label(), "D");
+    }
+
+    #[test]
+    fn lane_verdict_prefers_gold_diff_then_win_rate() {
+        assert_eq!(
+            LaneVerdict::from_matchup(0.49, Some(320.0)),
+            LaneVerdict::Good
+        );
+        assert_eq!(
+            LaneVerdict::from_matchup(0.51, Some(-250.0)),
+            LaneVerdict::Hard
+        );
+        assert_eq!(LaneVerdict::from_matchup(0.53, None), LaneVerdict::Good);
+        assert_eq!(LaneVerdict::from_matchup(0.50, None), LaneVerdict::Even);
+        assert_eq!(LaneVerdict::from_matchup(0.46, None), LaneVerdict::Hard);
+    }
+
+    #[test]
+    fn local_matchups_aggregate_non_remakes_by_opponent() {
+        let mut g1 = PlayerGame {
+            champion_id: 103,
+            opponent_champion_id: Some(238),
+            win: true,
+            duration_secs: 1800,
+            kills: 8,
+            deaths: 2,
+            assists: 6,
+            ..PlayerGame::default()
+        };
+        let mut g2 = g1.clone();
+        g2.win = false;
+        g2.kills = 2;
+        g2.deaths = 4;
+        g2.assists = 4;
+        let mut remake = g1.clone();
+        remake.duration_secs = 200;
+        g1.game_id = 1;
+        let out = aggregate_local_matchups(&[g1, g2, remake], 103);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].opponent_id, 238);
+        assert_eq!((out[0].games, out[0].wins), (2, 1));
+        assert!((out[0].kda - (20.0 / 6.0)).abs() < 1e-3);
     }
 }

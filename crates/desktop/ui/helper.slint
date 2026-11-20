@@ -12,6 +12,12 @@ export struct HelperIcon {
     initials: string,
 }
 
+export struct HelperSuggestion {
+    champion: HelperIcon,
+    tier: string,
+    detail: string,
+}
+
 export struct HelperChip {
     label: string,
     // A gap in the comp (no frontline, all magic...) rather than a strength.
@@ -41,6 +47,9 @@ export struct HelperView {
     win-rate: string,
     empty-note: string,
 
+    // Pre-lock pick suggestions (up to 5).
+    suggestions: [HelperSuggestion],
+
     has-runes: bool,
     keystone: HelperIcon,
     primary-style: HelperIcon,
@@ -66,6 +75,8 @@ export struct HelperView {
     lane-rate: string,
     lane-origin: string,
     lane-online: bool,
+    // Revealed enemy portraits for manual lane opponent override.
+    enemy-choices: [HelperIcon],
 
     mine: HelperTeam,
     theirs: HelperTeam,
@@ -254,12 +265,66 @@ component BuildLine inherits HorizontalLayout {
 // Runes, spells and items of the player's pick.
 component BuildBlock inherits VerticalLayout {
     in property <HelperView> h;
+    property <int> override-enemy-idx: -1;
+    property <HelperIcon> active-enemy: root.override-enemy-idx >= 0 && root.override-enemy-idx < root.h.enemy-choices.length
+        ? root.h.enemy-choices[root.override-enemy-idx]
+        : root.h.lane-enemy;
     property <HelperIcon> keystone: root.h.keystone;
     property <HelperIcon> primary: root.h.primary-style;
     property <HelperIcon> secondary: root.h.sub-style;
     property <HelperIcon> spell1: root.h.spell1;
     property <HelperIcon> spell2: root.h.spell2;
     spacing: Space.sm;
+
+    if root.h.suggestions.length > 0: VerticalLayout {
+        spacing: Space.xs;
+        Text {
+            text: @tr("Suggested picks");
+            color: Theme.muted;
+            font-size: Type.label;
+            font-weight: 700;
+        }
+        HorizontalLayout {
+            spacing: Space.xs;
+            alignment: start;
+            for s in root.h.suggestions: Rectangle {
+                height: 36px;
+                border-radius: Theme.radius-sm;
+                background: Theme.panel-raised;
+                border-width: 1px;
+                border-color: Theme.rule;
+                HorizontalLayout {
+                    padding-left: Space.xs;
+                    padding-right: Space.sm;
+                    spacing: Space.xs;
+                    GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 24px;
+                        icon: s.champion.icon;
+                        fallback-text: s.champion.initials;
+                        border: Theme.gold;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 0px;
+                        Text {
+                            text: s.tier != "" ? s.champion.name + " · " + s.tier : s.champion.name;
+                            color: Theme.text;
+                            font-size: Type.label;
+                            font-weight: 800;
+                        }
+                        if s.detail != "": Text {
+                            text: s.detail;
+                            color: Theme.muted;
+                            font-family: Type.mono-family;
+                            font-size: Type.label;
+                        }
+                    }
+                }
+            }
+        }
+        if root.h.has-runes || root.h.has-spells || root.h.items.length > 0: Divider {}
+    }
 
     if root.h.has-runes: BuildLine {
         label: @tr("Runes");
@@ -360,7 +425,7 @@ component BuildBlock inherits VerticalLayout {
         }
     }
 
-    if !root.h.has-runes && !root.h.has-spells && root.h.items.length == 0: Text {
+    if !root.h.has-runes && !root.h.has-spells && root.h.items.length == 0 && root.h.suggestions.length == 0: Text {
         text: root.h.empty-note;
         color: Theme.muted;
         font-size: Type.small;
@@ -375,7 +440,7 @@ component BuildBlock inherits VerticalLayout {
         accessible-label: root.h.lane-line + (root.h.lane-rate != "" ? ", " + root.h.lane-rate : "");
         Roundel { y: (parent.height - self.height) / 2; lane: root.h.lane; size: 22px; }
         Text {
-            text: root.h.lane-line;
+            text: root.override-enemy-idx >= 0 ? @tr("vs {0}", root.active-enemy.name) : root.h.lane-line;
             color: Theme.text;
             font-size: Type.body;
             font-weight: 800;
@@ -384,19 +449,46 @@ component BuildBlock inherits VerticalLayout {
         GameIconBadge {
             y: (parent.height - self.height) / 2;
             size: 24px;
-            icon: root.h.lane-enemy.icon;
-            fallback-text: root.h.lane-enemy.initials;
+            icon: root.active-enemy.icon;
+            fallback-text: root.active-enemy.initials;
             border: Theme.red;
             border-radius: 12px;
         }
         Text {
             horizontal-stretch: 1;
-            text: root.h.lane-rate;
+            text: root.override-enemy-idx >= 0 ? "" : root.h.lane-rate;
             color: Theme.muted;
             font-family: Type.mono-family;
             font-size: Type.label;
             vertical-alignment: center;
             overflow: elide;
+        }
+        if root.h.enemy-choices.length > 1: HorizontalLayout {
+            spacing: Space.xxs;
+            alignment: end;
+            for enemy[idx] in root.h.enemy-choices: Rectangle {
+                y: (parent.height - self.height) / 2;
+                width: 24px;
+                height: 24px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: root.override-enemy-idx == idx ? Theme.text : Theme.rule;
+                GameIconBadge {
+                    x: 1px;
+                    y: 1px;
+                    size: 22px;
+                    icon: enemy.icon;
+                    fallback-text: enemy.initials;
+                    border: transparent;
+                    border-radius: 11px;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.override-enemy-idx = root.override-enemy-idx == idx ? -1 : idx;
+                    }
+                }
+            }
         }
         if root.h.lane-origin != "": VerticalLayout {
             alignment: center;

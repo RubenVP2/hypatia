@@ -4,7 +4,7 @@
 // something changed, so the page stays still while idle. Nothing here animates on its own.
 
 import { Theme, Type, Space } from "theme.slint";
-import { Card, Divider, SectionLabel, Action, GameIconBadge, Roundel, HeroSplash } from "parts.slint";
+import { Card, Divider, SectionLabel, Action, GameIconBadge, Roundel, HeroSplash, ModalSheet } from "parts.slint";
 
 // An item, rune, rune style or summoner spell: its client name and cached icon.
 export struct StatsIcon {
@@ -39,9 +39,22 @@ export struct StatsRates {
     pick: string,
     ban: string,
     games: string,
+    // -1 when unknown, else 0 S .. 4 D.
+    tier: int,
+    // e.g. "Rank 4/41" / "Rang 4/41", "" when unknown.
+    rank-label: string,
 }
 
-// `kind` 0 most popular, 1 alternative, 2 Riot's recommended page.
+export struct StatsRuneNode {
+    icon: StatsIcon,
+    active: bool,
+}
+
+export struct StatsRuneRow {
+    nodes: [StatsRuneNode],
+}
+
+// `kind` 0 most popular, 1 alternative, 2 Riot's recommended page, 3 player's own local page.
 export struct StatsRunePage {
     kind: int,
     origin: int,
@@ -56,6 +69,38 @@ export struct StatsRunePage {
     primary-perks: [StatsIcon],
     secondary-perks: [StatsIcon],
     shards: [StatsIcon],
+    primary-rows: [StatsRuneRow],
+    secondary-rows: [StatsRuneRow],
+    shard-rows: [StatsRuneRow],
+}
+
+export struct StatsLocalBuild {
+    has: bool,
+    origin: int,
+    record: string,
+    win-rate: string,
+    kda: string,
+    cs-min: string,
+    dpm: string,
+    keystone: StatsIcon,
+    spell-a: StatsIcon,
+    spell-b: StatsIcon,
+    items: [StatsIcon],
+}
+
+export struct StatsChampProfile {
+    has: bool,
+    physical: float,
+    magic: float,
+    true-damage: float,
+    traits: [string],
+    has-local: bool,
+    local-origin: int,
+    kda: string,
+    cs-min: string,
+    dpm: string,
+    gpm: string,
+    vs-min: string,
 }
 
 export struct StatsSpellRow {
@@ -65,7 +110,7 @@ export struct StatsSpellRow {
     rates: string,
 }
 
-// `stage` 0 starting, 1 core, 2 boots, 3 situational, 4 unnamed.
+// `stage` 0 starting, 1 core, 2 boots, 3 situational, 4 unnamed, 5..9 Item 1..5.
 export struct StatsItemStage {
     stage: int,
     items: [StatsIcon],
@@ -79,13 +124,21 @@ export struct StatsSkillOrder {
     rates: string,
 }
 
-// `tier` 0 S .. 4 D; `lane` -1 for queues without lanes.
+export struct StatsSkillVariant {
+    priority: [string],
+    rates: string,
+}
+
+// `tier` 0 S+, 1 S, 2 A, 3 B, 4 C, 5 D; `lane` -1 for queues without lanes.
 export struct StatsTierRow {
     rank: int,
     tier: int,
     champion: StatsChampOption,
     lane: int,
     win: string,
+    win-delta: string,
+    // 1 positive, -1 negative, 0 neutral/none.
+    win-delta-dir: int,
     pick: string,
     ban: string,
     games: string,
@@ -97,19 +150,63 @@ export struct StatsMatchupRow {
     win-value: float,
     games: string,
     gold: string,
+    // 0 Good lane, 1 Even, 2 Hard lane.
+    verdict: int,
+    // Player's personal local record vs this opponent (e.g. "2W-1L"), "" if none.
+    local-record: string,
+}
+
+export struct StatsLocalMatchupRow {
+    opponent: StatsChampOption,
+    record: string,
+    win-rate: string,
+    kda: string,
+    win-value: float,
+}
+
+export struct StatsRankedCard {
+    has: bool,
+    tier-label: string,
+    lp: string,
+    record: string,
+    win-rate: string,
+}
+
+export struct StatsRoleSummary {
+    lane: int,
+    games: string,
+    win-rate: string,
+    kda: string,
+    win-value: float,
 }
 
 export struct StatsGameRow {
     champion: StatsChampOption,
     win: bool,
+    remake: bool,
+    summarised: bool,
     lane: int,
     queue: string,
     kda: string,
     ratio: string,
     cs-min: string,
     dpm: string,
+    vs-min: string,
+    kp: string,
     duration: string,
     when: string,
+    opponent: StatsChampOption,
+    keystone: StatsIcon,
+    spell-a: StatsIcon,
+    spell-b: StatsIcon,
+    items: [StatsIcon],
+    score: string,
+    score-value: int,
+    // 0 none, 1 MVP, 2 ACE, 3 Triple, 4 Quadra, 5 Penta.
+    badge: int,
+    // Non-empty on the first row of a new day/session bucket.
+    session-header: string,
+    session-summary: string,
 }
 
 export struct StatsChampionSummary {
@@ -144,46 +241,83 @@ export global StatsBridge {
     in property <StatsChampOption> champion;
     in property <image> splash;
     in property <int> role: -1;
+    // 5-element array indexed by lane (0..4) showing role pickrate share ("82%"), "" if none.
+    in property <[string]> role-shares;
     in-out property <string> search: "";
     in property <[StatsChampOption]> results;
     in property <bool> results-are-search: false;
 
-    // Champion Build.
+    // Champion Build. Queue: 0 Ranked Solo/Duo, 1 ARAM, 2 Arena.
+    // Bracket: 0 All, 1 Emerald+, 2 Diamond+, 3 Master+. Item view: 0 by stage, 1 by slot.
+    in property <int> build-queue: 0;
+    in property <int> build-bracket: 1;
+    in property <int> item-view: 0;
     in property <StatsBlock> build-block;
     in property <StatsBlock> client-block;
     in property <StatsRates> rates;
+    in property <StatsLocalBuild> local-build;
+    in property <StatsChampProfile> champ-profile;
     in property <[StatsRunePage]> rune-pages;
     in property <[StatsSpellRow]> spells;
     in property <[StatsItemStage]> items;
+    in property <[StatsItemStage]> slot-items;
+    in property <int> items-origin: 0;
     in property <bool> has-skills: false;
     in property <StatsSkillOrder> skills;
     in property <int> skills-origin: 0;
+    in property <[StatsSkillVariant]> alt-skills;
 
-    // Tier List. Queue 0 Ranked Solo/Duo, 1 ARAM, 2 Arena; role -1 all lanes.
+    // Tier List. Queue 0 Ranked Solo/Duo, 1 ARAM, 2 Arena; role -1 all lanes; bracket 0..3.
     in property <int> tier-queue: 0;
+    in property <int> tier-bracket: 1;
     in property <int> tier-role: -1;
+    // Sort column: 0 Tier, 1 Win, 2 Pick, 3 Ban, 4 Games.
+    in property <int> tier-sort-col: 0;
+    in property <bool> tier-sort-desc: false;
+    in-out property <string> tier-search: "";
+    in property <bool> tier-off-meta: false;
     in property <StatsBlock> tier-block;
     in property <string> tier-patch;
     in property <[StatsTierRow]> tiers;
 
     // Matchups.
+    in-out property <string> matchup-search: "";
+    in property <bool> matchup-show-all: false;
+    in property <bool> matchup-has-more: false;
     in property <StatsBlock> matchup-block;
     in property <[StatsMatchupRow]> hardest;
     in property <[StatsMatchupRow]> easiest;
+    in property <int> local-matchups-origin: 0;
+    in property <[StatsLocalMatchupRow]> local-matchups;
 
-    // My Stats.
+    // My Stats. `my-queue`: -1 All, 0 Ranked Solo, 1 Flex, 2 ARAM, 3 Arena. `my-role`: -1 All, 0..4.
     in property <StatsBlock> profile-block;
+    in property <StatsRankedCard> ranked-card;
     in property <StatsTotals> totals;
+    in property <[StatsRoleSummary]> role-summaries;
+    in property <int> my-queue: -1;
+    in property <int> my-role: -1;
     in property <[StatsChampionSummary]> my-champions;
     in property <[StatsGameRow]> games;
 
     callback select-tab(int);
     callback select-champion(int);
     callback select-role(int);
+    callback select-build-queue(int);
+    callback select-build-bracket(int);
+    callback select-item-view(int);
     callback search-edited(string);
     callback search-accepted();
     callback select-tier-queue(int);
+    callback select-tier-bracket(int);
     callback select-tier-role(int);
+    callback sort-tier-column(int);
+    callback tier-search-edited(string);
+    callback toggle-tier-off-meta();
+    callback matchup-search-edited(string);
+    callback toggle-matchup-show-all();
+    callback select-my-queue(int);
+    callback select-my-role(int);
     callback open-build(int, int);
     callback enable-online();
     callback open-link(string);
@@ -546,7 +680,8 @@ component ChampChip inherits Pressable {
 
 component RoleChip inherits Pressable {
     in property <int> lane;
-    label: Theme.lane-name(root.lane);
+    in property <string> share: "";
+    label: root.share != "" ? Theme.lane-name(root.lane) + " " + root.share : Theme.lane-name(root.lane);
     height: 30px;
     width: role-row.preferred-width;
     border-color: root.selected ? Theme.text : (root.hovered ? Theme.rule-strong : Theme.rule);
@@ -565,6 +700,14 @@ component RoleChip inherits Pressable {
             color: Theme.text;
             font-size: Type.small;
             font-weight: root.selected ? 800 : 600;
+            vertical-alignment: center;
+        }
+        if root.share != "": Text {
+            text: root.share;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
             vertical-alignment: center;
         }
     }
@@ -719,6 +862,7 @@ component ChampionPicker inherits Card {
             alignment: start;
             for lane in 5: RoleChip {
                 lane: lane;
+                share: lane < StatsBridge.role-shares.length ? StatsBridge.role-shares[lane] : "";
                 selected: StatsBridge.role == lane;
                 clicked => { StatsBridge.select-role(lane); }
             }
@@ -734,6 +878,77 @@ component RuneColumnLabel inherits Text {
     letter-spacing: 0.6px;
 }
 
+component RuneTreeGrid inherits HorizontalLayout {
+    in property <StatsRunePage> page;
+    spacing: Space.lg;
+    alignment: stretch;
+
+    // Primary tree: keystone row (36px) + 3 perk rows (28px).
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Space.sm;
+        alignment: start;
+        RuneColumnLabel { text: root.page.primary.name; }
+        for row[row-idx] in root.page.primary-rows: HorizontalLayout {
+            spacing: Space.sm;
+            alignment: start;
+            for node in row.nodes: GameIconBadge {
+                size: row-idx == 0 ? 36px : 28px;
+                icon: node.icon.icon;
+                fallback-text: node.icon.initials;
+                border: node.active ? (row-idx == 0 ? Theme.gold-bright : Theme.accent) : Theme.rule;
+                opacity: node.active ? 1.0 : 0.26;
+                accessible-role: text;
+                accessible-label: node.icon.name;
+            }
+        }
+        if root.page.keystone.name != "": Text {
+            text: root.page.keystone.name;
+            color: Theme.text;
+            font-size: Type.small;
+            font-weight: 800;
+            overflow: elide;
+        }
+    }
+
+    // Secondary tree (3 perk rows) + 3x3 Stat Shards grid.
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Space.sm;
+        alignment: start;
+        RuneColumnLabel { text: root.page.secondary.name; }
+        for row in root.page.secondary-rows: HorizontalLayout {
+            spacing: Space.sm;
+            alignment: start;
+            for node in row.nodes: GameIconBadge {
+                size: 26px;
+                icon: node.icon.icon;
+                fallback-text: node.icon.initials;
+                border: node.active ? Theme.accent : Theme.rule;
+                opacity: node.active ? 1.0 : 0.26;
+                accessible-role: text;
+                accessible-label: node.icon.name;
+            }
+        }
+        if root.page.shard-rows.length > 0: RuneColumnLabel {
+            text: @tr("Shards");
+        }
+        for row in root.page.shard-rows: HorizontalLayout {
+            spacing: Space.xs;
+            alignment: start;
+            for node in row.nodes: GameIconBadge {
+                size: 20px;
+                icon: node.icon.icon;
+                fallback-text: node.icon.initials;
+                border: node.active ? Theme.accent : Theme.rule;
+                opacity: node.active ? 1.0 : 0.24;
+                accessible-role: text;
+                accessible-label: node.icon.name;
+            }
+        }
+    }
+}
+
 component RunePageCard inherits Card {
     in property <StatsRunePage> page;
     min-width: 260px;
@@ -743,7 +958,11 @@ component RunePageCard inherits Card {
         BlockHeader {
             title: root.page.kind == 0
                 ? @tr("Most popular page")
-                : root.page.kind == 1 ? @tr("Alternative page") : @tr("Client's recommended page");
+                : root.page.kind == 1
+                    ? @tr("Alternative page")
+                    : root.page.kind == 2
+                        ? @tr("Client's recommended page")
+                        : @tr("Your most played page");
             detail: root.page.matches-client
                 ? (root.page.rates != "" ? root.page.rates + " · " : "") + @tr("Same as the client's recommended page")
                 : root.page.rates;
@@ -752,7 +971,8 @@ component RunePageCard inherits Card {
             link-url: root.page.link-url;
         }
         Divider { }
-        HorizontalLayout {
+        if root.page.primary-rows.length > 0: RuneTreeGrid { page: root.page; }
+        if root.page.primary-rows.length == 0: HorizontalLayout {
             spacing: Space.md;
             alignment: stretch;
             VerticalLayout {
@@ -789,7 +1009,21 @@ component StageLabel inherits Text {
     in property <int> stage;
     text: root.stage == 0
         ? @tr("Starting")
-        : root.stage == 1 ? @tr("Core") : root.stage == 2 ? @tr("Boots") : root.stage == 3 ? @tr("Situational") : @tr("Items");
+        : root.stage == 1
+            ? @tr("Core")
+            : root.stage == 2
+                ? @tr("Boots")
+                : root.stage == 3
+                    ? @tr("Situational")
+                    : root.stage == 5
+                        ? @tr("Item 1")
+                        : root.stage == 6
+                            ? @tr("Item 2")
+                            : root.stage == 7
+                                ? @tr("Item 3")
+                                : root.stage == 8
+                                    ? @tr("Item 4")
+                                    : root.stage == 9 ? @tr("Item 5") : @tr("Items");
     color: Theme.text;
     font-size: Type.small;
     font-weight: 800;
@@ -948,12 +1182,116 @@ component SkillPriority inherits HorizontalLayout {
     }
 }
 
+component TierBadge inherits Rectangle {
+    in property <int> tier;
+    property <color> ink: root.tier <= 1
+        ? Theme.gold-bright
+        : root.tier == 2 ? Theme.accent : root.tier == 3 ? Theme.text : Theme.muted;
+    width: 32px;
+    height: 26px;
+    border-radius: Theme.radius-sm;
+    background: root.tier == 0
+        ? Theme.gold-bright.with-alpha(0.24)
+        : root.tier == 1 ? Theme.gold.with-alpha(0.22) : Theme.panel-raised;
+    border-width: 1px;
+    border-color: root.ink;
+    opacity: root.tier == 5 ? 0.8 : 1.0;
+    accessible-role: text;
+    accessible-label: @tr("Tier {0}", tier-text.text);
+    tier-text := Text {
+        text: root.tier == 0 ? "S+" : root.tier == 1 ? "S" : root.tier == 2 ? "A" : root.tier == 3 ? "B" : root.tier == 4 ? "C" : "D";
+        color: root.ink;
+        font-family: Type.display-family;
+        font-size: Type.name;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
 component BuildTab inherits VerticalLayout {
     in property <bool> compact: false;
     spacing: Space.lg;
     alignment: start;
 
-    ChampionPicker { compact: root.compact; }
+    ChampionPicker {
+        compact: root.compact;
+        show-roles: StatsBridge.build-queue == 0;
+    }
+
+    if StatsBridge.champion.id > 0: Card {
+        VerticalLayout {
+            padding: Space.md;
+            spacing: Space.sm;
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                Action {
+                    text: @tr("Ranked Solo/Duo");
+                    selected: StatsBridge.build-queue == 0;
+                    clicked => { StatsBridge.select-build-queue(0); }
+                }
+                Action {
+                    text: "ARAM";
+                    selected: StatsBridge.build-queue == 1;
+                    clicked => { StatsBridge.select-build-queue(1); }
+                }
+                Action {
+                    text: @tr("Arena");
+                    selected: StatsBridge.build-queue == 2;
+                    clicked => { StatsBridge.select-build-queue(2); }
+                }
+                if !root.compact: Rectangle { horizontal-stretch: 1; }
+                if !root.compact && StatsBridge.build-queue == 0: HorizontalLayout {
+                    spacing: Space.xs;
+                    Action {
+                        text: @tr("All ranks");
+                        selected: StatsBridge.build-bracket == 0;
+                        clicked => { StatsBridge.select-build-bracket(0); }
+                    }
+                    Action {
+                        text: @tr("Emerald+");
+                        selected: StatsBridge.build-bracket == 1;
+                        clicked => { StatsBridge.select-build-bracket(1); }
+                    }
+                    Action {
+                        text: @tr("Diamond+");
+                        selected: StatsBridge.build-bracket == 2;
+                        clicked => { StatsBridge.select-build-bracket(2); }
+                    }
+                    Action {
+                        text: @tr("Master+");
+                        selected: StatsBridge.build-bracket == 3;
+                        clicked => { StatsBridge.select-build-bracket(3); }
+                    }
+                }
+            }
+            if root.compact && StatsBridge.build-queue == 0: HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                Action {
+                    text: @tr("All ranks");
+                    selected: StatsBridge.build-bracket == 0;
+                    clicked => { StatsBridge.select-build-bracket(0); }
+                }
+                Action {
+                    text: @tr("Emerald+");
+                    selected: StatsBridge.build-bracket == 1;
+                    clicked => { StatsBridge.select-build-bracket(1); }
+                }
+                Action {
+                    text: @tr("Diamond+");
+                    selected: StatsBridge.build-bracket == 2;
+                    clicked => { StatsBridge.select-build-bracket(2); }
+                }
+                Action {
+                    text: @tr("Master+");
+                    selected: StatsBridge.build-bracket == 3;
+                    clicked => { StatsBridge.select-build-bracket(3); }
+                }
+            }
+        }
+    }
 
     if StatsBridge.champion.id > 0 && StatsBridge.build-block.state == 2: OnlineOffCard { }
     if StatsBridge.champion.id > 0 && StatsBridge.build-block.state != 0 && StatsBridge.build-block.state != 2: Card {
@@ -975,6 +1313,18 @@ component BuildTab inherits VerticalLayout {
             padding: Space.lg;
             spacing: Space.xl;
             alignment: stretch;
+            if StatsBridge.rates.tier >= 0: VerticalLayout {
+                alignment: center;
+                spacing: Space.xs;
+                TierBadge { tier: StatsBridge.rates.tier; }
+                if StatsBridge.rates.rank-label != "": Text {
+                    text: StatsBridge.rates.rank-label;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    font-weight: 700;
+                }
+            }
             Figure { value: StatsBridge.rates.win; label: @tr("WIN RATE"); }
             Figure { value: StatsBridge.rates.pick; label: @tr("PICK RATE"); }
             Figure { value: StatsBridge.rates.ban; label: @tr("BAN RATE"); }
@@ -990,6 +1340,66 @@ component BuildTab inherits VerticalLayout {
                 if StatsBridge.build-block.link-url != "": SourceLink {
                     provider: StatsBridge.build-block.link-label;
                     url: StatsBridge.build-block.link-url;
+                }
+            }
+        }
+    }
+
+    // Player's own local stats & most-used kit on this champion.
+    if StatsBridge.champion.id > 0 && StatsBridge.local-build.has: Card {
+        VerticalLayout {
+            padding: Space.lg;
+            spacing: Space.md;
+            BlockHeader {
+                title: @tr("Your games");
+                detail: StatsBridge.local-build.record;
+                origin: StatsBridge.local-build.origin;
+            }
+            Divider { }
+            HorizontalLayout {
+                spacing: Space.xl;
+                alignment: stretch;
+                Figure { value: StatsBridge.local-build.win-rate; label: @tr("WIN RATE"); }
+                Figure { value: StatsBridge.local-build.kda; label: @tr("KDA"); }
+                Figure { value: StatsBridge.local-build.cs-min; label: @tr("CS/MIN"); }
+                Figure { value: StatsBridge.local-build.dpm; label: @tr("DPM"); }
+                Rectangle { horizontal-stretch: 1; }
+                if !root.compact: HorizontalLayout {
+                    spacing: Space.xs;
+                    alignment: end;
+                    if StatsBridge.local-build.keystone.name != "": GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 28px;
+                        icon: StatsBridge.local-build.keystone.icon;
+                        fallback-text: StatsBridge.local-build.keystone.initials;
+                        border: Theme.gold-bright;
+                        accessible-role: text;
+                        accessible-label: StatsBridge.local-build.keystone.name;
+                    }
+                    if StatsBridge.local-build.spell-a.name != "": GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 26px;
+                        icon: StatsBridge.local-build.spell-a.icon;
+                        fallback-text: StatsBridge.local-build.spell-a.initials;
+                        accessible-role: text;
+                        accessible-label: StatsBridge.local-build.spell-a.name;
+                    }
+                    if StatsBridge.local-build.spell-b.name != "": GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 26px;
+                        icon: StatsBridge.local-build.spell-b.icon;
+                        fallback-text: StatsBridge.local-build.spell-b.initials;
+                        accessible-role: text;
+                        accessible-label: StatsBridge.local-build.spell-b.name;
+                    }
+                    for item in StatsBridge.local-build.items: GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 28px;
+                        icon: item.icon;
+                        fallback-text: item.initials;
+                        accessible-role: text;
+                        accessible-label: item.name;
+                    }
                 }
             }
         }
@@ -1063,23 +1473,55 @@ component BuildTab inherits VerticalLayout {
         }
     }
 
-    if StatsBridge.champion.id > 0 && StatsBridge.items.length > 0: Card {
+    if StatsBridge.champion.id > 0 && (StatsBridge.items.length > 0 || StatsBridge.slot-items.length > 0): Card {
         VerticalLayout {
             padding: Space.lg;
             spacing: Space.sm;
-            BlockHeader {
-                title: @tr("Item path");
-                detail: @tr("Share of games and win rate for each stage");
-                origin: StatsBridge.build-block.origin;
-                link-label: StatsBridge.build-block.link-label;
-                link-url: StatsBridge.build-block.link-url;
+            HorizontalLayout {
+                spacing: Space.md;
+                BlockHeader {
+                    horizontal-stretch: 1;
+                    title: @tr("Item path");
+                    detail: @tr("Share of games and win rate for each stage");
+                    origin: StatsBridge.items-origin;
+                    link-label: StatsBridge.build-block.link-label;
+                    link-url: StatsBridge.items-origin == 2 ? StatsBridge.build-block.link-url : "";
+                }
+                if StatsBridge.slot-items.length > 0: HorizontalLayout {
+                    spacing: Space.xs;
+                    alignment: end;
+                    Action {
+                        text: @tr("By stage");
+                        selected: StatsBridge.item-view == 0;
+                        clicked => { StatsBridge.select-item-view(0); }
+                    }
+                    Action {
+                        text: @tr("By slot");
+                        selected: StatsBridge.item-view == 1;
+                        clicked => { StatsBridge.select-item-view(1); }
+                    }
+                }
             }
-            for row[i] in StatsBridge.items: VerticalLayout {
+            if StatsBridge.item-view == 0 || StatsBridge.slot-items.length == 0: VerticalLayout {
                 spacing: Space.sm;
-                if i > 0: Divider { }
-                ItemStageRow {
-                    entry: row;
-                    compact: root.compact;
+                for row[i] in StatsBridge.items: VerticalLayout {
+                    spacing: Space.sm;
+                    if i > 0: Divider { }
+                    ItemStageRow {
+                        entry: row;
+                        compact: root.compact;
+                    }
+                }
+            }
+            if StatsBridge.item-view == 1 && StatsBridge.slot-items.length > 0: VerticalLayout {
+                spacing: Space.sm;
+                for row[i] in StatsBridge.slot-items: VerticalLayout {
+                    spacing: Space.sm;
+                    if i > 0: Divider { }
+                    ItemStageRow {
+                        entry: row;
+                        compact: root.compact;
+                    }
                 }
             }
         }
@@ -1109,32 +1551,123 @@ component BuildTab inherits VerticalLayout {
                 Rectangle { horizontal-stretch: 1; }
             }
             SkillGrid { order: StatsBridge.skills; }
+            if StatsBridge.alt-skills.length > 0: VerticalLayout {
+                spacing: Space.xs;
+                Divider { }
+                for alt in StatsBridge.alt-skills: HorizontalLayout {
+                    spacing: Space.md;
+                    Text {
+                        text: @tr("Alternative");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    SkillPriority { letters: alt.priority; }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: alt.rates;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
         }
     }
-}
 
-component TierBadge inherits Rectangle {
-    in property <int> tier;
-    property <color> ink: root.tier == 0
-        ? Theme.gold-bright
-        : root.tier == 1 ? Theme.accent : root.tier == 2 ? Theme.text : Theme.muted;
-    width: 30px;
-    height: 26px;
-    border-radius: Theme.radius-sm;
-    background: root.tier == 0 ? Theme.gold.with-alpha(0.22) : Theme.panel-raised;
-    border-width: 1px;
-    border-color: root.ink;
-    opacity: root.tier == 4 ? 0.8 : 1.0;
-    accessible-role: text;
-    accessible-label: @tr("Tier {0}", tier-text.text);
-    tier-text := Text {
-        text: root.tier == 0 ? "S" : root.tier == 1 ? "A" : root.tier == 2 ? "B" : root.tier == 3 ? "C" : "D";
-        color: root.ink;
-        font-family: Type.display-family;
-        font-size: Type.name;
-        font-weight: 800;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    if StatsBridge.champion.id > 0 && StatsBridge.champ-profile.has: Card {
+        VerticalLayout {
+            padding: Space.lg;
+            spacing: Space.md;
+            BlockHeader {
+                title: @tr("Champion profile & benchmarks");
+                detail: @tr("Damage profile, combat traits and your personal averages");
+                origin: StatsBridge.champ-profile.has-local ? StatsBridge.champ-profile.local-origin : 0;
+                show-origin: StatsBridge.champ-profile.has-local;
+            }
+            VerticalLayout {
+                spacing: Space.xs;
+                HorizontalLayout {
+                    spacing: Space.sm;
+                    Text {
+                        text: @tr("Damage split");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Text {
+                        text: @tr("{0}% Physical · {1}% Magic · {2}% True",
+                            Math.round(StatsBridge.champ-profile.physical * 100),
+                            Math.round(StatsBridge.champ-profile.magic * 100),
+                            Math.round(StatsBridge.champ-profile.true-damage * 100));
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 8px;
+                    border-radius: 4px;
+                    clip: true;
+                    background: Theme.panel-raised;
+                    Rectangle {
+                        x: 0px;
+                        width: parent.width * StatsBridge.champ-profile.physical;
+                        background: Theme.dark ? #d29a52 : #9a5f14;
+                    }
+                    Rectangle {
+                        x: parent.width * StatsBridge.champ-profile.physical;
+                        width: parent.width * StatsBridge.champ-profile.magic;
+                        background: Theme.dark ? #4fb8e8 : #1f6fa8;
+                    }
+                    Rectangle {
+                        x: parent.width * (StatsBridge.champ-profile.physical + StatsBridge.champ-profile.magic);
+                        width: parent.width * StatsBridge.champ-profile.true-damage;
+                        background: Theme.dark ? #eef0f5 : #4c5364;
+                    }
+                }
+            }
+            if StatsBridge.champ-profile.traits.length > 0: HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                for tr-label in StatsBridge.champ-profile.traits: Rectangle {
+                    height: 22px;
+                    border-radius: Theme.radius-sm;
+                    background: Theme.panel-raised;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    HorizontalLayout {
+                        padding-left: Space.sm;
+                        padding-right: Space.sm;
+                        Text {
+                            text: tr-label;
+                            color: Theme.text;
+                            font-size: Type.label;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+            if StatsBridge.champ-profile.has-local: VerticalLayout {
+                spacing: Space.sm;
+                Divider { }
+                HorizontalLayout {
+                    spacing: Space.sm;
+                    Figure { horizontal-stretch: 1; label: @tr("KDA"); value: StatsBridge.champ-profile.kda; }
+                    Figure { horizontal-stretch: 1; label: @tr("CS / MIN"); value: StatsBridge.champ-profile.cs-min; }
+                    Figure { horizontal-stretch: 1; label: @tr("DPM"); value: StatsBridge.champ-profile.dpm; }
+                    if !root.compact: Figure { horizontal-stretch: 1; label: @tr("GOLD / MIN"); value: StatsBridge.champ-profile.gpm; }
+                    if !root.compact: Figure { horizontal-stretch: 1; label: @tr("VISION / MIN"); value: StatsBridge.champ-profile.vs-min; }
+                }
+            }
+        }
     }
 }
 
@@ -1154,6 +1687,41 @@ component HeaderCell inherits Text {
     font-weight: 700;
     letter-spacing: 0.6px;
     vertical-alignment: center;
+}
+
+component SortHeaderCell inherits Pressable {
+    in property <string> title;
+    in property <bool> active: false;
+    in property <bool> desc: false;
+    in property <bool> align-right: true;
+    label: root.title;
+    height: 24px;
+    HorizontalLayout {
+        spacing: Space.xs;
+        alignment: root.align-right ? end : start;
+        Text {
+            text: root.title;
+            color: root.active ? Theme.text : Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            vertical-alignment: center;
+        }
+        if root.active: Path {
+            y: (parent.height - 10px) / 2;
+            width: 10px;
+            height: 10px;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            commands: root.desc ? "M 6 9 L 12 15 L 18 9" : "M 6 15 L 12 9 L 18 15";
+            stroke: Theme.text;
+            stroke-width: 2.4px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
+        }
+    }
 }
 
 component TierRowView inherits Pressable {
@@ -1198,7 +1766,27 @@ component TierRowView inherits Pressable {
             lane: root.entry.lane;
             size: 24px;
         }
-        NumberCell { text: root.entry.win; }
+        VerticalLayout {
+            width: 82px;
+            alignment: center;
+            spacing: 0px;
+            Text {
+                text: root.entry.win;
+                color: Theme.text;
+                font-family: Type.mono-family;
+                font-size: Type.small;
+                horizontal-alignment: right;
+            }
+            if root.entry.win-delta != "": Text {
+                text: root.entry.win-delta;
+                color: root.entry.win-delta-dir > 0
+                    ? Theme.live-green
+                    : (root.entry.win-delta-dir < 0 ? Theme.red : Theme.muted);
+                font-family: Type.mono-family;
+                font-size: Type.label;
+                horizontal-alignment: right;
+            }
+        }
         NumberCell { text: root.entry.pick; }
         if !root.compact: NumberCell { text: root.entry.ban; }
         if !root.compact: NumberCell { text: root.entry.games; }
@@ -1232,6 +1820,12 @@ component TierTab inherits VerticalLayout {
                     selected: StatsBridge.tier-queue == 2;
                     clicked => { StatsBridge.select-tier-queue(2); }
                 }
+                Rectangle { horizontal-stretch: 1; }
+                Action {
+                    text: @tr("Off-meta");
+                    selected: StatsBridge.tier-off-meta;
+                    clicked => { StatsBridge.toggle-tier-off-meta(); }
+                }
             }
             if StatsBridge.tier-queue == 0: HorizontalLayout {
                 spacing: Space.xs;
@@ -1245,6 +1839,76 @@ component TierTab inherits VerticalLayout {
                     lane: lane;
                     selected: StatsBridge.tier-role == lane;
                     clicked => { StatsBridge.select-tier-role(lane); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Space.sm;
+                alignment: stretch;
+                if StatsBridge.tier-queue == 0: HorizontalLayout {
+                    spacing: Space.xs;
+                    alignment: start;
+                    Action {
+                        text: @tr("All ranks");
+                        selected: StatsBridge.tier-bracket == 0;
+                        clicked => { StatsBridge.select-tier-bracket(0); }
+                    }
+                    Action {
+                        text: @tr("Emerald+");
+                        selected: StatsBridge.tier-bracket == 1;
+                        clicked => { StatsBridge.select-tier-bracket(1); }
+                    }
+                    Action {
+                        text: @tr("Diamond+");
+                        selected: StatsBridge.tier-bracket == 2;
+                        clicked => { StatsBridge.select-tier-bracket(2); }
+                    }
+                    Action {
+                        text: @tr("Master+");
+                        selected: StatsBridge.tier-bracket == 3;
+                        clicked => { StatsBridge.select-tier-bracket(3); }
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle {
+                    width: root.compact ? 160px : 220px;
+                    height: 30px;
+                    background: Theme.backdrop;
+                    border-radius: Theme.radius-sm;
+                    border-width: 1px;
+                    border-color: tier-search-input.has-focus ? Theme.text : Theme.rule-strong;
+                    Path {
+                        x: 9px;
+                        y: (parent.height - 13px) / 2;
+                        width: 13px;
+                        height: 13px;
+                        viewbox-width: 24;
+                        viewbox-height: 24;
+                        commands: "M 10.5 4 A 6.5 6.5 0 1 0 10.51 4 Z M 15.5 15.5 L 20 20";
+                        stroke: Theme.muted;
+                        stroke-width: 2px;
+                        stroke-line-cap: round;
+                        fill: transparent;
+                    }
+                    if StatsBridge.tier-search == "": Text {
+                        x: 28px;
+                        height: 100%;
+                        text: @tr("Filter champions");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        vertical-alignment: center;
+                    }
+                    tier-search-input := TextInput {
+                        x: 28px;
+                        width: parent.width - 34px;
+                        height: 100%;
+                        single-line: true;
+                        text <=> StatsBridge.tier-search;
+                        accessible-label: @tr("Filter champions");
+                        color: Theme.text;
+                        font-size: Type.small;
+                        vertical-alignment: center;
+                        edited => { StatsBridge.tier-search-edited(self.text); }
+                    }
                 }
             }
         }
@@ -1275,18 +1939,49 @@ component TierTab inherits VerticalLayout {
             if StatsBridge.tier-block.state == 0 && StatsBridge.tiers.length > 0: VerticalLayout {
                 spacing: Space.xxs;
                 HorizontalLayout {
-                    height: 22px;
+                    height: 24px;
                     padding-left: Space.sm;
                     padding-right: Space.sm;
                     spacing: Space.md;
                     HeaderCell { width: 24px; text: "#"; horizontal-alignment: right; }
-                    HeaderCell { width: 30px; text: @tr("TIER"); }
+                    SortHeaderCell {
+                        width: 44px;
+                        title: @tr("TIER");
+                        align-right: false;
+                        active: StatsBridge.tier-sort-col == 0;
+                        desc: StatsBridge.tier-sort-desc;
+                        clicked => { StatsBridge.sort-tier-column(0); }
+                    }
                     HeaderCell { horizontal-stretch: 1; text: @tr("CHAMPION"); }
                     if StatsBridge.tier-queue == 0: Rectangle { width: 24px; }
-                    HeaderCell { width: 76px; text: @tr("WIN"); horizontal-alignment: right; }
-                    HeaderCell { width: 76px; text: @tr("PICK"); horizontal-alignment: right; }
-                    if !root.compact: HeaderCell { width: 76px; text: @tr("BAN"); horizontal-alignment: right; }
-                    if !root.compact: HeaderCell { width: 76px; text: @tr("GAMES"); horizontal-alignment: right; }
+                    SortHeaderCell {
+                        width: 82px;
+                        title: @tr("WIN");
+                        active: StatsBridge.tier-sort-col == 1;
+                        desc: StatsBridge.tier-sort-desc;
+                        clicked => { StatsBridge.sort-tier-column(1); }
+                    }
+                    SortHeaderCell {
+                        width: 76px;
+                        title: @tr("PICK");
+                        active: StatsBridge.tier-sort-col == 2;
+                        desc: StatsBridge.tier-sort-desc;
+                        clicked => { StatsBridge.sort-tier-column(2); }
+                    }
+                    if !root.compact: SortHeaderCell {
+                        width: 76px;
+                        title: @tr("BAN");
+                        active: StatsBridge.tier-sort-col == 3;
+                        desc: StatsBridge.tier-sort-desc;
+                        clicked => { StatsBridge.sort-tier-column(3); }
+                    }
+                    if !root.compact: SortHeaderCell {
+                        width: 76px;
+                        title: @tr("GAMES");
+                        active: StatsBridge.tier-sort-col == 4;
+                        desc: StatsBridge.tier-sort-desc;
+                        clicked => { StatsBridge.sort-tier-column(4); }
+                    }
                 }
                 Divider { }
                 for row in StatsBridge.tiers: TierRowView {
@@ -1320,10 +2015,40 @@ component WinBar inherits Rectangle {
     }
 }
 
+component VerdictChip inherits Rectangle {
+    // 0 Good lane, 1 Even, 2 Hard lane.
+    in property <int> verdict: 1;
+    height: 18px;
+    border-radius: Theme.radius-sm;
+    background: root.verdict == 0
+        ? Theme.blue.with-alpha(0.14)
+        : (root.verdict == 2 ? Theme.red.with-alpha(0.14) : Theme.panel-raised);
+    border-width: 1px;
+    border-color: root.verdict == 0
+        ? Theme.blue
+        : (root.verdict == 2 ? Theme.red : Theme.rule);
+    HorizontalLayout {
+        padding-left: Space.xs;
+        padding-right: Space.xs;
+        Text {
+            text: root.verdict == 0
+                ? @tr("Good lane")
+                : (root.verdict == 2 ? @tr("Hard lane") : @tr("Even"));
+            color: root.verdict == 0
+                ? Theme.blue
+                : (root.verdict == 2 ? Theme.red : Theme.muted);
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+}
+
 component MatchupRowView inherits Pressable {
     in property <StatsMatchupRow> entry;
     label: root.entry.opponent.name + ", " + root.entry.win;
-    height: 52px;
+    height: 58px;
     HorizontalLayout {
         padding-left: Space.sm;
         padding-right: Space.sm;
@@ -1349,21 +2074,37 @@ component MatchupRowView inherits Pressable {
                     font-weight: 800;
                     overflow: elide;
                 }
+                VerdictChip {
+                    y: (parent.height - self.height) / 2;
+                    verdict: root.entry.verdict;
+                }
                 Text {
                     text: root.entry.win;
                     color: Theme.text;
                     font-family: Type.mono-family;
                     font-size: Type.small;
                     font-weight: 700;
+                    vertical-alignment: center;
                 }
             }
             WinBar { value: root.entry.win-value; }
-            Text {
-                text: root.entry.gold != "" ? root.entry.games + " · " + root.entry.gold : root.entry.games;
-                color: Theme.muted;
-                font-family: Type.mono-family;
-                font-size: Type.label;
-                overflow: elide;
+            HorizontalLayout {
+                spacing: Space.sm;
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.entry.gold != "" ? root.entry.games + " · " + root.entry.gold : root.entry.games;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    overflow: elide;
+                }
+                if root.entry.local-record != "": Text {
+                    text: @tr("You: {0}", root.entry.local-record);
+                    color: Theme.accent;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    font-weight: 700;
+                }
             }
         }
     }
@@ -1392,7 +2133,7 @@ component MatchupColumn inherits Card {
         }
         for row in root.rows: MatchupRowView {
             entry: row;
-            clicked => { StatsBridge.select-champion(row.opponent.id); }
+            clicked => { StatsBridge.open-build(row.opponent.id, StatsBridge.role); }
         }
     }
 }
@@ -1403,6 +2144,125 @@ component MatchupsTab inherits VerticalLayout {
     alignment: start;
 
     ChampionPicker { compact: root.compact; }
+
+    if StatsBridge.champion.id > 0: Card {
+        HorizontalLayout {
+            padding: Space.md;
+            spacing: Space.sm;
+            alignment: stretch;
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 30px;
+                background: Theme.backdrop;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: mu-search-input.has-focus ? Theme.text : Theme.rule-strong;
+                Path {
+                    x: 9px;
+                    y: (parent.height - 13px) / 2;
+                    width: 13px;
+                    height: 13px;
+                    viewbox-width: 24;
+                    viewbox-height: 24;
+                    commands: "M 10.5 4 A 6.5 6.5 0 1 0 10.51 4 Z M 15.5 15.5 L 20 20";
+                    stroke: Theme.muted;
+                    stroke-width: 2px;
+                    stroke-line-cap: round;
+                    fill: transparent;
+                }
+                if StatsBridge.matchup-search == "": Text {
+                    x: 28px;
+                    height: 100%;
+                    text: @tr("Search an opponent");
+                    color: Theme.muted;
+                    font-size: Type.small;
+                    vertical-alignment: center;
+                }
+                mu-search-input := TextInput {
+                    x: 28px;
+                    width: parent.width - 34px;
+                    height: 100%;
+                    single-line: true;
+                    text <=> StatsBridge.matchup-search;
+                    accessible-label: @tr("Search an opponent");
+                    color: Theme.text;
+                    font-size: Type.small;
+                    vertical-alignment: center;
+                    edited => { StatsBridge.matchup-search-edited(self.text); }
+                }
+            }
+            if StatsBridge.matchup-has-more || StatsBridge.matchup-show-all: Action {
+                text: StatsBridge.matchup-show-all ? @tr("Top 8 only") : @tr("Show all");
+                selected: StatsBridge.matchup-show-all;
+                clicked => { StatsBridge.toggle-matchup-show-all(); }
+            }
+        }
+    }
+
+    if StatsBridge.champion.id > 0 && StatsBridge.local-matchups.length > 0: Card {
+        VerticalLayout {
+            padding: Space.lg;
+            spacing: Space.sm;
+            BlockHeader {
+                title: @tr("Your matchups");
+                detail: @tr("Your personal record on {0} against lane opponents", StatsBridge.champion.name);
+                origin: StatsBridge.local-matchups-origin;
+            }
+            Divider { }
+            for row in StatsBridge.local-matchups: Pressable {
+                height: 44px;
+                label: row.opponent.name + ", " + row.record;
+                clicked => { StatsBridge.open-build(row.opponent.id, StatsBridge.role); }
+                HorizontalLayout {
+                    padding-left: Space.sm;
+                    padding-right: Space.sm;
+                    spacing: Space.md;
+                    GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 30px;
+                        icon: row.opponent.icon;
+                        fallback-text: row.opponent.initials;
+                        border: row.win-value >= 0.5 ? Theme.blue : Theme.red;
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: row.opponent.name;
+                        color: Theme.text;
+                        font-size: Type.body;
+                        font-weight: 800;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: row.record;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: Type.small;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 64px;
+                        text: row.win-rate;
+                        color: row.win-value >= 0.5 ? Theme.blue : Theme.red;
+                        font-family: Type.mono-family;
+                        font-size: Type.small;
+                        font-weight: 700;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 66px;
+                        text: row.kda;
+                        color: Theme.text;
+                        font-family: Type.mono-family;
+                        font-size: Type.small;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
 
     if StatsBridge.champion.id > 0 && StatsBridge.matchup-block.state == 2: OnlineOffCard { }
     if StatsBridge.champion.id > 0 && StatsBridge.matchup-block.state != 0 && StatsBridge.matchup-block.state != 2: Card {
@@ -1450,15 +2310,18 @@ component MatchupsTab inherits VerticalLayout {
 
 component ResultChip inherits Rectangle {
     in property <bool> win;
-    width: 46px;
+    in property <bool> remake: false;
+    width: 54px;
     height: 22px;
     border-radius: Theme.radius-sm;
-    background: root.win ? Theme.blue.with-alpha(0.16) : Theme.red.with-alpha(0.14);
+    background: root.remake
+        ? Theme.panel-raised
+        : (root.win ? Theme.blue.with-alpha(0.16) : Theme.red.with-alpha(0.14));
     border-width: 1px;
-    border-color: root.win ? Theme.blue : Theme.red;
+    border-color: root.remake ? Theme.rule-strong : (root.win ? Theme.blue : Theme.red);
     Text {
-        text: root.win ? @tr("WIN") : @tr("LOSS");
-        color: root.win ? Theme.blue-soft : Theme.red-soft;
+        text: root.remake ? @tr("RMK") : (root.win ? @tr("WIN") : @tr("LOSS"));
+        color: root.remake ? Theme.muted : (root.win ? Theme.blue-soft : Theme.red-soft);
         font-family: Type.mono-family;
         font-size: Type.label;
         font-weight: 700;
@@ -1467,71 +2330,309 @@ component ResultChip inherits Rectangle {
     }
 }
 
-component GameRowView inherits Pressable {
-    in property <StatsGameRow> entry;
-    in property <bool> compact: false;
-    label: root.entry.champion.name + ", " + (root.entry.win ? @tr("WIN") : @tr("LOSS")) + ", " + root.entry.kda;
-    height: 50px;
+component ScorePill inherits HorizontalLayout {
+    in property <string> score;
+    in property <int> score-value;
+    in property <int> badge;
+    spacing: Space.xs;
+    alignment: end;
+
+    if root.badge > 0: Rectangle {
+        y: (parent.height - self.height) / 2;
+        height: 20px;
+        width: badge-txt.preferred-width + 10px;
+        border-radius: Theme.radius-sm;
+        background: root.badge == 1
+            ? Theme.gold.with-alpha(0.28)
+            : root.badge == 2 ? Theme.accent.with-alpha(0.18) : Theme.panel-raised;
+        border-width: 1px;
+        border-color: root.badge == 1
+            ? Theme.gold-bright
+            : root.badge == 2 ? Theme.accent : Theme.rule-strong;
+        badge-txt := Text {
+            text: root.badge == 1
+                ? "MVP"
+                : root.badge == 2
+                    ? "ACE"
+                    : root.badge == 3 ? "3K" : root.badge == 4 ? "4K" : "5K";
+            color: root.badge == 1
+                ? Theme.gold-bright
+                : root.badge == 2 ? Theme.accent : Theme.text;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    if root.score != "": Rectangle {
+        y: (parent.height - self.height) / 2;
+        width: 30px;
+        height: 22px;
+        border-radius: Theme.radius-sm;
+        background: Theme.panel-raised;
+        border-width: 1px;
+        border-color: root.score-value >= 80
+            ? Theme.gold-bright
+            : root.score-value >= 65 ? Theme.accent : Theme.rule;
+        Text {
+            text: root.score;
+            color: root.score-value >= 80
+                ? Theme.gold-bright
+                : root.score-value >= 65 ? Theme.text : Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component RoleSummaryTile inherits Pressable {
+    in property <StatsRoleSummary> entry;
+    label: Theme.lane-name(root.entry.lane) + " " + root.entry.win-rate;
+    height: 54px;
+    border-color: root.selected ? Theme.text : (root.hovered ? Theme.rule-strong : Theme.rule);
+    background: root.selected || root.hovered ? Theme.panel-raised : Theme.panel;
     HorizontalLayout {
         padding-left: Space.sm;
         padding-right: Space.sm;
-        spacing: Space.md;
-        ResultChip {
+        spacing: Space.sm;
+        Roundel {
             y: (parent.height - self.height) / 2;
-            win: root.entry.win;
-        }
-        GameIconBadge {
-            y: (parent.height - self.height) / 2;
-            size: 34px;
-            icon: root.entry.champion.icon;
-            fallback-text: root.entry.champion.initials;
+            lane: root.entry.lane;
+            size: 26px;
         }
         VerticalLayout {
             horizontal-stretch: 1;
             alignment: center;
             spacing: Space.xxs;
-            Text {
-                text: root.entry.champion.name;
-                color: Theme.text;
-                font-size: Type.body;
-                font-weight: 800;
-                overflow: elide;
+            HorizontalLayout {
+                spacing: Space.xs;
+                Text {
+                    text: Theme.lane-name(root.entry.lane);
+                    color: Theme.text;
+                    font-size: Type.small;
+                    font-weight: 800;
+                    overflow: elide;
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.entry.win-rate;
+                    color: root.entry.win-value >= 0.5 ? Theme.blue-soft : Theme.red-soft;
+                    font-family: Type.mono-family;
+                    font-size: Type.small;
+                    font-weight: 700;
+                    horizontal-alignment: right;
+                }
             }
             Text {
-                text: root.entry.queue + " · " + root.entry.when;
+                text: root.entry.games + " · " + root.entry.kda + " KDA";
                 color: Theme.muted;
+                font-family: Type.mono-family;
                 font-size: Type.label;
                 overflow: elide;
             }
         }
-        if root.entry.lane >= 0 && !root.compact: Roundel {
-            y: (parent.height - self.height) / 2;
-            lane: root.entry.lane;
-            size: 22px;
-        }
-        VerticalLayout {
-            width: 86px;
-            alignment: center;
-            spacing: Space.xxs;
+    }
+}
+
+component GameRowView inherits VerticalLayout {
+    in property <StatsGameRow> entry;
+    in property <bool> compact: false;
+    callback clicked();
+    spacing: Space.xxs;
+
+    if root.entry.session-header != "": Rectangle {
+        height: 26px;
+        background: Theme.backdrop;
+        border-radius: Theme.radius-sm;
+        HorizontalLayout {
+            padding-left: Space.sm;
+            padding-right: Space.sm;
+            spacing: Space.sm;
             Text {
-                text: root.entry.kda;
+                text: root.entry.session-header;
                 color: Theme.text;
                 font-family: Type.mono-family;
-                font-size: Type.small;
+                font-size: Type.label;
                 font-weight: 700;
-                horizontal-alignment: right;
+                vertical-alignment: center;
             }
             Text {
-                text: root.entry.ratio;
+                horizontal-stretch: 1;
+                text: root.entry.session-summary;
                 color: Theme.muted;
                 font-family: Type.mono-family;
                 font-size: Type.label;
                 horizontal-alignment: right;
+                vertical-alignment: center;
             }
         }
-        NumberCell { width: 64px; text: root.entry.cs-min; }
-        NumberCell { width: 64px; text: root.entry.dpm; }
-        if !root.compact: NumberCell { width: 56px; text: root.entry.duration; }
+    }
+
+    Pressable {
+        label: root.entry.champion.name + ", " + (root.entry.remake ? @tr("RMK") : (root.entry.win ? @tr("WIN") : @tr("LOSS"))) + ", " + root.entry.kda;
+        height: root.compact ? 56px : 62px;
+        opacity: root.entry.summarised ? 1.0 : 0.78;
+        clicked => { root.clicked(); }
+        HorizontalLayout {
+            padding-left: Space.sm;
+            padding-right: Space.sm;
+            spacing: Space.sm;
+            ResultChip {
+                y: (parent.height - self.height) / 2;
+                win: root.entry.win;
+                remake: root.entry.remake;
+            }
+            GameIconBadge {
+                y: (parent.height - self.height) / 2;
+                size: 36px;
+                icon: root.entry.champion.icon;
+                fallback-text: root.entry.champion.initials;
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                min-width: 110px;
+                alignment: center;
+                spacing: Space.xxs;
+                HorizontalLayout {
+                    spacing: Space.xs;
+                    alignment: start;
+                    Text {
+                        text: root.entry.champion.name;
+                        color: Theme.text;
+                        font-size: Type.body;
+                        font-weight: 800;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    if root.entry.opponent.id > 0 && !root.compact: Text {
+                        text: "VS";
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    if root.entry.opponent.id > 0 && !root.compact: GameIconBadge {
+                        y: (parent.height - self.height) / 2;
+                        size: 20px;
+                        icon: root.entry.opponent.icon;
+                        fallback-text: root.entry.opponent.initials;
+                        border: Theme.red;
+                        accessible-role: text;
+                        accessible-label: root.entry.opponent.name;
+                    }
+                    if root.entry.opponent.id > 0 && !root.compact: Text {
+                        text: root.entry.opponent.name;
+                        color: Theme.muted;
+                        font-size: Type.label;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+                Text {
+                    text: root.entry.queue + " · " + root.entry.duration + (root.entry.summarised ? "" : " · " + @tr("not in totals"));
+                    color: Theme.muted;
+                    font-size: Type.label;
+                    overflow: elide;
+                }
+            }
+            if root.entry.lane >= 0 && !root.compact: Roundel {
+                y: (parent.height - self.height) / 2;
+                lane: root.entry.lane;
+                size: 20px;
+            }
+            // Loadout: keystone, 2 spells, 6 items.
+            if !root.compact: HorizontalLayout {
+                spacing: Space.xxs;
+                alignment: end;
+                if root.entry.keystone.name != "": GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 22px;
+                    icon: root.entry.keystone.icon;
+                    fallback-text: root.entry.keystone.initials;
+                    border: Theme.gold-bright;
+                    accessible-role: text;
+                    accessible-label: root.entry.keystone.name;
+                }
+                if root.entry.spell-a.name != "": GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 20px;
+                    icon: root.entry.spell-a.icon;
+                    fallback-text: root.entry.spell-a.initials;
+                    accessible-role: text;
+                    accessible-label: root.entry.spell-a.name;
+                }
+                if root.entry.spell-b.name != "": GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 20px;
+                    icon: root.entry.spell-b.icon;
+                    fallback-text: root.entry.spell-b.initials;
+                    accessible-role: text;
+                    accessible-label: root.entry.spell-b.name;
+                }
+                for item in root.entry.items: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 22px;
+                    icon: item.icon;
+                    fallback-text: item.initials;
+                    accessible-role: text;
+                    accessible-label: item.name;
+                }
+            }
+            VerticalLayout {
+                width: 104px;
+                alignment: center;
+                spacing: Space.xxs;
+                Text {
+                    text: root.entry.kda;
+                    color: Theme.text;
+                    font-family: Type.mono-family;
+                    font-size: Type.small;
+                    font-weight: 700;
+                    horizontal-alignment: right;
+                }
+                Text {
+                    text: root.entry.kp != "" ? root.entry.ratio + " · " + root.entry.kp : root.entry.ratio;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    horizontal-alignment: right;
+                    overflow: elide;
+                }
+            }
+            VerticalLayout {
+                width: 60px;
+                alignment: center;
+                spacing: Space.xxs;
+                Text {
+                    text: root.entry.cs-min;
+                    color: Theme.text;
+                    font-family: Type.mono-family;
+                    font-size: Type.small;
+                    horizontal-alignment: right;
+                }
+                Text {
+                    text: root.entry.vs-min;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    horizontal-alignment: right;
+                }
+            }
+            if !root.compact: NumberCell { width: 52px; text: root.entry.dpm; }
+            ScorePill {
+                width: root.compact ? 42px : 82px;
+                score: root.entry.score;
+                score-value: root.entry.score-value;
+                badge: root.entry.badge;
+            }
+        }
     }
 }
 
@@ -1601,6 +2702,7 @@ component ChampionSummaryRow inherits Pressable {
 
 component MyStatsTab inherits VerticalLayout {
     in property <bool> compact: false;
+    callback inspect-game(StatsGameRow);
     spacing: Space.lg;
     alignment: start;
 
@@ -1629,12 +2731,63 @@ component MyStatsTab inherits VerticalLayout {
             }
             if StatsBridge.profile-block.state == 0: HorizontalLayout {
                 spacing: Space.xl;
-                alignment: start;
+                alignment: stretch;
+                if StatsBridge.ranked-card.has: Rectangle {
+                    min-width: 180px;
+                    border-radius: Theme.radius-sm;
+                    background: Theme.panel-raised;
+                    border-width: 1px;
+                    border-color: Theme.gold;
+                    VerticalLayout {
+                        padding: Space.sm;
+                        spacing: Space.xxs;
+                        alignment: center;
+                        Text {
+                            text: StatsBridge.ranked-card.tier-label;
+                            color: Theme.gold-bright;
+                            font-family: Type.display-family;
+                            font-size: Type.title;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: StatsBridge.ranked-card.lp + " · " + StatsBridge.ranked-card.record + " (" + StatsBridge.ranked-card.win-rate + ")";
+                            color: Theme.muted;
+                            font-family: Type.mono-family;
+                            font-size: Type.label;
+                            font-weight: 700;
+                        }
+                    }
+                }
                 Figure { value: StatsBridge.totals.games; label: @tr("GAMES"); }
                 Figure { value: StatsBridge.totals.win-rate; label: @tr("WIN RATE"); }
                 Figure { value: StatsBridge.totals.kda; label: @tr("KDA"); }
                 Figure { value: StatsBridge.totals.cs-min; label: @tr("CS/MIN"); }
                 Figure { value: StatsBridge.totals.dpm; label: @tr("DPM"); }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            if StatsBridge.profile-block.state == 0 && StatsBridge.role-summaries.length > 0: VerticalLayout {
+                spacing: Space.xs;
+                Divider { }
+                Text {
+                    text: @tr("By role");
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    font-weight: 700;
+                    letter-spacing: 0.6px;
+                }
+                HorizontalLayout {
+                    spacing: Space.xs;
+                    alignment: stretch;
+                    for role in StatsBridge.role-summaries: RoleSummaryTile {
+                        horizontal-stretch: 1;
+                        entry: role;
+                        selected: StatsBridge.my-role == role.lane;
+                        clicked => {
+                            StatsBridge.select-my-role(StatsBridge.my-role == role.lane ? -1 : role.lane);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1674,12 +2827,56 @@ component MyStatsTab inherits VerticalLayout {
     if StatsBridge.profile-block.state == 0: Card {
         VerticalLayout {
             padding: Space.lg;
-            spacing: Space.xxs;
+            spacing: Space.sm;
             BlockHeader {
                 title: @tr("Recent games");
+                detail: @tr("All queues listed; totals above count valid Summoner's Rift games.");
                 show-origin: false;
             }
-            Rectangle { height: Space.sm; }
+            // Queue & Role filter bar.
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                Action {
+                    text: @tr("All queues");
+                    selected: StatsBridge.my-queue == -1;
+                    clicked => { StatsBridge.select-my-queue(-1); }
+                }
+                Action {
+                    text: @tr("Ranked Solo/Duo");
+                    selected: StatsBridge.my-queue == 0;
+                    clicked => { StatsBridge.select-my-queue(0); }
+                }
+                Action {
+                    text: @tr("Ranked Flex");
+                    selected: StatsBridge.my-queue == 1;
+                    clicked => { StatsBridge.select-my-queue(1); }
+                }
+                Action {
+                    text: "ARAM";
+                    selected: StatsBridge.my-queue == 2;
+                    clicked => { StatsBridge.select-my-queue(2); }
+                }
+                Action {
+                    text: @tr("Arena");
+                    selected: StatsBridge.my-queue == 3;
+                    clicked => { StatsBridge.select-my-queue(3); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                Action {
+                    text: @tr("All roles");
+                    selected: StatsBridge.my-role == -1;
+                    clicked => { StatsBridge.select-my-role(-1); }
+                }
+                for lane in 5: RoleChip {
+                    lane: lane;
+                    selected: StatsBridge.my-role == lane;
+                    clicked => { StatsBridge.select-my-role(lane); }
+                }
+            }
             if StatsBridge.games.length == 0: Text {
                 text: @tr("No games in your recent history yet.");
                 color: Theme.muted;
@@ -1689,21 +2886,21 @@ component MyStatsTab inherits VerticalLayout {
                 height: 22px;
                 padding-left: Space.sm;
                 padding-right: Space.sm;
-                spacing: Space.md;
-                HeaderCell { width: 46px; text: @tr("RESULT"); }
-                Rectangle { width: 34px; }
+                spacing: Space.sm;
+                HeaderCell { width: 54px; text: @tr("RESULT"); }
+                Rectangle { width: 36px; }
                 HeaderCell { horizontal-stretch: 1; text: @tr("CHAMPION"); }
-                if !root.compact: Rectangle { width: 22px; }
-                HeaderCell { width: 86px; text: @tr("KDA"); horizontal-alignment: right; }
-                HeaderCell { width: 64px; text: @tr("CS/MIN"); horizontal-alignment: right; }
-                HeaderCell { width: 64px; text: @tr("DPM"); horizontal-alignment: right; }
-                if !root.compact: HeaderCell { width: 56px; text: @tr("TIME"); horizontal-alignment: right; }
+                if !root.compact: HeaderCell { width: 104px; text: @tr("KDA / KP"); horizontal-alignment: right; }
+                if root.compact: HeaderCell { width: 104px; text: @tr("KDA"); horizontal-alignment: right; }
+                HeaderCell { width: 60px; text: @tr("CS / VS"); horizontal-alignment: right; }
+                if !root.compact: HeaderCell { width: 52px; text: @tr("DPM"); horizontal-alignment: right; }
+                HeaderCell { width: root.compact ? 42px : 82px; text: @tr("SCORE"); horizontal-alignment: right; }
             }
             if StatsBridge.games.length > 0: Divider { }
             for row in StatsBridge.games: GameRowView {
                 entry: row;
                 compact: root.compact;
-                clicked => { StatsBridge.open-build(row.champion.id, row.lane); }
+                clicked => { root.inspect-game(row); }
             }
         }
     }
@@ -1727,76 +2924,202 @@ component StatsTabButton inherits Pressable {
 }
 
 // The Stats page in the companion stage.
-export component StatsPage inherits Flickable {
+export component StatsPage inherits Rectangle {
     in property <bool> compact: false;
-    content-height: body.preferred-height;
+    property <bool> inspecting: false;
+    property <StatsGameRow> inspected-game;
 
-    body := VerticalLayout {
+    Flickable {
         width: 100%;
-        padding: Theme.gutter;
-        spacing: Space.lg;
-        alignment: start;
+        height: 100%;
+        content-height: body.preferred-height;
 
-        HorizontalLayout {
-            spacing: Space.md;
-            alignment: stretch;
-            VerticalLayout {
-                horizontal-stretch: 1;
-                alignment: center;
-                spacing: Space.xxs;
-                Text {
-                    text: @tr("CHAMPION STATS");
-                    color: Theme.text;
-                    font-family: Type.display-family;
-                    font-size: Type.headline;
-                    font-weight: 800;
-                    letter-spacing: 0.4px;
-                }
-                Text {
-                    text: StatsBridge.online-enabled
-                        ? @tr("Your client and your games, plus global numbers from MetaBot.GG.")
-                        : @tr("From your client and your own games. Online stats are off.");
-                    color: Theme.muted;
-                    font-size: Type.small;
-                    overflow: elide;
-                }
-            }
-            if StatsBridge.dpm-url != "" && StatsBridge.tab != 3: ExternalLink {
-                y: (parent.height - self.height) / 2;
-                text: @tr("Open on dpm.lol");
-                label: @tr("Open this page on dpm.lol in your browser");
-                url: StatsBridge.dpm-url;
-            }
-        }
-
-        HorizontalLayout {
-            spacing: Space.xs;
+        body := VerticalLayout {
+            width: 100%;
+            padding: Theme.gutter;
+            spacing: Space.lg;
             alignment: start;
-            StatsTabButton {
-                text: @tr("Champion Build");
-                selected: StatsBridge.tab == 0;
-                clicked => { StatsBridge.select-tab(0); }
+
+            HorizontalLayout {
+                spacing: Space.md;
+                alignment: stretch;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: Space.xxs;
+                    Text {
+                        text: @tr("CHAMPION STATS");
+                        color: Theme.text;
+                        font-family: Type.display-family;
+                        font-size: Type.headline;
+                        font-weight: 800;
+                        letter-spacing: 0.4px;
+                    }
+                    Text {
+                        text: StatsBridge.online-enabled
+                            ? @tr("Your client and your games, plus global numbers from MetaBot.GG.")
+                            : @tr("From your client and your own games. Online stats are off.");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        overflow: elide;
+                    }
+                }
+                if StatsBridge.dpm-url != "" && StatsBridge.tab != 3: ExternalLink {
+                    y: (parent.height - self.height) / 2;
+                    text: @tr("Open on dpm.lol");
+                    label: @tr("Open this page on dpm.lol in your browser");
+                    url: StatsBridge.dpm-url;
+                }
             }
-            StatsTabButton {
-                text: @tr("Tier List");
-                selected: StatsBridge.tab == 1;
-                clicked => { StatsBridge.select-tab(1); }
+
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+                StatsTabButton {
+                    text: @tr("Champion Build");
+                    selected: StatsBridge.tab == 0;
+                    clicked => { StatsBridge.select-tab(0); }
+                }
+                StatsTabButton {
+                    text: @tr("Tier List");
+                    selected: StatsBridge.tab == 1;
+                    clicked => { StatsBridge.select-tab(1); }
+                }
+                StatsTabButton {
+                    text: @tr("Matchups");
+                    selected: StatsBridge.tab == 2;
+                    clicked => { StatsBridge.select-tab(2); }
+                }
+                StatsTabButton {
+                    text: @tr("My Stats");
+                    selected: StatsBridge.tab == 3;
+                    clicked => { StatsBridge.select-tab(3); }
+                }
             }
-            StatsTabButton {
-                text: @tr("Matchups");
-                selected: StatsBridge.tab == 2;
-                clicked => { StatsBridge.select-tab(2); }
-            }
-            StatsTabButton {
-                text: @tr("My Stats");
-                selected: StatsBridge.tab == 3;
-                clicked => { StatsBridge.select-tab(3); }
+
+            if StatsBridge.tab == 0: BuildTab { compact: root.compact; }
+            if StatsBridge.tab == 1: TierTab { compact: root.compact; }
+            if StatsBridge.tab == 2: MatchupsTab { compact: root.compact; }
+            if StatsBridge.tab == 3: MyStatsTab {
+                compact: root.compact;
+                inspect-game(row) => {
+                    root.inspected-game = row;
+                    root.inspecting = true;
+                }
             }
         }
+    }
 
-        if StatsBridge.tab == 0: BuildTab { compact: root.compact; }
-        if StatsBridge.tab == 1: TierTab { compact: root.compact; }
-        if StatsBridge.tab == 2: MatchupsTab { compact: root.compact; }
-        if StatsBridge.tab == 3: MyStatsTab { compact: root.compact; }
+    if root.inspecting: ModalSheet {
+        title: @tr("Match inspector");
+        subtitle: root.inspected-game.queue + " · " + root.inspected-game.duration
+            + (root.inspected-game.when != "" ? " · " + root.inspected-game.when : "");
+        panel-width: 620px;
+        dismiss => { root.inspecting = false; }
+
+        VerticalLayout {
+            spacing: Space.md;
+            HorizontalLayout {
+                spacing: Space.md;
+                GameIconBadge {
+                    size: 48px;
+                    icon: root.inspected-game.champion.icon;
+                    fallback-text: root.inspected-game.champion.initials;
+                    border: Theme.gold-bright;
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: Space.xs;
+                    HorizontalLayout {
+                        spacing: Space.sm;
+                        Text {
+                            text: root.inspected-game.champion.name;
+                            color: Theme.text;
+                            font-family: Type.display-family;
+                            font-size: Type.title;
+                            font-weight: 800;
+                        }
+                        ResultChip {
+                            y: (parent.height - self.height) / 2;
+                            win: root.inspected-game.win;
+                            remake: root.inspected-game.remake;
+                        }
+                        if root.inspected-game.score != "": Text {
+                            text: @tr("Score {0}", root.inspected-game.score);
+                            color: Theme.gold-bright;
+                            font-family: Type.mono-family;
+                            font-size: Type.small;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if root.inspected-game.opponent.id > 0: HorizontalLayout {
+                        spacing: Space.xs;
+                        Text {
+                            text: @tr("vs {0}", root.inspected-game.opponent.name);
+                            color: Theme.muted;
+                            font-size: Type.small;
+                            vertical-alignment: center;
+                        }
+                        GameIconBadge {
+                            size: 20px;
+                            icon: root.inspected-game.opponent.icon;
+                            fallback-text: root.inspected-game.opponent.initials;
+                            border: Theme.red;
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Space.sm;
+                Figure { horizontal-stretch: 1; label: @tr("KDA"); value: root.inspected-game.kda; }
+                Figure { horizontal-stretch: 1; label: @tr("RATIO"); value: root.inspected-game.ratio; }
+                if root.inspected-game.kp != "": Figure { horizontal-stretch: 1; label: @tr("KP"); value: root.inspected-game.kp; }
+                Figure { horizontal-stretch: 1; label: @tr("CS / MIN"); value: root.inspected-game.cs-min; }
+                Figure { horizontal-stretch: 1; label: @tr("DPM"); value: root.inspected-game.dpm; }
+            }
+
+            HorizontalLayout {
+                spacing: Space.md;
+                alignment: start;
+                if root.inspected-game.keystone.name != "": GameIconBadge {
+                    size: 32px;
+                    icon: root.inspected-game.keystone.icon;
+                    fallback-text: root.inspected-game.keystone.initials;
+                    border: Theme.gold;
+                }
+                if root.inspected-game.spell-a.name != "": GameIconBadge {
+                    size: 28px;
+                    icon: root.inspected-game.spell-a.icon;
+                    fallback-text: root.inspected-game.spell-a.initials;
+                }
+                if root.inspected-game.spell-b.name != "": GameIconBadge {
+                    size: 28px;
+                    icon: root.inspected-game.spell-b.icon;
+                    fallback-text: root.inspected-game.spell-b.initials;
+                }
+                for it in root.inspected-game.items: GameIconBadge {
+                    size: 32px;
+                    icon: it.icon;
+                    fallback-text: it.initials;
+                }
+            }
+
+            Divider { }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Space.sm;
+                Action {
+                    primary: true;
+                    text: @tr("Open champion build");
+                    clicked => {
+                        root.inspecting = false;
+                        StatsBridge.open-build(root.inspected-game.champion.id, root.inspected-game.lane);
+                    }
+                }
+            }
+        }
     }
 }

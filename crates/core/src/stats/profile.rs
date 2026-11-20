@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use hypatia_shared::{
-    summarised_games, PlayerChampionStats, PlayerGame, PlayerProfile, RuneSetup, StatsOrigin,
+    summarised_games, PlayerChampionStats, PlayerGame, PlayerProfile, Position, RoleSummary,
+    RuneSetup, SessionGroup, SpellPair, StatsOrigin,
 };
 
 pub use hypatia_shared::REMAKE_SECS;
@@ -16,15 +17,112 @@ const NON_BUILD_ITEMS: &[i64] = &[
 /// How many of a champion's most frequent items are kept.
 const TOP_ITEMS: usize = 6;
 
-/// Sorts `games` newest first and summarizes them per champion.
+/// Sorts `games` newest first and summarizes them per champion and per role.
 pub fn build_profile(mut games: Vec<PlayerGame>, origin: StatsOrigin) -> PlayerProfile {
     games.sort_by_key(|a| std::cmp::Reverse(a.started_at_ms));
     let champions = aggregate_champions(&games);
+    let roles = aggregate_roles(&games);
     PlayerProfile {
         origin,
         games,
         champions,
+        roles,
     }
+}
+
+/// Per-role performance breakdown across the 5 Summoner's Rift positions, over
+/// [`summarised_games`]. Ordered by games played descending, then canonical lane order.
+pub fn aggregate_roles(games: &[PlayerGame]) -> Vec<RoleSummary> {
+    const LANES: [Position; 5] = [
+        Position::Top,
+        Position::Jungle,
+        Position::Mid,
+        Position::Bot,
+        Position::Support,
+    ];
+    let summarised = summarised_games(games);
+    let mut out: Vec<RoleSummary> = LANES
+        .iter()
+        .filter_map(|&pos| {
+            let lane_games: Vec<&PlayerGame> = summarised
+                .iter()
+                .copied()
+                .filter(|g| g.position == Some(pos))
+                .collect();
+            if lane_games.is_empty() {
+                return None;
+            }
+            let wins = lane_games.iter().filter(|g| g.win).count() as u32;
+            let (k, d, a) = lane_games.iter().fold((0u32, 0u32, 0u32), |acc, g| {
+                (acc.0 + g.kills, acc.1 + g.deaths, acc.2 + g.assists)
+            });
+            let minutes: f32 = lane_games
+                .iter()
+                .map(|g| g.duration_secs as f32 / 60.0)
+                .sum::<f32>()
+                .max(1.0);
+            let cs: u32 = lane_games.iter().map(|g| g.cs).sum();
+            let dmg: u32 = lane_games.iter().map(|g| g.damage_to_champions).sum();
+            Some(RoleSummary {
+                position: pos,
+                games: lane_games.len() as u32,
+                wins,
+                kda: (k + a) as f32 / d.max(1) as f32,
+                cs_per_min: cs as f32 / minutes,
+                dpm: dmg as f32 / minutes,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.games
+            .cmp(&a.games)
+            .then_with(|| a.position.desktop_index().cmp(&b.position.desktop_index()))
+    });
+    out
+}
+
+/// Groups newest-first games into UTC calendar-day sessions with W-L record (excluding remakes)
+/// and average performance score.
+pub fn group_sessions(games: &[&PlayerGame]) -> Vec<SessionGroup> {
+    let mut groups: Vec<SessionGroup> = Vec::new();
+    for (idx, g) in games.iter().enumerate() {
+        let day_key = if g.started_at_ms > 0 {
+            g.started_at_ms.div_euclid(86_400_000)
+        } else {
+            0
+        };
+        if let Some(last) = groups.last_mut().filter(|s| s.day_key == day_key) {
+            last.game_indices.push(idx);
+        } else {
+            groups.push(SessionGroup {
+                day_key,
+                wins: 0,
+                losses: 0,
+                avg_score: None,
+                game_indices: vec![idx],
+            });
+        }
+    }
+    for group in &mut groups {
+        let mut score_sum = 0u32;
+        let mut score_count = 0u32;
+        for &idx in &group.game_indices {
+            let g = games[idx];
+            if !g.is_remake() {
+                if g.win {
+                    group.wins += 1;
+                } else {
+                    group.losses += 1;
+                }
+            }
+            if let Some(score) = g.performance_score {
+                score_sum += u32::from(score);
+                score_count += 1;
+            }
+        }
+        group.avg_score = (score_count > 0).then(|| score_sum as f32 / score_count as f32);
+    }
+    groups
 }
 
 /// One summary per champion, most played first (ties: most recent first), over
@@ -52,7 +150,7 @@ pub fn aggregate_champions(games: &[PlayerGame]) -> Vec<PlayerChampionStats> {
 }
 
 /// Summary of one champion's games: per-game KDA averages, per-minute rates over the total
-/// time played, the most played rune page and the most frequent build items.
+/// time played, the most played rune page, spells, and the most frequent build items.
 pub fn summarize(champion_id: i64, games: &[&PlayerGame]) -> PlayerChampionStats {
     let n = games.len() as f32;
     let minutes: f32 = games.iter().map(|g| g.duration_secs as f32 / 60.0).sum();
@@ -82,6 +180,7 @@ pub fn summarize(champion_id: i64, games: &[&PlayerGame]) -> PlayerChampionStats
         gold_per_min: per_min(|g| g.gold),
         vision_per_min: per_min(|g| g.vision_score),
         runes: most_used_runes(games),
+        spells: most_used_spells(games),
         items: most_used_items(games),
     }
 }
@@ -105,6 +204,32 @@ fn most_used_runes(games: &[&PlayerGame]) -> Option<RuneSetup> {
         .rev()
         .max_by_key(|(_, n)| *n)
         .map(|(r, _)| r.clone())
+}
+
+fn most_used_spells(games: &[&PlayerGame]) -> Option<SpellPair> {
+    let mut tally: Vec<(SpellPair, u32)> = Vec::new();
+    for g in games {
+        if g.spells.first <= 0 || g.spells.second <= 0 {
+            continue;
+        }
+        let pair = if g.spells.first <= g.spells.second {
+            g.spells
+        } else {
+            SpellPair {
+                first: g.spells.second,
+                second: g.spells.first,
+            }
+        };
+        match tally.iter_mut().find(|(p, _)| *p == pair) {
+            Some((_, n)) => *n += 1,
+            None => tally.push((pair, 1)),
+        }
+    }
+    tally
+        .into_iter()
+        .rev()
+        .max_by_key(|(_, n)| *n)
+        .map(|(p, _)| p)
 }
 
 fn most_used_items(games: &[&PlayerGame]) -> Vec<i64> {
@@ -236,8 +361,57 @@ mod tests {
     #[test]
     fn empty_input_gives_an_empty_profile() {
         let profile = build_profile(Vec::new(), StatsOrigin::Local);
-        assert!(profile.games.is_empty() && profile.champions.is_empty());
+        assert!(
+            profile.games.is_empty() && profile.champions.is_empty() && profile.roles.is_empty()
+        );
         let s = summarize(1, &[]);
         assert_eq!((s.games, s.kills, s.dpm), (0, 0.0, 0.0));
+        assert_eq!(s.spells, None);
+    }
+
+    #[test]
+    fn aggregates_roles_and_groups_sessions() {
+        let day1 = 20_412 * 86_400_000;
+        let day2 = 20_413 * 86_400_000;
+        let mut g1 = game(1, 103, day2 + 7_200_000, true);
+        g1.position = Some(Position::Mid);
+        g1.queue = Some(hypatia_shared::StatsQueue::RankedSolo);
+        g1.performance_score = Some(86);
+
+        let mut g2 = game(2, 103, day2 + 3_600_000, false);
+        g2.position = Some(Position::Mid);
+        g2.queue = Some(hypatia_shared::StatsQueue::RankedSolo);
+        g2.performance_score = Some(62);
+
+        let mut g3 = game(3, 222, day1 + 3_600_000, true);
+        g3.position = Some(Position::Bot);
+        g3.queue = Some(hypatia_shared::StatsQueue::RankedSolo);
+        g3.performance_score = Some(78);
+
+        let mut remake = game(4, 99, day2 + 1_000_000, false);
+        remake.position = Some(Position::Mid);
+        remake.queue = Some(hypatia_shared::StatsQueue::RankedSolo);
+        remake.duration_secs = 200;
+
+        let profile = build_profile(vec![g1, g2, g3, remake], StatsOrigin::Local);
+        assert_eq!(profile.roles.len(), 2);
+        assert_eq!(profile.roles[0].position, Position::Mid);
+        assert_eq!((profile.roles[0].games, profile.roles[0].wins), (2, 1));
+        assert_eq!(profile.roles[1].position, Position::Bot);
+        assert_eq!((profile.roles[1].games, profile.roles[1].wins), (1, 1));
+
+        let refs: Vec<&PlayerGame> = profile.games.iter().collect();
+        let sessions = group_sessions(&refs);
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0].day_key, 20_413);
+        assert_eq!(
+            (sessions[0].wins, sessions[0].losses),
+            (1, 1),
+            "remake excluded from W/L"
+        );
+        assert!((sessions[0].avg_score.unwrap() - 74.0).abs() < 1e-3);
+        assert_eq!(sessions[0].game_indices, vec![0, 1, 2]);
+        assert_eq!(sessions[1].day_key, 20_412);
+        assert_eq!((sessions[1].wins, sessions[1].losses), (1, 0));
     }
 }

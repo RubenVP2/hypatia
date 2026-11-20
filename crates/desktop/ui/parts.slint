@@ -67,6 +67,14 @@ export struct PlayerLine {
     level: int,
     kda: string,
     cs: int,
+    // Optional extra telemetry line (live CS/m + lane diff, or post-game KP% / gold / dmg).
+    sub-detail: string,
+    // Optional badge ("MVP", "ACE") and score ("91").
+    badge: string,
+    score: string,
+    // Optional 0..1 ratio and label for EndOfGame Damage & Gold comparison mode.
+    bar-ratio: float,
+    bar-label: string,
     is-self: bool,
     dead: bool,
     respawn: string,
@@ -1878,7 +1886,8 @@ export component BanChip inherits Rectangle {
 export component PlayerRow inherits Rectangle {
     in property <PlayerLine> p;
     in property <bool> mine: true;
-    height: 50px;
+    in property <bool> show-bar: false;
+    height: root.show-bar ? 56px : 52px;
     border-radius: Theme.radius;
     background: p.is-self ? Theme.panel-raised : Theme.panel;
     clip: true;
@@ -1928,22 +1937,77 @@ export component PlayerRow inherits Rectangle {
             }
         }
         VerticalLayout {
+            horizontal-stretch: 1;
             alignment: center;
-            spacing: 1px;
-            Text {
-                text: (root.p.is-self ? @tr("{0} (you)", root.p.champion) : root.p.champion);
-                color: Theme.text;
-                font-size: Type.body;
-                font-weight: 800;
-                overflow: elide;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: Space.xs;
+                Text {
+                    text: (root.p.is-self ? @tr("{0} (you)", root.p.champion) : root.p.champion);
+                    color: Theme.text;
+                    font-size: Type.body;
+                    font-weight: 800;
+                    overflow: elide;
+                }
+                if root.p.badge != "": Rectangle {
+                    y: (parent.height - self.height) / 2;
+                    height: 18px;
+                    width: badge-lbl.preferred-width + 10px;
+                    border-radius: Theme.radius-sm;
+                    background: root.p.badge == "MVP" ? Theme.gold-bright.with-alpha(0.24) : Theme.accent.with-alpha(0.18);
+                    border-width: 1px;
+                    border-color: root.p.badge == "MVP" ? Theme.gold-bright : Theme.accent;
+                    badge-lbl := Text {
+                        text: root.p.badge;
+                        color: root.p.badge == "MVP" ? Theme.gold-bright : Theme.accent;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.p.score != "": Text {
+                    text: root.p.score;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
             }
-            Text {
+            if !root.show-bar: Text {
                 text: root.p.dead
                     ? @tr("Respawn {0}", root.p.respawn)
-                    : @tr("Lvl {0} · {1} CS", root.p.level, root.p.cs);
+                    : (root.p.sub-detail != ""
+                        ? @tr("Lvl {0} · {1} CS · {2}", root.p.level, root.p.cs, root.p.sub-detail)
+                        : @tr("Lvl {0} · {1} CS", root.p.level, root.p.cs));
                 color: root.p.dead ? Theme.danger : Theme.muted;
                 font-size: Type.small;
                 font-weight: root.p.dead ? 600 : 400;
+                overflow: elide;
+            }
+            if root.show-bar: VerticalLayout {
+                spacing: 2px;
+                Rectangle {
+                    height: 6px;
+                    border-radius: 3px;
+                    background: Theme.panel-raised;
+                    Rectangle {
+                        x: 0px;
+                        width: parent.width * max(0.02, min(1.0, root.p.bar-ratio));
+                        height: 100%;
+                        border-radius: 3px;
+                        background: root.mine ? Theme.blue : Theme.red;
+                    }
+                }
+                Text {
+                    text: root.p.bar-label;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    overflow: elide;
+                }
             }
         }
         Text {

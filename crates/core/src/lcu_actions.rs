@@ -126,6 +126,20 @@ pub fn resolve_lcu_command_localized(
                 body: None,
             }])
         }
+        RemoteCommand::SwapBenchChampion { champion_id } => {
+            if *champion_id <= 0 {
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid champion_id", "champion_id invalide"),
+                    champion_id
+                );
+            }
+            Ok(vec![ResolvedLcuCall {
+                method: Method::POST,
+                path: format!("/lol-champ-select/v1/session/bench/swap/{champion_id}"),
+                body: None,
+            }])
+        }
         RemoteCommand::SetSummonerSpells {
             spell1_id,
             spell2_id,
@@ -511,6 +525,7 @@ pub fn affected_lcu_uris(cmd: &RemoteCommand) -> &'static [&'static str] {
         | RemoteCommand::RequestChampionTrade { .. }
         | RemoteCommand::CancelChampionTrade { .. } => &["/lol-champ-select/v1/session"],
         RemoteCommand::LockAction { .. }
+        | RemoteCommand::SwapBenchChampion { .. }
         | RemoteCommand::SetSkin { .. }
         | RemoteCommand::RespondChampionTrade { .. } => &[
             "/lol-champ-select/v1/session",
@@ -576,6 +591,17 @@ mod tests {
             swap[0].path,
             "/lol-champ-select/v1/session/position-swaps/3/request"
         );
+
+        let bench = resolve_lcu_command_localized(
+            &RemoteCommand::SwapBenchChampion { champion_id: 222 },
+            None,
+            Lang::En,
+        )
+        .unwrap();
+        assert_eq!(bench.len(), 1);
+        assert_eq!(bench[0].method, Method::POST);
+        assert_eq!(bench[0].path, "/lol-champ-select/v1/session/bench/swap/222");
+        assert_eq!(bench[0].body, None);
     }
 
     #[test]
@@ -597,6 +623,20 @@ mod tests {
             },
             None,
             Lang::En,
+        )
+        .is_err());
+
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SwapBenchChampion { champion_id: 0 },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SwapBenchChampion { champion_id: -5 },
+            None,
+            Lang::Fr,
         )
         .is_err());
 

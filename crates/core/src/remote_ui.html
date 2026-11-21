@@ -159,7 +159,7 @@ button:disabled { cursor: default; }
 .scene.defeat .veil { background-color: rgba(40, 52, 70, 0.55); }
 .scene.defeat img { filter: saturate(0.35); }
 
-/* ---- Top bar --------------------------------------------------------------------------------- */
+/* ---- Top bar + 5-step Hextech phase rail ---------------------------------------------------- */
 .topbar {
   position: sticky; top: 0; z-index: 20;
   padding-top: env(safe-area-inset-top);
@@ -171,12 +171,25 @@ button:disabled { cursor: default; }
 .topbar-inner {
   max-width: 560px; margin: 0 auto;
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 8px 6px 16px;
-  min-height: 56px;
+  padding: 5px 8px 5px 14px;
+  min-height: 52px;
 }
+.phase-rail {
+  max-width: 560px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px;
+  padding: 0 14px 4px;
+}
+.phase-rail[hidden] { display: none; }
+.phase-rail i {
+  display: block; height: 3px; border-radius: 2px;
+  background: var(--rule);
+  transition: background-color 240ms ease;
+}
+.phase-rail i.done { background: var(--gold-bright); }
+.phase-rail i.now { background: var(--signal); }
 .who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
-.avatar { position: relative; width: 36px; height: 36px; flex-shrink: 0; }
-.avatar .pt { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--gold-bright); }
+.avatar { position: relative; width: 34px; height: 34px; flex-shrink: 0; }
+.avatar .pt { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--gold-bright); }
 .conn-dot {
   position: absolute; right: -1px; bottom: -1px;
   width: 11px; height: 11px; border-radius: 50%;
@@ -192,7 +205,7 @@ button:disabled { cursor: default; }
   color: var(--gold-bright);
 }
 .brand-sub {
-  margin-top: 3px;
+  margin-top: 2px;
   font-size: 12px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -236,15 +249,17 @@ button:disabled { cursor: default; }
   position: relative; z-index: 15;
   display: flex; align-items: center; gap: 6px;
   max-width: 560px; margin: 0 auto;
-  padding: 8px 16px 0;
+  padding: 6px 14px 0;
   overflow-x: auto; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, #000 92%, transparent);
 }
 .demo-strip::-webkit-scrollbar { display: none; }
-.demo-label { font: 700 11px var(--font-mono); letter-spacing: 0.1em; color: var(--muted); flex-shrink: 0; }
+.demo-label { font: 700 11px var(--font-mono); letter-spacing: 0.1em; color: var(--gold-bright); flex-shrink: 0; }
 .demo-chip {
   flex-shrink: 0;
-  height: 32px; padding: 0 11px;
-  border-radius: 16px;
+  height: 30px; padding: 0 11px;
+  border-radius: 15px;
   border: 1px solid var(--rule);
   background: var(--glass);
   font-size: 12px; font-weight: 600; color: var(--muted);
@@ -255,34 +270,35 @@ button:disabled { cursor: default; }
 .shell {
   position: relative; z-index: 1;
   max-width: 560px; margin: 0 auto;
-  padding: 12px 16px calc(var(--dock-h) + 24px);
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 10px 14px calc(var(--dock-h) + 20px);
+  display: flex; flex-direction: column; gap: 10px;
 }
-#view-root { display: flex; flex-direction: column; gap: 12px; }
-#view-root.enter { animation: enter 260ms ease-out; }
-@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#view-root { display: flex; flex-direction: column; gap: 10px; }
+#view-root.enter { animation: enter 240ms ease-out; }
+@keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 .panel {
   position: relative;
   background: var(--glass);
   border: 1px solid var(--rule);
   border-radius: var(--r);
-  padding: 14px;
+  padding: 12px 14px;
   box-shadow: inset 0 1px 0 var(--bevel);
 }
 .panel.flush { padding: 0; overflow: hidden; }
 .eyebrow {
   font: 700 12px/1.2 var(--font-display);
-  letter-spacing: 0.16em; text-transform: uppercase;
+  letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--gold-bright);
 }
 .title {
-  margin: 2px 0 0;
-  font: 800 26px/1.05 var(--font-display);
+  margin: 0;
+  font: 800 25px/1.05 var(--font-display);
   letter-spacing: 0.02em; text-transform: uppercase;
 }
 .title.sm { font-size: 20px; }
-.meta { font-size: 13px; color: var(--muted); }
+.meta { font-size: 12px; color: var(--muted); }
+.sub-meta { margin-top: 3px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
 .row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .stack { display: flex; flex-direction: column; gap: 8px; }
@@ -293,7 +309,7 @@ button:disabled { cursor: default; }
 .rule { height: 1px; background: var(--rule); margin: 12px 0; }
 
 /* Spotlight: the player's turn or a ready check. The ring fades out twice, then holds still. */
-.spot { border-color: var(--signal); background: linear-gradient(180deg, var(--signal-soft), transparent 70%), var(--glass); }
+.spot { border-color: var(--signal); background: linear-gradient(180deg, var(--signal-soft), transparent 72%), var(--glass); }
 .spot::after {
   content: ""; position: absolute; inset: -4px;
   border: 2px solid var(--signal); border-radius: 9px;
@@ -310,14 +326,15 @@ button:disabled { cursor: default; }
   border-radius: var(--r-sm);
   font-weight: 800; font-size: 14px;
   letter-spacing: 0.02em;
-  transition: transform 120ms ease, opacity 160ms ease;
+  transition: transform 110ms ease, opacity 160ms ease, border-color 140ms ease;
 }
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled { opacity: 0.4; }
 .btn-plate { background: var(--plate); color: var(--on-plate); }
 .btn-ghost { border: 1px solid var(--rule-strong); background: var(--glass-row); }
+.btn-dirty { border-color: var(--gold-bright); color: var(--gold-bright); background: var(--raised); }
 .btn-danger { border: 1px solid var(--danger); color: var(--danger); background: var(--danger-soft); }
-.btn-sm { min-height: 36px; font-size: 12px; padding: 0 10px; }
+.btn-sm { min-height: 44px; font-size: 12px; padding: 0 10px; }
 .btn-block { width: 100%; }
 .btn-signal {
   width: 100%; min-height: 48px;
@@ -328,7 +345,7 @@ button:disabled { cursor: default; }
 .btn-signal .pt { width: 32px; height: 32px; border: 1px solid rgba(0, 0, 0, 0.35); }
 .btn-signal .lock-name { margin-left: auto; font-size: 18px; }
 .btn-accept {
-  width: 100%; min-height: 58px;
+  width: 100%; min-height: 56px;
   background: var(--green); color: #06130b;
   font: 800 22px var(--font-display); letter-spacing: 0.08em;
 }
@@ -346,18 +363,24 @@ button:disabled { cursor: default; }
 }
 .dock[hidden] { display: none; }
 .demo-strip[hidden] { display: none; }
-.dock-inner { max-width: 560px; margin: 0 auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.dock-inner { max-width: 560px; margin: 0 auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
 .tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .tab {
-  min-height: var(--tap);
+  min-height: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 4px 2px;
   border-radius: var(--r-sm);
-  font: 700 14px var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
+  border: 1px solid transparent;
+  font: 700 11px/1.1 var(--font-display); letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--muted);
   position: relative;
+  min-width: 0;
 }
+.tab svg { width: 17px; height: 17px; flex-shrink: 0; }
+.tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab.active { background: var(--plate); color: var(--on-plate); }
 .tab .tab-dot {
-  position: absolute; top: 8px; right: 10px;
+  position: absolute; top: 5px; right: 8px;
   width: 7px; height: 7px; border-radius: 50%; background: var(--signal);
 }
 
@@ -375,9 +398,11 @@ button:disabled { cursor: default; }
 }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }
 
-.alert-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
-.alert-card .icon { color: var(--accent); }
+.alert-card { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; }
+.alert-card .icon { color: var(--accent); width: 18px; height: 18px; }
 .alert-card[hidden] { display: none; }
+.alert-close { width: 44px; height: 44px; display: inline-grid; place-items: center; border-radius: var(--r-sm); color: var(--muted); flex-shrink: 0; }
+.alert-close:active { background: var(--raised); }
 
 /* ---- Portraits and client art ---------------------------------------------------------------- */
 .pt {
@@ -443,20 +468,22 @@ button:disabled { cursor: default; }
 .u2 .drain i { background: var(--danger); }
 
 /* ---- Lobby ------------------------------------------------------------------------------------- */
-.role-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 8px; }
+.role-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 8px; }
 .role-slot {
   display: flex; align-items: center; gap: 10px;
-  min-height: 64px; padding: 10px;
+  min-height: 62px; padding: 10px;
   border: 1px solid var(--rule); border-radius: var(--r);
   background: var(--glass-row); text-align: left;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
-.role-slot.focus { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px var(--gold-bright); }
+.role-slot.focus { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px var(--gold-bright); background: var(--raised); }
+.role-slot.optional { opacity: 0.55; }
 .role-slot .slot-k { font: 700 11px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
 .role-slot .slot-v { font: 800 20px/1.1 var(--font-display); text-transform: uppercase; }
-.lane-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.lane-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
 .lane-btn {
   position: relative;
-  min-height: 62px;
+  min-height: 60px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   border: 1px solid var(--rule); border-radius: var(--r);
   background: var(--glass-row);
@@ -464,20 +491,26 @@ button:disabled { cursor: default; }
 }
 .lane-btn.chosen { border-color: var(--text); background: var(--raised); }
 .lane-btn .rank {
-  position: absolute; top: 5px; right: 6px;
+  position: absolute; top: 5px; right: 7px;
   font: 800 12px var(--font-display); color: var(--gold-bright);
 }
 
 /* ---- Queue and ready check medallion -------------------------------------------------------- */
-.hero-center { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 22px 14px; }
-.dial { position: relative; width: 210px; height: 210px; margin: 10px 0 4px; display: grid; place-items: center; }
+.hero-center { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 14px; }
+.dial { position: relative; width: 204px; height: 204px; margin: 8px 0 4px; display: grid; place-items: center; }
 .dial svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .dial-track { fill: none; stroke: var(--rule); stroke-width: 2; }
 .dial-ticks { fill: none; stroke: var(--gold); stroke-width: 6; stroke-dasharray: 0.6 3.566; }
-.dial-inner { fill: none; stroke: var(--gold-bright); stroke-width: 1; opacity: 0.6; }
+.dial-prog {
+  fill: none; stroke: var(--gold-bright); stroke-width: 3;
+  stroke-dasharray: 100; transform-origin: 60px 60px; transform: rotate(-90deg);
+  transition: stroke-dashoffset 250ms linear;
+}
+.dial-inner { fill: none; stroke: var(--gold-bright); stroke-width: 1; opacity: 0.45; }
 .dial .js-clock-wrap { align-items: center; }
+.queue-roles { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 5px 10px; border-radius: var(--r); border: 1px solid var(--rule); background: var(--glass-row); font-size: 12px; font-weight: 700; }
 
-.medal { position: relative; width: 236px; height: 236px; margin: 6px auto 4px; display: grid; place-items: center; }
+.medal { position: relative; width: 224px; height: 224px; margin: 4px auto; display: grid; place-items: center; }
 .medal .ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 .medal .ring-track { fill: none; stroke: var(--rule); stroke-width: 6; }
 .medal .ring-fill {
@@ -491,22 +524,74 @@ button:disabled { cursor: default; }
 .medal.declined .ring-fill { stroke: var(--danger); stroke-dashoffset: 0 !important; }
 .medal-core {
   position: relative;
-  width: 192px; height: 192px; border-radius: 50%;
+  width: 182px; height: 182px; border-radius: 50%;
   overflow: hidden;
   background: radial-gradient(circle at 50% 40%, #1c3346, #070b12 72%);
   border: 2px solid var(--gold);
   display: grid; place-items: center;
 }
 .medal-core::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, rgba(5, 8, 13, 0.15), rgba(5, 8, 13, 0.62)); }
-.medal-num { position: relative; z-index: 1; font: 800 72px/1 var(--font-display); color: #eef0f5; font-variant-numeric: tabular-nums; }
+.medal-num { position: relative; z-index: 1; font: 800 70px/1 var(--font-display); color: #eef0f5; font-variant-numeric: tabular-nums; }
 .medal .js-clock-wrap { position: absolute; inset: 0; display: grid; place-items: center; }
 .medal .js-clock-wrap > * { grid-area: 1 / 1; }
 .medal-mark { position: relative; z-index: 1; width: 72px; height: 72px; }
 .medal.accepted .medal-mark { color: var(--accent); }
 .medal.declined .medal-mark { color: var(--danger); }
 
-/* ---- Champion select: header plate and draft board ------------------------------------------- */
-.plate-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+/* ---- Champion select: turn HUD, compact tactical draft strip & full board ------------------- */
+.plate-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.draft-hud { padding: 8px 10px; display: flex; flex-direction: column; gap: 7px; }
+.draft-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.draft-slot {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 5px 3px 4px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rule);
+  background: var(--glass-row);
+  min-width: 0;
+}
+.draft-slot.self { border-color: var(--gold-bright); background: var(--raised); }
+.draft-slot.acting { border-color: var(--signal); background: var(--signal-soft); }
+.draft-slot .pt-wrap { position: relative; width: 38px; height: 38px; }
+.draft-slot .lane-pip {
+  position: absolute; left: -4px; top: -4px; z-index: 2;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  background: var(--shell); border: 1px solid currentColor;
+}
+.draft-slot .lock-pip {
+  position: absolute; right: -3px; bottom: -3px; z-index: 2;
+  width: 14px; height: 14px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  background: var(--gold-bright); color: var(--on-plate);
+}
+.draft-slot-nm { width: 100%; text-align: center; font: 700 11px/1.15 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-slot.empty-slot .draft-slot-nm { color: var(--muted); }
+.draft-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding-top: 6px; border-top: 1px solid var(--rule);
+  min-width: 0;
+}
+.draft-mini-group { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+.draft-mini-k { font: 700 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
+.draft-mini-k.blue { color: var(--blue); }
+.draft-mini-k.red { color: var(--red); }
+.draft-div { width: 1px; height: 14px; background: var(--rule-strong); flex-shrink: 0; margin: 0 2px; }
+.draft-toggle {
+  min-height: 44px; min-width: 44px;
+  margin: -10px -6px -10px 0;
+  padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font: 700 11px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--gold-bright); flex-shrink: 0;
+}
+.draft-toggle svg { width: 15px; height: 15px; transition: transform 180ms ease; }
+.draft-toggle.open svg { transform: rotate(180deg); }
+
+.swap-inline { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.swap-inline-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
 .board { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
 .ally {
   position: relative; overflow: hidden;
@@ -514,7 +599,8 @@ button:disabled { cursor: default; }
   min-height: 52px; padding: 6px 10px 6px 8px;
   border-radius: var(--r-sm);
   background: var(--glass-row);
-  border-left: 3px solid transparent;
+  border: 1px solid transparent;
+  transition: border-color 180ms ease, background-color 180ms ease, opacity 240ms ease;
 }
 .ally .banner {
   position: absolute; top: 0; right: 0; bottom: 0; width: 72%;
@@ -527,9 +613,10 @@ button:disabled { cursor: default; }
 .ally.hover .banner { opacity: 0.4; }
 .ally.locked .banner { opacity: 1; }
 .ally.dead .banner { opacity: 0.1; }
+.ally.dead { opacity: 0.58; }
 .ally > :not(.banner):not(.glint) { position: relative; }
-.ally.self { border-left-color: var(--gold-bright); }
-.ally.acting { border-left-color: var(--signal); }
+.ally.self { border-color: var(--gold-bright); }
+.ally.acting { border-color: var(--signal); background: var(--signal-soft); }
 .ally-name { font: 800 17px/1.05 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
 .ally-sub { font-size: 12px; color: var(--muted); }
 .ally.locked .ally-sub, .ally.hover .ally-sub { color: #d8dce6; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
@@ -545,44 +632,59 @@ button:disabled { cursor: default; }
 @keyframes glint { 0% { opacity: 1; transform: translateX(0); } 100% { opacity: 0; transform: translateX(520%); } }
 
 .board-foot { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px 4px; }
-.strip { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.strip { display: flex; align-items: center; gap: 5px; min-width: 0; flex-wrap: wrap; }
 .strip-lbl { width: 54px; flex-shrink: 0; font: 700 11px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
 .strip-lbl.blue { color: var(--blue); }
 .strip-lbl.red { color: var(--red); }
 .strip .gap { width: 6px; }
 
 /* Champion grid */
+.search-wrap { position: relative; display: flex; align-items: center; }
 .search {
   width: 100%; height: var(--tap);
-  padding: 0 12px 0 38px;
+  padding: 0 42px 0 38px;
   border: 1px solid var(--rule); border-radius: var(--r-sm);
   background: var(--backdrop) url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='%239aa7bd' stroke-width='2' xmlns='http:%2F%2Fwww.w3.org%2F2000%2Fsvg'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") no-repeat 12px center / 17px;
   font-size: 15px;
 }
 .search:focus { outline: none; border-color: var(--gold-bright); }
+.search-clear {
+  position: absolute; right: 0; top: 0;
+  width: var(--tap); height: var(--tap);
+  display: inline-grid; place-items: center;
+  color: var(--muted);
+}
+.search-clear[hidden] { display: none; }
 .field { width: 100%; height: var(--tap); padding: 0 12px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--backdrop); }
 .field:focus { outline: none; border-color: var(--gold-bright); }
-.pills { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 10px -14px 12px; padding: 0 14px; }
+.pills { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 8px -14px 10px; padding: 0 14px; }
 .pills::-webkit-scrollbar { display: none; }
 .pill {
   flex-shrink: 0;
-  height: 36px; padding: 0 12px;
+  min-height: var(--tap); padding: 0 12px;
   display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--rule); border-radius: 18px;
+  border: 1px solid var(--rule); border-radius: var(--r-sm);
   background: var(--glass-row);
-  font-size: 13px; font-weight: 600; color: var(--muted);
+  font-size: 13px; font-weight: 700; color: var(--muted);
 }
 .pill.active { border-color: var(--text); color: var(--text); background: var(--raised); }
-.champ-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 10px 6px; }
+.draft-status {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 10px;
+  border-radius: var(--r-sm); border: 1px solid var(--rule-strong); background: var(--glass-row);
+}
+.draft-status-links { display: flex; gap: 6px; }
+.champ-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 10px 6px; }
 .champ {
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 0; content-visibility: auto; contain-intrinsic-size: 72px 86px;
 }
 .champ .pt { width: 100%; height: auto; aspect-ratio: 1; border-color: var(--rule); }
 .champ.sel .pt { border: 2px solid var(--gold-bright); box-shadow: 0 0 0 2px rgba(200, 170, 110, 0.25); }
+.champ.sel.ban-sel .pt { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(240, 96, 90, 0.28); }
 .champ-name { width: 100%; text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.champ.sel .champ-name { color: var(--text); }
-.champ:disabled { opacity: 0.32; }
+.champ.sel .champ-name { color: var(--text); font-weight: 700; }
+.champ:disabled { opacity: 0.34; }
 .empty-note { padding: 18px 4px; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* Skin carousel */
@@ -601,15 +703,22 @@ button:disabled { cursor: default; }
   border-radius: var(--r);
   overflow: hidden;
   border: 1px solid var(--rule);
-  background: linear-gradient(160deg, var(--raised), var(--backdrop));
+  background: linear-gradient(155deg, var(--raised), var(--backdrop));
   text-align: left;
 }
-.skin .art { object-position: 50% 18%; }
-.skin::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 50%, rgba(5, 8, 13, 0.85)); }
-.skin-label { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.skin-crest {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--gold); opacity: 0.28;
+  pointer-events: none;
+}
+.skin-crest svg { width: 76px; height: 76px; }
+.skin .art { object-position: 50% 18%; z-index: 1; }
+.skin::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 45%, rgba(5, 8, 13, 0.88)); }
+.skin-label { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 3; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
 .skin-name { font: 800 20px/1.05 var(--font-display); text-transform: uppercase; color: #eef0f5; letter-spacing: 0.02em; }
 .skin.sel { border: 2px solid var(--gold-bright); }
-.skin .tag { background: rgba(5, 8, 13, 0.6); }
+.skin .tag { background: rgba(5, 8, 13, 0.65); }
 .carousel-foot { display: flex; justify-content: center; gap: 5px; margin-top: 10px; }
 .carousel-foot i { width: 6px; height: 6px; border-radius: 50%; background: var(--rule-strong); }
 .carousel-foot i.on { background: var(--gold-bright); }
@@ -622,8 +731,21 @@ button:disabled { cursor: default; }
   border: 1px solid var(--rule); border-radius: var(--r);
   background: var(--glass-row); text-align: left;
 }
-.spell-slot.focus { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px var(--gold-bright); }
+.spell-slot.focus { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px var(--gold-bright); background: var(--raised); }
+.keycap {
+  display: inline-grid; place-items: center;
+  min-width: 20px; height: 18px; padding: 0 4px;
+  border-radius: 3px; border: 1px solid var(--rule-strong); background: var(--backdrop);
+  font: 700 11px/1 var(--font-mono); color: var(--gold-bright);
+}
 .slot-k { font: 700 11px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); }
+.rune-strip {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 10px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
+  background: var(--glass-row);
+}
+.rune-strip .rdiv { width: 1px; height: 22px; background: var(--rule-strong); margin: 0 2px; }
 /* ---- Champ-select helper (Guide tab): build, lane, comps, tips ------------------------------- */
 .hl-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .hl-champ { font: 800 22px/1.05 var(--font-display); letter-spacing: 0.02em; }
@@ -763,7 +885,7 @@ button:disabled { cursor: default; }
 .st-rates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
 .st-rate { padding: 7px 4px 6px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--glass-row); text-align: center; min-width: 0; }
 .st-rate b { display: block; font: 800 19px/1.05 var(--font-display); font-variant-numeric: tabular-nums; }
-.st-rate span { font: 700 10px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.st-rate span { font: 700 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .st-roles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 12px; }
 .st-roles.six { grid-template-columns: repeat(6, 1fr); }
 .st-role {
@@ -776,7 +898,7 @@ button:disabled { cursor: default; }
 .st-role span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
 .st-role.active { border-color: var(--text); background: var(--raised); color: var(--text); }
 .st-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; border: 1px solid var(--rule); border-radius: var(--r-sm); margin-top: 10px; }
-.st-seg button { min-height: 40px; border-radius: 3px; border: 1px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
+.st-seg button { min-height: var(--tap); border-radius: 3px; border: 1px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
 .st-seg button.active { background: var(--raised); border-color: var(--text); color: var(--text); }
 .st-state { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
 .st-state .icon { width: 18px; height: 18px; margin-top: 1px; }
@@ -799,7 +921,7 @@ button:disabled { cursor: default; }
 .stage-head { display: flex; flex-direction: column; gap: 2px; }
 .stage-items { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 4px; margin-top: 8px; }
 .it { width: 60px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.it .meta { width: 100%; font-size: 10.5px; line-height: 1.15; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.it .meta { width: 100%; font-size: 11px; line-height: 1.15; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .chev { width: 12px; height: 40px; display: grid; place-items: center; color: var(--gold-bright); }
 .prio { display: flex; align-items: center; gap: 6px; margin-top: 8px; font: 800 22px/1 var(--font-display); }
 .prio .chev { height: auto; color: var(--muted); }
@@ -842,8 +964,8 @@ button:disabled { cursor: default; }
 @media (max-width: 360px) {
   .clock.specimen { font-size: 48px; }
   .score { font-size: 38px; }
-  .medal { width: 210px; height: 210px; }
-  .medal-core { width: 170px; height: 170px; }
+  .medal { width: 204px; height: 204px; }
+  .medal-core { width: 164px; height: 164px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -859,7 +981,7 @@ button:disabled { cursor: default; }
         <div class="avatar"><span id="summoner-avatar"></span><span id="conn-dot" class="conn-dot"></span></div>
         <div class="brand">
           <h1 class="brand-title">HYPATIA</h1>
-          <div id="summoner-line" class="brand-sub">Connexion...</div>
+          <div id="summoner-line" class="brand-sub">...</div>
         </div>
       </div>
       <div class="top-actions">
@@ -895,6 +1017,7 @@ button:disabled { cursor: default; }
         </div>
       </div>
     </div>
+    <div id="phase-rail" class="phase-rail" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
   </header>
 
   <nav id="demo-strip" class="demo-strip" hidden>
@@ -912,10 +1035,13 @@ button:disabled { cursor: default; }
     <section id="alert-setup-card" class="panel alert-card" hidden>
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       <div class="grow">
-        <div id="arm-title" style="font-weight:800;font-size:14px">Enable alerts</div>
+        <div id="arm-title" style="font-weight:800;font-size:13px">Enable alerts</div>
         <div id="arm-desc" class="meta"></div>
       </div>
       <button id="arm-alerts-btn" class="btn btn-ghost btn-sm" type="button">Enable</button>
+      <button id="dismiss-alerts-btn" class="alert-close" type="button" aria-label="Dismiss">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </section>
     <div id="view-root"></div>
   </main>
@@ -1162,7 +1288,19 @@ button:disabled { cursor: default; }
       q_RankedFlex: "Ranked Flex",
       q_Normal: "Normal",
       q_Aram: "ARAM",
-      q_Arena: "Arena"
+      q_Arena: "Arena",
+      dismiss: "Dismiss",
+      alertsMuted: "Alerts muted",
+      clearSearch: "Clear search",
+      savedRoles: "Saved",
+      draftDetails: "Details",
+      draftCompact: "Compact",
+      lockedIn: n => `Locked in: ${n}`,
+      waitingTurn: "Waiting for your turn",
+      modeRift: "Rift",
+      modeArena: "Arena",
+      optionalRole: "Auto",
+      stPickBan: (p, b) => `P ${p} · B ${b}`
     },
     fr: {
       title: "Hypatia — Télécommande mobile",
@@ -1394,7 +1532,19 @@ button:disabled { cursor: default; }
       q_RankedFlex: "Classée Flexible",
       q_Normal: "Normale",
       q_Aram: "ARAM",
-      q_Arena: "Arène"
+      q_Arena: "Arène",
+      dismiss: "Masquer",
+      alertsMuted: "Alertes coupées",
+      clearSearch: "Effacer la recherche",
+      savedRoles: "Appliqué",
+      draftDetails: "Détails",
+      draftCompact: "Compact",
+      lockedIn: n => `Verrouillé : ${n}`,
+      waitingTurn: "En attente de votre tour",
+      modeRift: "Faille",
+      modeArena: "Arène",
+      optionalRole: "Auto",
+      stPickBan: (p, b) => `P ${p} · B ${b}`
     }
   };
 
@@ -1461,6 +1611,7 @@ button:disabled { cursor: default; }
     theme: store.get("hypatia_theme")
       || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"),
     csTab: "pick",
+    draftExpanded: false,
     liveTab: "allies",
     champQuery: "",
     champRole: "ALL",
@@ -1479,6 +1630,7 @@ button:disabled { cursor: default; }
     customNameEdited: false,
     lastAvatarKey: "",
     alertsArmed: store.get("hypatia_alerts") === "1",
+    alertDismissed: store.get("hypatia_alert_dismissed") === "1",
     lastAlertSeq: 0,
     audioCtx: null,
     ws: null,
@@ -1545,8 +1697,23 @@ button:disabled { cursor: default; }
     $("arm-title").textContent = t("armTitle");
     $("arm-desc").textContent = t("armDesc");
     $("arm-alerts-btn").textContent = t("armBtn");
+    $("dismiss-alerts-btn").setAttribute("aria-label", t("dismiss"));
     if (!ui.state) $("summoner-line").textContent = t("connecting");
     updateAlertChrome();
+  }
+
+  function updatePhaseRail(phase) {
+    const rail = $("phase-rail");
+    const stepMap = {
+      Lobby: 0, Matchmaking: 1, ReadyCheck: 1, ChampSelect: 2,
+      InProgress: 3, PreEndOfGame: 4, WaitingForStats: 4, EndOfGame: 4
+    };
+    const idx = stepMap[phase];
+    if (idx === undefined) { rail.hidden = true; return; }
+    rail.hidden = false;
+    rail.querySelectorAll("i").forEach((seg, i) => {
+      seg.className = i < idx ? "done" : (i === idx ? "now" : "");
+    });
   }
 
   function applyTheme(next) {
@@ -1609,6 +1776,8 @@ button:disabled { cursor: default; }
       if (bar) bar.style.transform = `scaleX(${frac.toFixed(3)})`;
       const ring = w.querySelector(".js-ring");
       if (ring) ring.style.strokeDashoffset = String(100 - 100 * frac);
+      const prog = w.parentElement && w.parentElement.querySelector(".js-dial-prog");
+      if (prog && total > 0) prog.style.strokeDashoffset = String((100 - 100 * frac).toFixed(2));
     });
   }
   setInterval(() => { if (!document.hidden) tickClocks(); }, 250);
@@ -1617,7 +1786,7 @@ button:disabled { cursor: default; }
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   }
 
-  // ---- Labels ---------------------------------------------------------------------------------
+  // ---- Labels & authentic League vector silhouettes (mirroring desktop theme.slint) -----------
   function laneInfo(raw) {
     const lang = activeLang();
     const u = String(raw || "").toUpperCase();
@@ -1631,15 +1800,18 @@ button:disabled { cursor: default; }
   function styleName(id, fallback) { const e = STYLE_NAMES[Number(id)]; return e ? e[activeLang()] : (fallback || ""); }
   function shardName(id) { const e = SHARD_NAMES[Number(id)]; return e ? e[activeLang()] : String(id); }
 
-  function laneSvg(raw, size = 14, stroke = "currentColor") {
+  const LANE_PATHS = {
+    TOP: ["M 3 3 H 19 L 15.5 6.5 H 6.5 V 15.5 L 3 19 Z", "M 21 21 H 5 L 8.5 17.5 H 17.5 V 8.5 L 21 5 Z M 10 10 H 14 V 14 H 10 Z"],
+    JUNGLE: ["M 12 2 L 14.6 10.5 L 12 21.5 L 9.4 10.5 Z M 4 5.5 L 9.5 12 L 8.8 19.5 L 5.2 14 Z M 20 5.5 L 18.8 14 L 15.2 19.5 L 14.5 12 Z", ""],
+    MIDDLE: ["M 18 3 H 21 V 6 L 6 21 H 3 V 18 Z", "M 3 3 H 12 L 8.5 6.5 H 6.5 V 8.5 L 3 12 Z M 21 21 H 12 L 15.5 17.5 H 17.5 V 15.5 L 21 12 Z"],
+    BOTTOM: ["M 21 21 H 5 L 8.5 17.5 H 17.5 V 8.5 L 21 5 Z", "M 3 3 H 19 L 15.5 6.5 H 6.5 V 15.5 L 3 19 Z M 10 10 H 14 V 14 H 10 Z"],
+    UTILITY: ["M 12 3.5 L 15 9.5 L 12 20.5 L 9 9.5 Z M 2 7.5 H 8 L 9.2 11.5 L 4.5 13 Z M 22 7.5 H 16 L 14.8 11.5 L 19.5 13 Z", "M 9.5 15.5 H 14.5 L 12 21 Z"],
+    FILL: ["M 12 3 L 15.2 8.8 L 21 12 L 15.2 15.2 L 12 21 L 8.8 15.2 L 3 12 L 8.8 8.8 Z", ""]
+  };
+  function laneSvg(raw, size = 14, color = "currentColor") {
     const key = laneInfo(raw).key;
-    const d = key === "TOP" ? "M5 18V5h13M11 11h8v8h-8z"
-      : key === "JUNGLE" ? "M12 3v17M6 9l5 8M18 9l-5 8M4 15l4 5M20 15l-4 5"
-      : key === "MIDDLE" ? "M5 19L19 5M5 9V5h4M15 19h4v-4"
-      : key === "BOTTOM" ? "M6 19h13V6M5 5h7v7H5z"
-      : key === "UTILITY" ? "M4 7h16l-4 7H8zM12 14v6M8 20h8"
-      : "M12 3l9 9-9 9-9-9zM12 9v6M9 12h6";
-    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+    const [pri, ctx] = LANE_PATHS[key] || LANE_PATHS.FILL;
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${ctx ? `<path d="${ctx}" fill="${color}" opacity="0.34"/>` : ""}<path d="${pri}" fill="${color}"/></svg>`;
   }
   function roundel(raw, cls = "") {
     const l = laneInfo(raw);
@@ -1669,6 +1841,12 @@ button:disabled { cursor: default; }
     if (u.includes("ARAM")) return "ARAM";
     return String(q || "").replace(/_/g, " ");
   }
+  function gameModeLabel(raw) {
+    const u = String(raw || "").toUpperCase();
+    if (u === "CLASSIC") return t("modeRift");
+    if (u === "CHERRY" || u === "ARENA") return t("modeArena");
+    return raw || "";
+  }
   function swapKindLabel(kind) {
     const fr = activeLang() === "fr";
     if (kind === "position") return fr ? "échange de poste" : "position swap";
@@ -1686,18 +1864,30 @@ button:disabled { cursor: default; }
     if (snap.alert_kind === "incoming_swap") return { title: t("incomingReq"), body: snap.alert_body || "" };
     return { title: snap.alert_title || "", body: snap.alert_body || "" };
   }
-  function objectiveSvg(label, size = 13) {
+  function objectiveSvg(label, size = 14) {
     const s = String(label || "").toLowerCase();
-    let d = "M4 8l8-4 8 4-4 6-4 6-4-6zM8 10l4 3 4-3";
-    if (s.includes("baron")) d = "M4 19h16l1-12-5 5-4-8-4 8-5-5z";
-    else if (s.includes("elder") || s.includes("ancestral")) d = "M12 3l8 6-4 11H8L4 9zM12 8v8M9 12h6";
-    else if (s.includes("herald") || s.includes("héraut")) d = "M4 16l4-9h8l4 9zM9 16v3M15 16v3M12 10l2 3-2 2-2-2z";
-    else if (s.includes("grub") || s.includes("larve")) d = "M7 6l3 3-3 3-3-3zM17 6l3 3-3 3-3-3zM12 13l3 3-3 3-3-3z";
-    else if (s.includes("tower") || s.includes("turret") || s.includes("tourelle") || s.includes("inhib")) d = "M7 20h10M9 20V8l3-4 3 4v12M8 8h8";
-    else if (s.includes("->") || s.includes("→") || s.includes("kill") || s.includes("élimin") || s.includes("sang")) d = "M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5";
-    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+    if (s.includes("baron")) return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 12 3 L 15 8 L 19.5 5.5 L 18 13 L 20.5 17.5 L 16 19.5 L 12 16 L 8 19.5 L 3.5 17.5 L 6 13 L 4.5 5.5 L 9 8 Z"/></svg>`;
+    if (s.includes("elder") || s.includes("ancestral")) return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 12 2 L 15 6 L 21 5 L 17 12 L 19.5 18 L 12 22 L 4.5 18 L 7 12 L 3 5 L 9 6 Z"/></svg>`;
+    if (s.includes("herald") || s.includes("héraut")) return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 12 3 L 16.5 6.5 L 19.5 13 L 16 20 H 8 L 4.5 13 L 7.5 6.5 Z"/></svg>`;
+    if (s.includes("grub") || s.includes("larve")) return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 7.5 5 L 10.5 8.5 L 7.5 12 L 4.5 8.5 Z M 16.5 5 L 19.5 8.5 L 16.5 12 L 13.5 8.5 Z M 12 13 L 15 16.5 L 12 20 L 9 16.5 Z"/></svg>`;
+    if (s.includes("tower") || s.includes("turret") || s.includes("tourelle") || s.includes("inhib")) return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 6 4 H 9.5 V 7 H 14.5 V 4 H 18 V 9.5 L 16 11.5 V 18 L 19 21 H 5 L 8 18 V 11.5 L 6 9.5 Z"/></svg>`;
+    if (s.includes("->") || s.includes("→") || s.includes("kill") || s.includes("élimin") || s.includes("sang")) return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5"/></svg>`;
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 12 4 L 15 9 L 21.5 7 L 18 14 L 12 21 L 6 14 L 2.5 7 L 9 9 Z"/></svg>`;
   }
-  const TOWER_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10M9 20V8l3-4 3 4v12M8 8h8"/></svg>`;
+  const TOWER_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 6 4 H 9.5 V 7 H 14.5 V 4 H 18 V 9.5 L 16 11.5 V 18 L 19 21 H 5 L 8 18 V 11.5 L 6 9.5 Z"/></svg>`;
+  const TAB_ICONS = {
+    pick: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+    skins: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.4L20 11l-5.4 2.6L12 19l-2.6-5.4L4 11l5.4-2.6z"/></svg>`,
+    loadout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 4v6c0 4.5-3 7.2-7 8-4-.8-7-3.5-7-8V7z"/><path d="M12 8v8M9 12h6"/></svg>`,
+    guide: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5.5-5.5 2 2-5.5z"/></svg>`,
+    team: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12"/></svg>`,
+    allies: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 4v6c0 4.5-3 7.2-7 8-4-.8-7-3.5-7-8V7z"/></svg>`,
+    enemies: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5"/></svg>`,
+    build: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-3-3z"/></svg>`,
+    tiers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9h12M4 15h16M8 4h8M7 20h10"/></svg>`,
+    matchups: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5"/></svg>`,
+    mine: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>`
+  };
   function initials(name) {
     const s = String(name || "").trim();
     if (!s) return "";
@@ -1706,11 +1896,17 @@ button:disabled { cursor: default; }
     return s.slice(0, 2).toUpperCase();
   }
   function spellFallbackGlyph(id, name) {
-    const map = { 1: "PU", 3: "FA", 4: "SE", 6: "FT", 7: "SO", 11: "CH", 12: "TP", 13: "CL", 14: "EM", 21: "BA", 32: "MQ" };
+    const fr = activeLang() === "fr";
+    const map = fr
+      ? { 1: "PU", 3: "FA", 4: "SE", 6: "FT", 7: "SO", 11: "CH", 12: "TP", 13: "CL", 14: "EM", 21: "BA", 32: "MQ" }
+      : { 1: "CL", 3: "EX", 4: "FL", 6: "GH", 7: "HE", 11: "SM", 12: "TP", 13: "CL", 14: "IG", 21: "BA", 32: "MK" };
     return esc(map[Number(id)] || initials(name));
   }
   function shardFallbackGlyph(id) {
-    const map = { 5008: "+9", 5005: "VA", 5007: "AC", 5010: "VIT", 5001: "PV", 5011: "PV+", 5013: "TÉN" };
+    const fr = activeLang() === "fr";
+    const map = fr
+      ? { 5008: "+9", 5005: "VA", 5007: "AC", 5010: "VIT", 5001: "PV", 5011: "PV+", 5013: "TÉN" }
+      : { 5008: "+9", 5005: "AS", 5007: "AH", 5010: "MS", 5001: "HP", 5011: "HP+", 5013: "TEN" };
     return esc(map[Number(id)] || "*");
   }
   function fmtNum(n) { return Number(n || 0).toLocaleString(activeLang() === "fr" ? "fr-FR" : "en-US"); }
@@ -1850,24 +2046,37 @@ button:disabled { cursor: default; }
   function armAlerts(isTest) {
     initAudio();
     ui.alertsArmed = true;
+    ui.alertDismissed = false;
     store.set("hypatia_alerts", "1");
-    if ("Notification" in window && Notification.permission === "default") {
+    store.del("hypatia_alert_dismissed");
+    if (window.isSecureContext && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().finally(updateAlertChrome);
     }
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if (window.isSecureContext && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
     updateAlertChrome();
     playChime();
     showToast(isTest ? t("chimeTested") : t("alertsEnabled"));
   }
+  function toggleAlerts() {
+    if (ui.alertsArmed) {
+      ui.alertsArmed = false;
+      ui.alertDismissed = true;
+      store.set("hypatia_alerts", "0");
+      store.set("hypatia_alert_dismissed", "1");
+      updateAlertChrome();
+      showToast(t("alertsMuted"));
+    } else {
+      armAlerts(false);
+    }
+  }
   function updateAlertChrome() {
-    const permGranted = !("Notification" in window) || Notification.permission === "granted";
-    const armed = ui.alertsArmed && permGranted;
+    const armed = ui.alertsArmed;
     const btn = $("alert-top-btn");
     btn.classList.toggle("on", armed);
     btn.setAttribute("aria-label", `${t("alerts")} · ${armed ? t("alertsOn") : t("alertsOff")}`);
     $("alerts-menu-val").textContent = armed ? t("alertsOn") : t("alertsOff");
     $("alerts-menu-btn").classList.toggle("on", armed);
-    $("alert-setup-card").hidden = armed;
+    $("alert-setup-card").hidden = armed || ui.alertDismissed;
   }
   function fireAlertIfNew(snap) {
     if (!snap || !snap.alert_seq || snap.alert_seq <= ui.lastAlertSeq) return;
@@ -1877,7 +2086,7 @@ button:disabled { cursor: default; }
     if (isInitial || !ui.alertsArmed || !msg.title) return;
     playChime();
     if (navigator.vibrate) navigator.vibrate([120, 60, 140]);
-    if ("Notification" in window && Notification.permission === "granted") {
+    if (window.isSecureContext && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(msg.title, { body: msg.body || "", tag: "hypatia-turn" }); } catch (_) {}
     }
   }
@@ -1983,11 +2192,12 @@ button:disabled { cursor: default; }
 
   function tabsHtml(tabs, current, action) {
     return `<div class="tabs" role="tablist">${tabs.map(tb =>
-      `<button class="tab ${current === tb.id ? "active" : ""}" role="tab" aria-selected="${current === tb.id}" data-action="${action}" data-tab="${tb.id}">${esc(tb.label)}${tb.dot ? '<i class="tab-dot"></i>' : ""}</button>`
+      `<button class="tab ${current === tb.id ? "active" : ""}" role="tab" aria-selected="${current === tb.id}" data-action="${action}" data-tab="${tb.id}">${TAB_ICONS[tb.icon || tb.id] || ""}<span>${esc(tb.label)}</span>${tb.dot ? '<i class="tab-dot"></i>' : ""}</button>`
     ).join("")}</div>`;
   }
 
   // ---- Lobby ----------------------------------------------------------------------------------
+  const MINI_CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
   function renderLobby(s) {
     const l = s.lobby;
     if (!ui.lobbySynced && l) {
@@ -1995,29 +2205,37 @@ button:disabled { cursor: default; }
       ui.lobbySecond = l.second_position || "TOP";
       ui.lobbySynced = true;
     }
+    const dirty = !l || ui.lobbyFirst !== (l.first_position || "MIDDLE") || (ui.lobbyFirst !== "FILL" && ui.lobbySecond !== (l.second_position || "TOP"));
     renderDock(`<div class="dock-row">
-        <button class="btn btn-ghost" data-action="save-roles">${esc(t("saveRoles"))}</button>
+        <button class="btn btn-ghost ${dirty ? "btn-dirty" : ""}" data-action="save-roles">${dirty ? esc(t("saveRoles")) : `${MINI_CHECK_SVG}${esc(t("savedRoles"))}`}</button>
         <button class="btn btn-plate" data-action="start-queue">${esc(t("findMatch"))}</button>
       </div>`);
+    const fillPrimary = ui.lobbyFirst === "FILL";
     const slot = (n, key) => {
+      const optional = n === 2 && fillPrimary;
       const l2 = laneInfo(key);
-      const focus = (n === 1) === ui.selectingFirstRole;
-      return `<button class="role-slot ${focus ? "focus" : ""}" data-action="focus-slot" data-slot="${n}">
-        ${roundel(key, "lg")}
-        <span class="grow"><span class="slot-k">${esc(n === 1 ? t("primary") : t("secondary"))}</span><br><span class="slot-v">${esc(l2.label)}</span></span>
+      const focus = !optional && (n === 1) === ui.selectingFirstRole;
+      return `<button class="role-slot ${focus ? "focus" : ""} ${optional ? "optional" : ""}" data-action="focus-slot" data-slot="${n}" ${optional ? "disabled" : ""}>
+        ${roundel(optional ? "FILL" : key, "lg")}
+        <span class="grow"><span class="slot-k">${esc(n === 1 ? t("primary") : t("secondary"))}</span><br><span class="slot-v">${esc(optional ? t("optionalRole") : l2.label)}</span></span>
       </button>`;
     };
     return `
       <section class="panel">
-        <div class="eyebrow">${esc(t("lobby"))}${l && l.member_count ? " · " + esc(t("playersCount", l.member_count)) : ""}</div>
-        <h2 class="title">${esc((l && queueLabel(l.queue_name)) || t("leagueLobby"))}</h2>
+        <div class="between">
+          <div class="grow">
+            <h2 class="title">${esc((l && queueLabel(l.queue_name)) || t("leagueLobby"))}</h2>
+            <div class="sub-meta">${esc(t("lobby"))}${l && l.member_count ? " · " + esc(t("playersCount", l.member_count)) : ""}</div>
+          </div>
+          ${l && l.member_count ? `<span class="tag gold">${esc(t("playersCount", l.member_count))}</span>` : ""}
+        </div>
       </section>
       <section class="panel">
         <div class="section-head"><span class="eyebrow">${esc(t("roles"))}</span><span class="meta">${esc(t("lobbyHint"))}</span></div>
         <div class="role-pair">${slot(1, ui.lobbyFirst)}${slot(2, ui.lobbySecond)}</div>
         <div class="lane-grid">
           ${LANE_META_BASE.map(item => {
-            const rank = item.key === ui.lobbyFirst ? "1" : (item.key === ui.lobbySecond ? "2" : "");
+            const rank = item.key === ui.lobbyFirst ? "1" : (!fillPrimary && item.key === ui.lobbySecond ? "2" : "");
             return `<button class="lane-btn ${rank ? "chosen" : ""}" data-action="pick-lane" data-lane="${item.key}">
               ${rank ? `<span class="rank">${rank}</span>` : ""}
               ${roundel(item.key)}
@@ -2031,20 +2249,31 @@ button:disabled { cursor: default; }
   // ---- Queue ----------------------------------------------------------------------------------
   function renderQueue(s) {
     const mm = s.matchmaking || {};
+    const est = Math.max(10, Number(mm.estimated_queue_time_sec) || 60);
+    const cur = Math.max(0, Number(mm.time_in_queue_sec) || 0);
+    const off = (100 - 100 * Math.min(1, cur / est)).toFixed(2);
+    const l = s.lobby;
+    const p1 = (l && l.first_position) || ui.lobbyFirst;
+    const p2 = (l && l.second_position) || ui.lobbySecond;
     renderDock(`<button class="btn btn-danger btn-block" data-action="stop-queue">${esc(t("cancelQueue"))}</button>`);
     return `
       <section class="panel hero-center">
-        <div class="eyebrow">${esc(t("inQueue"))}</div>
-        <h2 class="title sm">${esc(queueLabel(mm.queue_name) || "Matchmaking")}</h2>
+        <h2 class="title">${esc(t("inQueue"))}</h2>
+        <div class="meta">${esc(queueLabel(mm.queue_name) || "Matchmaking")}</div>
         <div class="dial">
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <circle class="dial-track" cx="60" cy="60" r="57"/>
+            <circle class="dial-prog js-dial-prog" cx="60" cy="60" r="57" pathLength="100" style="stroke-dashoffset:${off}"/>
             <circle class="dial-ticks" cx="60" cy="60" r="51"/>
             <circle class="dial-inner" cx="60" cy="60" r="45"/>
           </svg>
-          ${clockHtml(mm.time_in_queue_sec, { cls: "specimen" })}
+          ${clockHtml(cur, { cls: "specimen", total: est })}
         </div>
-        <div class="meta">${esc(t("estWait", fmtSec(mm.estimated_queue_time_sec || 60)))}</div>
+        <div class="meta">${esc(t("estWait", fmtSec(est)))}</div>
+        ${p1 ? `<div class="queue-roles">
+          ${laneSvg(p1, 15, laneInfo(p1).color)}<span>${esc(laneInfo(p1).label)}</span>
+          ${p1 !== "FILL" && p2 ? `<span class="meta">·</span>${laneSvg(p2, 15, laneInfo(p2).color)}<span>${esc(laneInfo(p2).label)}</span>` : ""}
+        </div>` : ""}
       </section>`;
   }
 
@@ -2073,10 +2302,9 @@ button:disabled { cursor: default; }
       : `<div class="medal">${clockHtml(left, { down: true, total, fmt: "s", cls: "medal-num", extra: "" }).replace('<span class="clock medal-num', `${ring}${core}<span class="clock medal-num`)}</div>`;
     return `
       <section class="panel hero-center ${state ? "" : "spot" + (Date.now() < ui.turnFlashUntil ? " turn-start" : "")}">
-        <div class="eyebrow">${esc(queueLabel(mm.queue_name) || "")}</div>
         ${medal}
         <h2 class="title">${esc(accepted ? t("matchAccepted") : declined ? t("matchDeclined") : t("matchFound"))}</h2>
-        <div class="meta">${esc(accepted ? t("waitingOthers") : declined ? "" : t("acceptBefore"))}</div>
+        <div class="meta">${esc(queueLabel(mm.queue_name) || "")}${accepted ? " · " + esc(t("waitingOthers")) : declined ? "" : " · " + esc(t("acceptBefore"))}</div>
       </section>`;
   }
 
@@ -2114,6 +2342,59 @@ button:disabled { cursor: default; }
     }
   }
 
+  const CHEV_DOWN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+  const LOCK_MINI_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+
+  function draftBansMini(cs) {
+    const myIds = (cs.my_team_ban_ids && cs.my_team_ban_ids.length) ? cs.my_team_ban_ids : (cs.my_team_bans || []).map(() => 0);
+    const theirIds = (cs.their_team_ban_ids && cs.their_team_ban_ids.length) ? cs.their_team_ban_ids : (cs.their_team_bans || []).map(() => 0);
+    const myChips = myIds.map((id, i) => pt("champion", id, esc(initials((cs.my_team_bans || [])[i] || "")), 22, "struck"));
+    const theirChips = theirIds.map((id, i) => pt("champion", id, esc(initials((cs.their_team_bans || [])[i] || "")), 22, "struck enemy"));
+    if (!myChips.length && !theirChips.length) return `<span class="meta">—</span>`;
+    return `${myChips.join("")}${myChips.length && theirChips.length ? '<i class="draft-div"></i>' : ""}${theirChips.join("")}`;
+  }
+
+  function draftHud(cs) {
+    const enemies = (cs.their_team || []).map(e => champPt(e.champion_id, e.champion_name, 22, "enemy")).join("");
+    if (ui.draftExpanded) {
+      return `<section class="panel draft-hud" aria-label="${esc(t("champSelect"))}" data-key="draft-hud">
+          <div class="draft-bar" style="padding-top:0;border-top:0">
+            <span class="eyebrow">${esc(t("allies"))}</span>
+            <button class="draft-toggle open" data-action="toggle-draft" aria-expanded="true">
+              <span>${esc(t("draftCompact"))}</span>${CHEV_DOWN_SVG}
+            </button>
+          </div>
+          ${draftBoard(cs)}
+        </section>`;
+    }
+    const slots = (cs.my_team || []).map(a => {
+      const has = a.champion_id > 0;
+      const acting = Boolean(a.acting_type && !a.is_self);
+      const l = laneInfo(a.assigned_position);
+      return `<div class="draft-slot ${a.is_self ? "self" : ""} ${acting ? "acting" : ""} ${has ? "" : "empty-slot"}" data-key="ds-${a.cell_id}">
+        <span class="pt-wrap">
+          ${champPt(a.champion_id, a.champion_name, 38, a.is_self ? "self" : "")}
+          <span class="lane-pip" style="color:${l.color}" title="${esc(l.label)}">${laneSvg(l.key, 11)}</span>
+          ${a.pick_locked ? `<span class="lock-pip">${LOCK_MINI_SVG}</span>` : ""}
+        </span>
+        <span class="draft-slot-nm">${esc(has ? a.champion_name : l.label)}</span>
+      </div>`;
+    }).join("");
+    return `<section class="panel draft-hud" aria-label="${esc(t("champSelect"))}" data-key="draft-hud">
+        <div class="draft-strip">${slots}</div>
+        <div class="draft-bar">
+          <div class="draft-mini-group">
+            <span class="draft-mini-k blue">${esc(t("bans"))}</span>
+            ${draftBansMini(cs)}
+          </div>
+          ${enemies ? `<div class="draft-mini-group"><span class="draft-mini-k red">VS</span>${enemies}</div>` : ""}
+          <button class="draft-toggle" data-action="toggle-draft" aria-expanded="false">
+            <span>${esc(t("draftDetails"))}</span>${CHEV_DOWN_SVG}
+          </button>
+        </div>
+      </section>`;
+  }
+
   function draftBoard(cs) {
     const spells = cs.available_spells || [];
     const allies = (cs.my_team || []).map(a => {
@@ -2140,19 +2421,29 @@ button:disabled { cursor: default; }
         <i class="glint"></i>
       </div>`;
     }).join("");
-    const bans = (names, ids, mine) => {
-      const list = (ids && ids.length ? ids : names.map(() => 0)).map((id, i) =>
-        pt("champion", id, esc(initials(names[i] || "")), 26, `struck ${mine ? "" : "enemy"}`));
-      return list.length ? list.join("") : `<span class="meta">${esc(t("none"))}</span>`;
-    };
     const enemies = (cs.their_team || []).map(e => champPt(e.champion_id, e.champion_name, 30, "enemy")).join("");
-    return `<section class="panel board" aria-label="${esc(t("champSelect"))}">
+    return `<div class="board" style="padding:6px 0 0;border-top:1px solid var(--rule)" data-key="draft-expanded">
         ${allies}
         <div class="board-foot">
-          <div class="strip"><span class="strip-lbl blue">${esc(t("bans"))}</span>${bans(cs.my_team_bans || [], cs.my_team_ban_ids || [], true)}<span class="gap"></span>${bans(cs.their_team_bans || [], cs.their_team_ban_ids || [], false)}</div>
+          <div class="strip"><span class="strip-lbl blue">${esc(t("bans"))}</span>${draftBansMini(cs)}</div>
           ${enemies ? `<div class="strip"><span class="strip-lbl red">${esc(t("enemies"))}</span>${enemies}</div>` : ""}
         </div>
-      </section>`;
+      </div>`;
+  }
+
+  function inlineSwapsHtml(cs) {
+    const incoming = cs.incoming_swaps || [];
+    if (!incoming.length || ui.csTab === "team") return "";
+    return incoming.map(sw => `<section class="panel spot swap-inline" data-key="isw-${esc(sw.kind)}-${sw.id}">
+        <div class="between">
+          <div class="grow"><b class="ellipsis" style="display:block">${esc(sw.caller_name)} · ${esc(swapKindLabel(sw.kind))}</b>${sw.detail ? `<span class="meta">${esc(sw.detail)}</span>` : ""}</div>
+          <span class="tag signal">${esc(t("incomingReq"))}</span>
+        </div>
+        <div class="swap-inline-btns">
+          <button class="btn btn-ghost" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="0">${esc(t("decline"))}</button>
+          <button class="btn btn-plate" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="1">${esc(t("accept"))}</button>
+        </div>
+      </section>`).join("");
   }
 
   function pickTab(cs, act, isBan) {
@@ -2161,21 +2452,38 @@ button:disabled { cursor: default; }
       if (q && !c.name.toLowerCase().includes(q)) return false;
       if (ui.champRole !== "ALL" && !(c.roles || []).includes(ui.champRole)) return false;
       return true;
-    }).slice(0, 96);
+    });
     const selectedId = act ? act.champion_id : 0;
     const canAct = Boolean(act && act.is_my_turn && !act.completed);
-    return `<section class="panel">
-        <input id="champ-search" class="search" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(isBan ? t("filterBan") : t("filterPick"))}" value="${esc(ui.champQuery)}">
+    const me = (cs.my_team || []).find(a => a.is_self);
+    const statusBar = !canAct ? `<div class="draft-status">
+        <div class="grow">
+          <b style="display:block;font-size:14px">${esc(me && me.champion_id > 0 && me.pick_locked ? t("lockedIn", me.champion_name) : t("waitingTurn"))}</b>
+        </div>
+        <div class="draft-status-links">
+          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="loadout">${esc(t("tabLoadout"))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="skins">${esc(t("tabSkins"))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="guide">${esc(t("tabGuide"))}</button>
+        </div>
+      </div>` : "";
+    return `<section class="panel" data-key="pick-panel">
+        ${statusBar}
+        <div class="search-wrap">
+          <input id="champ-search" class="search" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(isBan ? t("filterBan") : t("filterPick"))}" value="${esc(ui.champQuery)}">
+          <button class="search-clear" type="button" data-action="clear-champ-search" aria-label="${esc(t("clearSearch"))}" ${ui.champQuery ? "" : "hidden"}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
         <div class="pills">
           ${["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"].map(rk => `
             <button class="pill ${ui.champRole === rk ? "active" : ""}" data-action="champ-role" data-role="${rk}">
-              ${rk === "ALL" ? esc(t("all")) : `${laneSvg(rk, 13, laneInfo(rk).color)}<span>${esc(laneInfo(rk).label)}</span>`}
+              ${rk === "ALL" ? esc(t("all")) : `${laneSvg(rk, 14, laneInfo(rk).color)}<span>${esc(laneInfo(rk).label)}</span>`}
             </button>`).join("")}
         </div>
         ${filtered.length ? `<div class="champ-grid">
           ${filtered.map(c => {
             const allowed = isBan ? c.bannable !== false : c.pickable !== false;
-            return `<button class="champ ${c.id === selectedId ? "sel" : ""}" data-key="c${c.id}" data-action="hover-champ" data-id="${c.id}" ${canAct && allowed ? "" : "disabled"} aria-label="${esc(c.name)}">
+            return `<button class="champ ${c.id === selectedId ? "sel" + (isBan ? " ban-sel" : "") : ""}" data-key="c${c.id}" data-action="hover-champ" data-id="${c.id}" ${canAct && allowed ? "" : "disabled"} aria-label="${esc(c.name)}">
               ${pt("champion", c.id, esc(initials(c.name)), 0)}
               <span class="champ-name">${esc(c.name)}</span>
             </button>`;
@@ -2188,11 +2496,12 @@ button:disabled { cursor: default; }
     const skins = cs.available_skins || [];
     if (!skins.length) return `<section class="panel"><div class="empty-note">${esc(t("selectChampSkins"))}</div></section>`;
     const champ = Math.floor((skins[0].id || 0) / 1000);
-    return `<section class="panel">
+    return `<section class="panel" data-key="skins-panel">
         <div class="section-head"><span class="eyebrow">${esc(t("tabSkins"))}</span><span class="meta mono">${skins.length}</span></div>
         <div class="carousel" id="skin-carousel" data-key="skins-${champ}">
           ${skins.map(sk => `
             <button class="skin ${sk.selected ? "sel" : ""}" data-key="sk${sk.id}" data-action="set-skin" data-id="${sk.id}">
+              <span class="skin-crest" aria-hidden="true">${CREST_SVG}</span>
               ${imgTag("splash", sk.id, "art")}
               <span class="skin-label">
                 <span class="skin-name">${esc(sk.name)}</span>
@@ -2215,10 +2524,28 @@ button:disabled { cursor: default; }
     const sTree = (cs.rune_trees || []).find(tr => tr.id === ui.customSub);
     const slotBtn = (n, raw, name) => `<button class="spell-slot ${ui.spellSlot === n ? "focus" : ""}" data-action="focus-spell-slot" data-slot="${n}">
         ${pt("spell", raw.id, spellFallbackGlyph(raw.id, name), 40)}
-        <span class="grow"><span class="slot-k">${esc(n === 1 ? t("slotD") : t("slotF"))}</span><br><b class="ellipsis">${esc(name)}</b>${raw.cooldown ? `<br><span class="meta">${esc(raw.cooldown)}</span>` : ""}</span>
+        <span class="grow"><span class="keycap">${esc(n === 1 ? t("slotD") : t("slotF"))}</span><br><b class="ellipsis">${esc(name)}</b>${raw.cooldown ? `<br><span class="meta">${esc(raw.cooldown)}</span>` : ""}</span>
       </button>`;
     const chip = (cls, action, attrs, icon, label) =>
       `<button class="chip ${cls}" data-action="${action}" ${attrs}>${icon}<span>${esc(label)}</span></button>`;
+
+    const findPerkName = (id) => {
+      for (const tr of (cs.rune_trees || [])) {
+        for (const list of [tr.keystones, tr.slot1, tr.slot2, tr.slot3]) {
+          const hit = (list || []).find(x => x.id === id);
+          if (hit) return hit.name;
+        }
+      }
+      return "";
+    };
+    const runeStrip = `<div class="rune-strip" aria-hidden="true">
+        ${pt("perk", ui.customPerks[0], esc(initials(findPerkName(ui.customPerks[0]))), 32, "round self")}
+        ${[1, 2, 3].map(i => pt("perk", ui.customPerks[i], esc(initials(findPerkName(ui.customPerks[i]))), 22, "round")).join("")}
+        <i class="rdiv"></i>
+        ${[4, 5].map(i => pt("perk", ui.customPerks[i], esc(initials(findPerkName(ui.customPerks[i]))), 22, "round")).join("")}
+        <i class="rdiv"></i>
+        ${[6, 7, 8].map(i => pt("perk", ui.customPerks[i], shardFallbackGlyph(ui.customPerks[i]), 20, "round")).join("")}
+      </div>`;
 
     const runeBody = ui.runeSubView === "saved"
       ? `<div class="stack">${pages.map(pg => {
@@ -2235,6 +2562,7 @@ button:disabled { cursor: default; }
             </button>`;
         }).join("")}</div>`
       : `<div>
+          ${runeStrip}
           <input id="custom-rune-name" class="field" type="text" value="${esc(ui.customName)}" placeholder="${esc(t("runeNamePh"))}">
           <div class="sub-k">${esc(t("priPath"))}</div>
           <div class="chip-grid">${(cs.rune_trees || []).map(tr => chip(tr.id === ui.customPrimary ? "active" : "", "rune-pri", `data-id="${tr.id}"`, pt("style", tr.id, "", 22, "round no-rim"), styleName(tr.id, tr.name))).join("")}</div>
@@ -2434,7 +2762,7 @@ button:disabled { cursor: default; }
     const cs = s.champ_select;
     if (!cs) {
       renderDock("");
-      return `<section class="panel"><div class="eyebrow">${esc(t("champSelect"))}</div><div class="meta">${esc(t("syncDraft"))}</div></section>`;
+      return `<section class="panel"><h2 class="title sm">${esc(t("champSelect"))}</h2><div class="meta" style="margin-top:4px">${esc(t("syncDraft"))}</div></section>`;
     }
     syncCustomRunesDefaults(cs);
     const act = cs.active_action;
@@ -2464,17 +2792,19 @@ button:disabled { cursor: default; }
       : ui.csTab === "guide" ? helperTab(cs)
       : teamTab(cs);
     const flash = isTurn && Date.now() < ui.turnFlashUntil;
+    const pos = laneInfo(cs.assigned_position);
     return `
-      <section class="panel ${isTurn ? "spot" : ""}${flash ? " turn-start" : ""}">
+      <section class="panel ${isTurn ? "spot" : ""}${flash ? " turn-start" : ""}" data-key="cs-turn">
         <div class="plate-head">
           <div class="grow">
-            <div class="eyebrow ellipsis">${esc(queueLabel(cs.queue_type) || subPhaseLabel(cs.sub_phase))} · ${esc(laneInfo(cs.assigned_position).label)}</div>
             <h2 class="title">${esc(isTurn ? (isBan ? t("turnBan") : t("turnPick")) : subPhaseLabel(cs.sub_phase))}</h2>
+            <div class="sub-meta">${laneSvg(pos.key, 13, pos.color)}<span class="ellipsis">${esc(pos.label)} · ${esc(queueLabel(cs.queue_type) || subPhaseLabel(cs.sub_phase))}</span></div>
           </div>
           ${clockHtml(cs.time_left_sec, { down: true, total: cs.total_time_sec || cs.time_left_sec, fmt: "s", bar: true })}
         </div>
       </section>
-      ${draftBoard(cs)}
+      ${draftHud(cs)}
+      ${inlineSwapsHtml(cs)}
       ${body}`;
   }
 
@@ -2495,7 +2825,7 @@ button:disabled { cursor: default; }
     const lg = s.live_game;
     renderDock(lg ? tabsHtml([{ id: "allies", label: t("allies") }, { id: "enemies", label: t("enemies") }], ui.liveTab, "live-tab") : "");
     if (!lg) {
-      return `<section class="panel"><div class="eyebrow">${esc(t("liveMatch"))}</div><div class="meta" style="margin-top:6px">${esc(t("waitingLive"))}</div></section>`;
+      return `<section class="panel"><h2 class="title sm">${esc(t("liveMatch"))}</h2><div class="meta" style="margin-top:4px">${esc(t("waitingLive"))}</div></section>`;
     }
     const me = (lg.allies || []).find(p => p.is_self);
     const dead = Boolean(me && me.dead);
@@ -2527,7 +2857,7 @@ button:disabled { cursor: default; }
         <div class="hud-side blue"><span class="score">${lg.my_kills}</span><span class="towers">${TOWER_SVG}${lg.my_towers}</span></div>
         <div class="hud-clock">
           ${clockSec != null ? clockHtml(clockSec, { cls: "inline" }) : `<span class="clock inline">${esc(lg.clock)}</span>`}
-          <span class="hud-mode">${esc(lg.game_mode || "")}</span>
+          <span class="hud-mode">${esc(gameModeLabel(lg.game_mode))}</span>
         </div>
         <div class="hud-side red"><span class="towers">${lg.enemy_towers}${TOWER_SVG}</span><span class="score">${lg.enemy_kills}</span></div>
       </section>
@@ -2879,7 +3209,7 @@ button:disabled { cursor: default; }
           ${champPt(e.champion.id, e.champion.name, 36)}
           <span class="grow">
             <span class="st-nm ellipsis" style="display:block">${esc(e.champion.name)}</span>
-            <span class="meta row" style="gap:5px">${e.position ? `<span style="display:inline-flex" title="${esc(laneInfo(laneOf(e.position)).label)}">${laneSvg(laneOf(e.position), 13, laneInfo(laneOf(e.position)).color)}</span>` : ""}<span class="mono ellipsis" style="font-size:11px">${esc(t("stPick"))} ${esc(fmtPct(e.rates.pick_rate))} · ${esc(t("stBan"))} ${esc(fmtPct(e.rates.ban_rate))}</span></span>
+            <span class="meta row" style="gap:5px">${e.position ? `<span style="display:inline-flex" title="${esc(laneInfo(laneOf(e.position)).label)}">${laneSvg(laneOf(e.position), 13, laneInfo(laneOf(e.position)).color)}</span>` : ""}<span class="mono ellipsis" style="font-size:11px">${esc(t("stPickBan", fmtPct(e.rates.pick_rate), fmtPct(e.rates.ban_rate)))}</span></span>
           </span>
           <span class="st-fig"><b>${esc(fmtPct(e.rates.win_rate))}</b><span>${esc(t("stWin"))}</span></span>
         </button>`).join("");
@@ -3048,12 +3378,13 @@ button:disabled { cursor: default; }
     }
     applyStaticChrome();
     fireAlertIfNew(s);
+    updatePhaseRail(s.phase);
 
     $("summoner-line").textContent = (s.summoner_name || "Hypatia") + " · " + phaseLabel(s.phase);
     const avatarKey = `${s.profile_icon_id || 0}:${s.summoner_name || ""}`;
     if (ui.lastAvatarKey !== avatarKey) {
       ui.lastAvatarKey = avatarKey;
-      $("summoner-avatar").innerHTML = pt("profile", s.profile_icon_id || 0, esc(initials(s.summoner_name || "HY")), 36, "round");
+      $("summoner-avatar").innerHTML = pt("profile", s.profile_icon_id || 0, esc(initials(s.summoner_name || "HY")), 34, "round");
     }
 
     const demoBtn = $("demo-toggle-btn");
@@ -3115,9 +3446,14 @@ button:disabled { cursor: default; }
   menuBtn.addEventListener("click", (ev) => { ev.stopPropagation(); setMenu(!menu.classList.contains("open")); });
   document.addEventListener("click", (ev) => { if (!menu.contains(ev.target) && ev.target !== menuBtn) setMenu(false); });
 
-  $("alert-top-btn").addEventListener("click", () => armAlerts(true));
-  $("alerts-menu-btn").addEventListener("click", () => { setMenu(false); armAlerts(true); });
+  $("alert-top-btn").addEventListener("click", () => toggleAlerts());
+  $("alerts-menu-btn").addEventListener("click", () => { setMenu(false); toggleAlerts(); });
   $("arm-alerts-btn").addEventListener("click", () => armAlerts(false));
+  $("dismiss-alerts-btn").addEventListener("click", () => {
+    ui.alertDismissed = true;
+    store.set("hypatia_alert_dismissed", "1");
+    updateAlertChrome();
+  });
   $("refresh-btn").addEventListener("click", () => { setMenu(false); fetchState(); });
   $("theme-btn").addEventListener("click", () => {
     applyTheme(ui.theme === "dark" ? "light" : "dark");
@@ -3205,14 +3541,14 @@ button:disabled { cursor: default; }
       if (ui.selectingFirstRole) {
         if (k === ui.lobbySecond && k !== "FILL") ui.lobbySecond = ui.lobbyFirst;
         ui.lobbyFirst = k;
-        ui.selectingFirstRole = false;
+        ui.selectingFirstRole = k === "FILL";
       } else {
         if (k === ui.lobbyFirst && k !== "FILL") ui.lobbyFirst = ui.lobbySecond;
         ui.lobbySecond = k;
       }
       renderState(ui.state);
     } else if (act === "save-roles") {
-      sendCmd({ cmd: "set_lobby_positions", first: ui.lobbyFirst, second: ui.lobbySecond });
+      sendCmd({ cmd: "set_lobby_positions", first: ui.lobbyFirst, second: ui.lobbyFirst === "FILL" ? "FILL" : ui.lobbySecond });
     } else if (act === "start-queue") {
       sendCmd({ cmd: "start_matchmaking" });
     } else if (act === "stop-queue") {
@@ -3221,8 +3557,17 @@ button:disabled { cursor: default; }
       sendCmd({ cmd: "accept_ready_check" });
     } else if (act === "decline-ready") {
       sendCmd({ cmd: "decline_ready_check" });
+    } else if (act === "toggle-draft") {
+      ui.draftExpanded = !ui.draftExpanded;
+      renderState(ui.state);
+    } else if (act === "clear-champ-search") {
+      ui.champQuery = "";
+      renderState(ui.state);
+      const inp = $("champ-search");
+      if (inp) inp.focus();
     } else if (act === "cs-tab") {
       ui.csTab = btn.dataset.tab;
+      ui.draftExpanded = false;
       renderState(ui.state);
       window.scrollTo(0, 0);
     } else if (act === "live-tab") {

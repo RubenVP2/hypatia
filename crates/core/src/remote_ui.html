@@ -36,6 +36,7 @@
   --accent: #0ac8b9;
   --accent-soft: rgba(10, 200, 185, 0.14);
   --green: #45c47f;
+  --on-green: #06130b;
   --green-soft: rgba(69, 196, 127, 0.16);
   --danger: #f0605a;
   --danger-soft: rgba(240, 96, 90, 0.16);
@@ -86,6 +87,7 @@
   --accent: #087c73;
   --accent-soft: rgba(8, 124, 115, 0.12);
   --green: #1e7f48;
+  --on-green: #faf8f2;
   --green-soft: rgba(30, 127, 72, 0.12);
   --danger: #c9342e;
   --danger-soft: rgba(201, 52, 46, 0.12);
@@ -345,11 +347,16 @@ button:disabled { cursor: default; }
 .btn-signal .pt { width: 32px; height: 32px; border: 1px solid rgba(0, 0, 0, 0.35); }
 .btn-signal .lock-name { margin-left: auto; font-size: 18px; }
 .btn-accept {
-  width: 100%; min-height: 56px;
-  background: var(--green); color: #06130b;
-  font: 800 22px var(--font-display); letter-spacing: 0.08em;
+  width: 100%; min-height: 58px;
+  background: var(--green); color: var(--on-green);
+  font: 800 22px var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
 }
-.btn-quiet { width: 100%; min-height: var(--tap); color: var(--muted); font-weight: 600; font-size: 14px; }
+.btn-quiet {
+  width: 100%; min-height: var(--tap);
+  border: 1px solid var(--rule); border-radius: var(--r-sm);
+  background: var(--glass-row);
+  color: var(--text); font-weight: 600; font-size: 14px;
+}
 .dock-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
 
 /* ---- Bottom dock ---------------------------------------------------------------------------- */
@@ -510,64 +517,69 @@ button:disabled { cursor: default; }
 .dial .js-clock-wrap { align-items: center; }
 .queue-roles { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 5px 10px; border-radius: var(--r); border: 1px solid var(--rule); background: var(--glass-row); font-size: 12px; font-weight: 700; }
 
-.medal { position: relative; width: 224px; height: 224px; margin: 4px auto; display: grid; place-items: center; }
+.medal { position: relative; width: 228px; height: 228px; margin: 6px auto 4px; display: grid; place-items: center; }
 .medal .ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
-.medal .ring-track { fill: none; stroke: var(--rule); stroke-width: 6; }
+.medal .ring-outer { fill: none; stroke: var(--gold-bright); stroke-width: 2; opacity: 0.72; }
+.medal .ring-track { fill: none; stroke: #223047; stroke-width: 7; }
 .medal .ring-fill {
-  fill: none; stroke: var(--signal); stroke-width: 6;
+  fill: none; stroke: #f5b400; stroke-width: 7;
   stroke-dasharray: 100; stroke-linecap: butt;
   transition: stroke-dashoffset 250ms linear, stroke 240ms ease;
 }
-.medal .ring-notch { fill: none; stroke: var(--shell); stroke-width: 8; stroke-dasharray: 0.5 9.5; }
-.u2 .ring-fill { stroke: var(--danger); }
-.medal.accepted .ring-fill { stroke: var(--accent); stroke-dashoffset: 0 !important; }
-.medal.declined .ring-fill { stroke: var(--danger); stroke-dashoffset: 0 !important; }
+.medal .ring-notch { fill: none; stroke: #070b12; stroke-width: 9; stroke-dasharray: 0.65 7.683; }
+.u2 .ring-fill { stroke: #f0605a; }
+.medal.accepted .ring-fill { stroke: #0ac8b9; stroke-dashoffset: 0 !important; }
+.medal.declined .ring-fill { stroke: #f0605a; stroke-dashoffset: 0 !important; }
 .medal-core {
   position: relative;
-  width: 182px; height: 182px; border-radius: 50%;
+  width: 176px; height: 176px; border-radius: 50%;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 40%, #1c3346, #070b12 72%);
-  border: 2px solid var(--gold);
+  background: radial-gradient(circle at 50% 38%, #1c3346, #070b12 72%);
+  border: 2px solid var(--gold-bright);
   display: grid; place-items: center;
 }
-.medal-core::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, rgba(5, 8, 13, 0.15), rgba(5, 8, 13, 0.62)); }
-.medal-num { position: relative; z-index: 1; font: 800 70px/1 var(--font-display); color: #eef0f5; font-variant-numeric: tabular-nums; }
+.medal-core::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, rgba(5, 8, 13, 0.14), rgba(5, 8, 13, 0.62)); }
+.medal-num { position: relative; z-index: 1; font: 800 66px/0.92 var(--font-display); color: #eef0f5; font-variant-numeric: tabular-nums; margin-top: -12px; }
+.medal-sec { position: relative; z-index: 1; font: 700 11px/1 var(--font-mono); letter-spacing: 0.14em; color: #9aa7bd; margin-top: 56px; }
 .medal .js-clock-wrap { position: absolute; inset: 0; display: grid; place-items: center; }
 .medal .js-clock-wrap > * { grid-area: 1 / 1; }
-.medal-mark { position: relative; z-index: 1; width: 72px; height: 72px; }
-.medal.accepted .medal-mark { color: var(--accent); }
-.medal.declined .medal-mark { color: var(--danger); }
+.medal-mark { position: relative; z-index: 1; width: 68px; height: 68px; }
+.medal.accepted .medal-mark { color: #0ac8b9; }
+.medal.declined .medal-mark { color: #f0605a; }
+.ready-stage { padding: 24px 16px 20px; gap: 8px; }
+.ready-stage .title { font-size: 30px; letter-spacing: 0.04em; margin-top: 4px; }
 
-/* ---- Champion select: turn HUD, compact tactical draft strip & full board ------------------- */
+/* ---- Champion select: splash turn header, 1-line 5v5 mirror strip & full board -------------- */
 .plate-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cs-turn-plate { display: flex; flex-direction: column; gap: 8px; }
+.cs-turn-plate .clock { font-size: 46px; line-height: 0.88; }
+.cs-turn-bar { width: 100%; height: 4px; border-radius: 2px; background: var(--rule); overflow: hidden; }
+.cs-turn-bar i { display: block; height: 100%; background: var(--gold-bright); transform-origin: left center; transition: background-color 240ms ease; }
+.spot .cs-turn-bar i, .u1 .cs-turn-bar i { background: var(--signal); }
+.u2 .cs-turn-bar i { background: var(--danger); }
+
 .draft-hud { padding: 8px 10px; display: flex; flex-direction: column; gap: 7px; }
-.draft-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-.draft-slot {
-  position: relative; overflow: hidden;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 5px 3px 4px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--rule);
-  background: var(--glass-row);
-  min-width: 0;
+.draft-mirror {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px;
 }
-.draft-slot.self { border-color: var(--gold-bright); background: var(--raised); }
-.draft-slot.acting { border-color: var(--signal); background: var(--signal-soft); }
-.draft-slot .pt-wrap { position: relative; width: 38px; height: 38px; }
-.draft-slot .lane-pip {
-  position: absolute; left: -4px; top: -4px; z-index: 2;
-  width: 18px; height: 18px; border-radius: 50%;
-  display: inline-grid; place-items: center;
-  background: var(--shell); border: 1px solid currentColor;
+.draft-side { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.draft-side.enemy { justify-content: flex-end; }
+.draft-vs { font: 800 12px/1 var(--font-display); letter-spacing: 0.08em; color: var(--gold-bright); padding: 0 2px; }
+.mirror-pt {
+  position: relative;
+  width: 28px; height: 28px; flex-shrink: 0;
 }
-.draft-slot .lock-pip {
-  position: absolute; right: -3px; bottom: -3px; z-index: 2;
-  width: 14px; height: 14px; border-radius: 50%;
+.mirror-pt .pt { width: 28px; height: 28px; border-color: var(--blue); }
+.mirror-pt.self .pt { border: 2px solid var(--gold-bright); }
+.mirror-pt.acting .pt { border: 2px solid var(--signal); }
+.mirror-pt.enemy .pt { border-color: var(--red); }
+.mirror-pt.enemy .pt.empty { border-color: var(--rule-strong); border-style: dashed; }
+.mirror-pt .lock-pip {
+  position: absolute; right: -2px; bottom: -2px; z-index: 2;
+  width: 11px; height: 11px; border-radius: 50%;
   display: inline-grid; place-items: center;
   background: var(--gold-bright); color: var(--on-plate);
 }
-.draft-slot-nm { width: 100%; text-align: center; font: 700 11px/1.15 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.draft-slot.empty-slot .draft-slot-nm { color: var(--muted); }
 .draft-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   padding-top: 6px; border-top: 1px solid var(--rule);
@@ -589,8 +601,10 @@ button:disabled { cursor: default; }
 .draft-toggle svg { width: 15px; height: 15px; transition: transform 180ms ease; }
 .draft-toggle.open svg { transform: rotate(180deg); }
 
-.swap-inline { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-.swap-inline-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.swap-inline { padding: 8px 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.swap-inline-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 150px; }
+.swap-inline-btns { display: flex; gap: 6px; flex-shrink: 0; margin-left: auto; }
+.swap-inline-btns .btn { min-height: 44px; padding: 0 12px; font-size: 13px; }
 
 .board { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
 .ally {
@@ -687,7 +701,7 @@ button:disabled { cursor: default; }
 .champ:disabled { opacity: 0.34; }
 .empty-note { padding: 18px 4px; text-align: center; color: var(--muted); font-size: 13px; }
 
-/* Skin carousel */
+/* Skin carousel (86% wide peeking showcase) */
 .carousel {
   display: flex; gap: 10px;
   overflow-x: auto; scroll-snap-type: x mandatory;
@@ -697,7 +711,7 @@ button:disabled { cursor: default; }
 }
 .carousel::-webkit-scrollbar { display: none; }
 .skin {
-  position: relative; flex: 0 0 84%;
+  position: relative; flex: 0 0 86%;
   aspect-ratio: 16 / 10;
   scroll-snap-align: center;
   border-radius: var(--r);
@@ -714,27 +728,44 @@ button:disabled { cursor: default; }
 }
 .skin-crest svg { width: 76px; height: 76px; }
 .skin .art { object-position: 50% 18%; z-index: 1; }
-.skin::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 45%, rgba(5, 8, 13, 0.88)); }
+.skin::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 42%, rgba(5, 8, 13, 0.90)); }
 .skin-label { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 3; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
-.skin-name { font: 800 20px/1.05 var(--font-display); text-transform: uppercase; color: #eef0f5; letter-spacing: 0.02em; }
+.skin-name { font: 800 22px/1.02 var(--font-display); text-transform: uppercase; color: #eef0f5; letter-spacing: 0.02em; }
 .skin.sel { border: 2px solid var(--gold-bright); }
-.skin .tag { background: rgba(5, 8, 13, 0.65); }
-.carousel-foot { display: flex; justify-content: center; gap: 5px; margin-top: 10px; }
+.skin .tag { background: rgba(5, 8, 13, 0.72); }
+.carousel-foot { display: flex; justify-content: center; gap: 5px; margin-top: 8px; }
 .carousel-foot i { width: 6px; height: 6px; border-radius: 50%; background: var(--rule-strong); }
 .carousel-foot i.on { background: var(--gold-bright); }
 
-/* Loadout */
-.spell-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.spell-slot {
-  display: flex; align-items: center; gap: 10px;
-  min-height: 60px; padding: 8px 10px;
-  border: 1px solid var(--rule); border-radius: var(--r);
-  background: var(--glass-row); text-align: left;
+/* Unified 1-Tap Prep & Loadout */
+.prep-sec { padding: 12px 0; border-top: 1px solid var(--rule); }
+.prep-sec:first-child { padding-top: 0; border-top: 0; }
+.prep-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.prep-sec-head .eyebrow { display: flex; align-items: center; gap: 8px; flex: 1; }
+.prep-sec-head .eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+.spell-duel {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
 }
-.spell-slot.focus { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px var(--gold-bright); background: var(--raised); }
+.spell-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-height: 76px; padding: 8px 6px;
+  border-radius: var(--r); border: 1px solid transparent;
+  background: transparent; text-align: center;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.spell-btn.focus { border-color: var(--gold-bright); background: var(--raised); }
+.spell-btn .pt { width: 48px; height: 48px; border-color: var(--gold); }
+.spell-btn-lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; max-width: 100%; }
+.spell-swap-orb {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--rule-strong); background: var(--glass-row);
+  display: inline-grid; place-items: center; color: var(--text);
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+.spell-swap-orb:active { transform: scale(0.94); border-color: var(--gold-bright); }
 .keycap {
   display: inline-grid; place-items: center;
-  min-width: 20px; height: 18px; padding: 0 4px;
+  min-width: 19px; height: 18px; padding: 0 4px;
   border-radius: 3px; border: 1px solid var(--rule-strong); background: var(--backdrop);
   font: 700 11px/1 var(--font-mono); color: var(--gold-bright);
 }
@@ -756,6 +787,7 @@ button:disabled { cursor: default; }
 .hl-item { width: 64px; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
 .hl-item .meta { font-size: 11px; width: 100%; text-align: center; }
 .tag.online { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.tag.green { border-color: var(--green); color: var(--green); background: var(--green-soft); }
 .hl-link { font: 700 12px var(--font-ui); color: var(--accent); text-decoration: underline; text-underline-offset: 3px; min-height: var(--tap); display: inline-flex; align-items: center; }
 .hl-apply { display: flex; justify-content: flex-end; padding: 0 0 8px; }
 .dmg { margin-top: 10px; }
@@ -789,16 +821,22 @@ button:disabled { cursor: default; }
 .chip.active { border-color: var(--text); background: var(--raised); }
 .chip.sub-active { border-color: var(--accent); background: var(--accent-soft); }
 .seg { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border: 1px solid var(--rule); border-radius: var(--r-sm); }
-.seg button { min-height: 34px; padding: 0 12px; border-radius: 3px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.seg button { min-height: 36px; padding: 0 12px; border-radius: 3px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .seg button.active { background: var(--plate); color: var(--on-plate); }
 .page-row {
   width: 100%;
   display: flex; align-items: center; gap: 10px;
-  min-height: 56px; padding: 8px 10px;
+  min-height: 58px; padding: 8px 10px;
   border: 1px solid var(--rule); border-radius: var(--r);
   background: var(--glass-row); text-align: left;
 }
-.page-row.current { border-color: var(--text); background: var(--raised); }
+.page-row.current { border-color: var(--gold-bright); background: var(--raised); }
+.page-apply {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 32px; padding: 0 11px; border-radius: var(--r-sm);
+  background: var(--plate); color: var(--on-plate);
+  font-size: 12px; font-weight: 800; flex-shrink: 0;
+}
 .sub-k { margin: 12px 0 6px; font: 700 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 
 /* Team tab */
@@ -823,7 +861,46 @@ button:disabled { cursor: default; }
   border-left: 1px solid var(--gold); border-right: 1px solid var(--gold);
 }
 .hud-clock .js-clock-wrap { align-items: center; }
-.hud-mode { font: 700 11px var(--font-mono); color: var(--muted); letter-spacing: 0.06em; }
+.hud-mode { font: 700 11px var(--font-mono); color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Live Objective Timer Strip (from LiveBoard::pits) */
+.pit-bar {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border-radius: var(--r); border: 1px solid var(--rule);
+  background: var(--glass); overflow: hidden;
+}
+.pit-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  padding: 9px 6px; border-left: 1px solid var(--rule); min-width: 0;
+}
+.pit-cell:first-child { border-left: 0; }
+.pit-cell-top { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.pit-cell-lbl { font: 700 11px/1.1 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.pit-cell-val { font: 800 17px/1 var(--font-display); letter-spacing: 0.03em; font-variant-numeric: tabular-nums; color: var(--text); }
+.pit-cell.up .pit-cell-top, .pit-cell.up .pit-cell-val { color: var(--accent); }
+.pit-cell.mine .pit-cell-top, .pit-cell.mine .pit-cell-val { color: var(--blue); }
+
+/* Head-to-Head Lane Duel Card */
+.duel-card { border-color: var(--gold-bright); padding: 12px 10px 10px; display: flex; flex-direction: column; gap: 10px; }
+.duel-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.duel-side { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.duel-side.enemy { flex-direction: row-reverse; text-align: right; }
+.duel-side .pt { width: 40px; height: 40px; }
+.duel-nm { font: 800 18px/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
+.duel-side.enemy .duel-nm { color: var(--red); }
+.duel-kda { font: 700 13px/1.25 var(--font-mono); color: var(--text); margin-top: 2px; white-space: nowrap; }
+.duel-sub { font: 600 11px/1.2 var(--font-mono); color: var(--muted); white-space: nowrap; letter-spacing: -0.02em; }
+.duel-vs { font: 800 13px/1 var(--font-display); letter-spacing: 0.08em; color: var(--gold-bright); }
+.duel-deltas {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--rule); padding-top: 8px; text-align: center;
+}
+.duel-delta { font: 700 13px/1.15 var(--font-mono); border-left: 1px solid var(--rule); padding: 0 4px; }
+.duel-delta:first-child { border-left: 0; }
+.duel-delta.pos { color: var(--green); }
+.duel-delta.neg { color: var(--red); }
+.duel-delta.gold { color: var(--gold-bright); }
+
 .me { display: flex; align-items: center; gap: 12px; }
 .me .pt { width: 60px; height: 60px; }
 .me-name { font: 800 24px/1 var(--font-display); text-transform: uppercase; }
@@ -1300,7 +1377,13 @@ button:disabled { cursor: default; }
       modeRift: "Rift",
       modeArena: "Arena",
       optionalRole: "Auto",
-      stPickBan: (p, b) => `P ${p} · B ${b}`
+      stPickBan: (p, b) => `P ${p} · B ${b}`,
+      secShort: "SEC",
+      pitUp: "UP",
+      applyShort: "Apply",
+      lvlDelta: n => `${n > 0 ? "+" : ""}${n} Lvl`,
+      csDelta: n => `${n > 0 ? "+" : ""}${n} CS`,
+      changeSpellHint: "Tap D or F to change"
     },
     fr: {
       title: "Hypatia — Télécommande mobile",
@@ -1544,7 +1627,13 @@ button:disabled { cursor: default; }
       modeRift: "Faille",
       modeArena: "Arène",
       optionalRole: "Auto",
-      stPickBan: (p, b) => `P ${p} · B ${b}`
+      stPickBan: (p, b) => `P ${p} · B ${b}`,
+      secShort: "SEC",
+      pitUp: "ACTIF",
+      applyShort: "Appliquer",
+      lvlDelta: n => `${n > 0 ? "+" : ""}${n} Niv`,
+      csDelta: n => `${n > 0 ? "+" : ""}${n} CS`,
+      changeSpellHint: "Touchez D ou F pour changer"
     }
   };
 
@@ -1620,6 +1709,7 @@ button:disabled { cursor: default; }
     lobbySecond: "TOP",
     lobbySynced: false,
     spellSlot: 1,
+    spellPickerOpen: false,
     runeSubView: "saved",
     customPrimary: 8100,
     customSub: 8200,
@@ -1766,13 +1856,13 @@ button:disabled { cursor: default; }
       const total = Number(w.dataset.total);
       const now = dir < 0 ? Math.max(0, Math.ceil(base - elapsed)) : Math.floor(base + elapsed);
       const label = w.querySelector(".js-clock");
-      const text = fmtClock(now, w.dataset.fmt);
+      const text = (now === 0 && w.dataset.zeroLabel) ? w.dataset.zeroLabel : fmtClock(now, w.dataset.fmt);
       if (label && label.textContent !== text) label.textContent = text;
       const u = dir < 0 && !w.dataset.calm ? urgency(now) : 0;
       w.classList.toggle("u1", u === 1);
       w.classList.toggle("u2", u === 2);
       const frac = Math.min(1, now / Math.max(1, total));
-      const bar = w.querySelector(".js-bar i");
+      const bar = w.querySelector(".js-bar i") || (w.closest(".cs-turn-plate") && w.closest(".cs-turn-plate").querySelector(".js-bar i"));
       if (bar) bar.style.transform = `scaleX(${frac.toFixed(3)})`;
       const ring = w.querySelector(".js-ring");
       if (ring) ring.style.strokeDashoffset = String(100 - 100 * frac);
@@ -2292,19 +2382,23 @@ button:disabled { cursor: default; }
       <button class="btn-quiet" data-action="decline-ready">${esc(t("decline"))}</button>`);
     const state = accepted ? "accepted" : (declined ? "declined" : "");
     const ring = `<svg class="ring-svg" viewBox="0 0 120 120" aria-hidden="true">
-        <circle class="ring-track" cx="60" cy="60" r="56"/>
-        <circle class="ring-fill js-ring" cx="60" cy="60" r="56" pathLength="100" style="stroke-dashoffset:${(100 - 100 * Math.min(1, left / total)).toFixed(2)}"/>
-        <circle class="ring-notch" cx="60" cy="60" r="56" pathLength="100"/>
+        <circle class="ring-outer" cx="60" cy="60" r="58.5"/>
+        <circle class="ring-track" cx="60" cy="60" r="53"/>
+        <circle class="ring-fill js-ring" cx="60" cy="60" r="53" pathLength="100" style="stroke-dashoffset:${(100 - 100 * Math.min(1, left / total)).toFixed(2)}"/>
+        <circle class="ring-notch" cx="60" cy="60" r="53" pathLength="100"/>
       </svg>`;
     const core = `<div class="medal-core">${imgTag("art", ART.readyCheck, "art")}${accepted ? CHECK_SVG : declined ? CROSS_SVG : ""}</div>`;
     const medal = state
       ? `<div class="medal ${state}">${ring}${core}</div>`
-      : `<div class="medal">${clockHtml(left, { down: true, total, fmt: "s", cls: "medal-num", extra: "" }).replace('<span class="clock medal-num', `${ring}${core}<span class="clock medal-num`)}</div>`;
+      : `<div class="medal">${clockHtml(left, { down: true, total, fmt: "s", cls: "medal-num", extra: `<span class="medal-sec">${esc(t("secShort"))}</span>` }).replace('<span class="clock medal-num', `${ring}${core}<span class="clock medal-num`)}</div>`;
+    const lob = s.lobby || {};
+    const p1 = lob.first_position && lob.first_position !== "UNSELECTED" ? laneInfo(lob.first_position).label : "";
+    const subParts = [queueLabel(mm.queue_name), p1, accepted ? t("waitingOthers") : (declined ? "" : t("acceptBefore"))].filter(Boolean);
     return `
-      <section class="panel hero-center ${state ? "" : "spot" + (Date.now() < ui.turnFlashUntil ? " turn-start" : "")}">
+      <section class="panel hero-center ready-stage ${state ? "" : "spot" + (Date.now() < ui.turnFlashUntil ? " turn-start" : "")}">
         ${medal}
         <h2 class="title">${esc(accepted ? t("matchAccepted") : declined ? t("matchDeclined") : t("matchFound"))}</h2>
-        <div class="meta">${esc(queueLabel(mm.queue_name) || "")}${accepted ? " · " + esc(t("waitingOthers")) : declined ? "" : " · " + esc(t("acceptBefore"))}</div>
+        <div class="meta">${esc(subParts.join(" · "))}</div>
       </section>`;
   }
 
@@ -2355,7 +2449,6 @@ button:disabled { cursor: default; }
   }
 
   function draftHud(cs) {
-    const enemies = (cs.their_team || []).map(e => champPt(e.champion_id, e.champion_name, 22, "enemy")).join("");
     if (ui.draftExpanded) {
       return `<section class="panel draft-hud" aria-label="${esc(t("champSelect"))}" data-key="draft-hud">
           <div class="draft-bar" style="padding-top:0;border-top:0">
@@ -2367,27 +2460,29 @@ button:disabled { cursor: default; }
           ${draftBoard(cs)}
         </section>`;
     }
-    const slots = (cs.my_team || []).map(a => {
-      const has = a.champion_id > 0;
+    const allySlots = (cs.my_team || []).slice(0, 5).map(a => {
       const acting = Boolean(a.acting_type && !a.is_self);
-      const l = laneInfo(a.assigned_position);
-      return `<div class="draft-slot ${a.is_self ? "self" : ""} ${acting ? "acting" : ""} ${has ? "" : "empty-slot"}" data-key="ds-${a.cell_id}">
-        <span class="pt-wrap">
-          ${champPt(a.champion_id, a.champion_name, 38, a.is_self ? "self" : "")}
-          <span class="lane-pip" style="color:${l.color}" title="${esc(l.label)}">${laneSvg(l.key, 11)}</span>
-          ${a.pick_locked ? `<span class="lock-pip">${LOCK_MINI_SVG}</span>` : ""}
-        </span>
-        <span class="draft-slot-nm">${esc(has ? a.champion_name : l.label)}</span>
-      </div>`;
+      return `<span class="mirror-pt ${a.is_self ? "self" : ""} ${acting ? "acting" : ""}" data-key="ds-${a.cell_id}" title="${esc(a.champion_name || laneInfo(a.assigned_position).label)}">
+        ${champPt(a.champion_id, a.champion_name, 28, a.is_self ? "self" : "")}
+        ${a.pick_locked ? `<span class="lock-pip">${LOCK_MINI_SVG}</span>` : ""}
+      </span>`;
+    }).join("");
+    const enemyRaw = (cs.their_team || []).slice(0, 5);
+    const enemySlots = Array.from({ length: Math.max(enemyRaw.length, Math.min(5, (cs.my_team || []).length)) }, (_, i) => {
+      const e = enemyRaw[i];
+      return `<span class="mirror-pt enemy" data-key="de-${i}">${e ? champPt(e.champion_id, e.champion_name, 28, "enemy") : `<span class="pt empty" style="width:28px;height:28px"></span>`}</span>`;
     }).join("");
     return `<section class="panel draft-hud" aria-label="${esc(t("champSelect"))}" data-key="draft-hud">
-        <div class="draft-strip">${slots}</div>
+        <div class="draft-mirror">
+          <div class="draft-side">${allySlots}</div>
+          <span class="draft-vs">VS</span>
+          <div class="draft-side enemy">${enemySlots}</div>
+        </div>
         <div class="draft-bar">
           <div class="draft-mini-group">
             <span class="draft-mini-k blue">${esc(t("bans"))}</span>
             ${draftBansMini(cs)}
           </div>
-          ${enemies ? `<div class="draft-mini-group"><span class="draft-mini-k red">VS</span>${enemies}</div>` : ""}
           <button class="draft-toggle" data-action="toggle-draft" aria-expanded="false">
             <span>${esc(t("draftDetails"))}</span>${CHEV_DOWN_SVG}
           </button>
@@ -2434,10 +2529,11 @@ button:disabled { cursor: default; }
   function inlineSwapsHtml(cs) {
     const incoming = cs.incoming_swaps || [];
     if (!incoming.length || ui.csTab === "team") return "";
+    const pos = laneInfo(cs.assigned_position);
     return incoming.map(sw => `<section class="panel spot swap-inline" data-key="isw-${esc(sw.kind)}-${sw.id}">
-        <div class="between">
-          <div class="grow"><b class="ellipsis" style="display:block">${esc(sw.caller_name)} · ${esc(swapKindLabel(sw.kind))}</b>${sw.detail ? `<span class="meta">${esc(sw.detail)}</span>` : ""}</div>
-          <span class="tag signal">${esc(t("incomingReq"))}</span>
+        <div class="swap-inline-info">
+          ${laneSvg(pos.key, 18, pos.color)}
+          <div class="grow"><b class="ellipsis" style="display:block;font-size:13px">${esc(sw.caller_name)} · ${esc(swapKindLabel(sw.kind))}</b>${sw.detail ? `<span class="meta ellipsis" style="display:block">${esc(sw.detail)}</span>` : ""}</div>
         </div>
         <div class="swap-inline-btns">
           <button class="btn btn-ghost" data-action="resp-swap" data-kind="${esc(sw.kind)}" data-id="${sw.id}" data-accept="0">${esc(t("decline"))}</button>
@@ -2462,7 +2558,6 @@ button:disabled { cursor: default; }
         </div>
         <div class="draft-status-links">
           <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="loadout">${esc(t("tabLoadout"))}</button>
-          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="skins">${esc(t("tabSkins"))}</button>
           <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="guide">${esc(t("tabGuide"))}</button>
         </div>
       </div>` : "";
@@ -2492,13 +2587,11 @@ button:disabled { cursor: default; }
       </section>`;
   }
 
-  function skinsTab(cs) {
+  function skinsCarouselHtml(cs) {
     const skins = cs.available_skins || [];
-    if (!skins.length) return `<section class="panel"><div class="empty-note">${esc(t("selectChampSkins"))}</div></section>`;
+    if (!skins.length) return `<div class="empty-note">${esc(t("selectChampSkins"))}</div>`;
     const champ = Math.floor((skins[0].id || 0) / 1000);
-    return `<section class="panel" data-key="skins-panel">
-        <div class="section-head"><span class="eyebrow">${esc(t("tabSkins"))}</span><span class="meta mono">${skins.length}</span></div>
-        <div class="carousel" id="skin-carousel" data-key="skins-${champ}">
+    return `<div class="carousel" id="skin-carousel" data-key="skins-${champ}">
           ${skins.map(sk => `
             <button class="skin ${sk.selected ? "sel" : ""}" data-key="sk${sk.id}" data-action="set-skin" data-id="${sk.id}">
               <span class="skin-crest" aria-hidden="true">${CREST_SVG}</span>
@@ -2509,8 +2602,7 @@ button:disabled { cursor: default; }
               </span>
             </button>`).join("")}
         </div>
-        ${skins.length <= 24 ? `<div class="carousel-foot" aria-hidden="true">${skins.map(sk => `<i class="${sk.selected ? "on" : ""}"></i>`).join("")}</div>` : ""}
-      </section>`;
+        ${skins.length <= 24 ? `<div class="carousel-foot" aria-hidden="true">${skins.map(sk => `<i class="${sk.selected ? "on" : ""}"></i>`).join("")}</div>` : ""}`;
   }
 
   function loadoutTab(cs) {
@@ -2522,9 +2614,9 @@ button:disabled { cursor: default; }
     const pages = [...(cs.rune_pages || []), ...(cs.recommended_rune_pages || [])];
     const pTree = (cs.rune_trees || []).find(tr => tr.id === ui.customPrimary);
     const sTree = (cs.rune_trees || []).find(tr => tr.id === ui.customSub);
-    const slotBtn = (n, raw, name) => `<button class="spell-slot ${ui.spellSlot === n ? "focus" : ""}" data-action="focus-spell-slot" data-slot="${n}">
-        ${pt("spell", raw.id, spellFallbackGlyph(raw.id, name), 40)}
-        <span class="grow"><span class="keycap">${esc(n === 1 ? t("slotD") : t("slotF"))}</span><br><b class="ellipsis">${esc(name)}</b>${raw.cooldown ? `<br><span class="meta">${esc(raw.cooldown)}</span>` : ""}</span>
+    const spellBtn = (n, raw, name) => `<button class="spell-btn ${ui.spellPickerOpen && ui.spellSlot === n ? "focus" : ""}" data-action="focus-spell-slot" data-slot="${n}">
+        ${pt("spell", raw.id, spellFallbackGlyph(raw.id, name), 48)}
+        <span class="spell-btn-lbl"><span class="keycap">${esc(n === 1 ? t("slotD") : t("slotF"))}</span><span class="ellipsis">${esc(name)}</span></span>
       </button>`;
     const chip = (cls, action, attrs, icon, label) =>
       `<button class="chip ${cls}" data-action="${action}" ${attrs}>${icon}<span>${esc(label)}</span></button>`;
@@ -2553,12 +2645,15 @@ button:disabled { cursor: default; }
           const pStyle = styleName(pg.primary_style_id, pg.primary_style_name);
           const sStyle = styleName(pg.sub_style_id, pg.sub_style_name);
           return `<button class="page-row ${pg.current ? "current" : ""}" data-key="pg${pg.id}" data-action="select-rune-page" data-id="${pg.id}" data-is-preset="${pg.is_preset ? "1" : "0"}" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc((pg.selected_perk_ids || []).join(","))}">
-              ${pt("perk", keystoneId, esc(initials(pg.keystone_name)), 34, "round no-rim")}
+              ${pt("perk", keystoneId, esc(initials(pg.keystone_name)), 36, "round no-rim")}
               <span class="grow">
                 <b class="ellipsis" style="display:block">${esc(pg.name)}</b>
-                <span class="meta row" style="gap:5px">${pt("style", pg.primary_style_id, "", 16, "round no-rim")}${esc(pStyle)} + ${pt("style", pg.sub_style_id, "", 14, "round no-rim")}${esc(sStyle)}</span>
+                <span class="meta row" style="gap:5px;margin-top:2px">
+                  ${pt("style", pg.primary_style_id, "", 15, "round no-rim")}<span class="ellipsis">${esc(pStyle)} · ${esc(sStyle)}</span>
+                  ${pg.is_preset ? `<span class="tag">${esc(t("presetTag"))}</span>` : ""}
+                </span>
               </span>
-              ${pg.current ? `<span class="tag accent">${esc(t("activeTag"))}</span>` : (pg.is_preset ? `<span class="tag">${esc(t("presetTag"))}</span>` : "")}
+              ${pg.current ? `<span class="tag green">${esc(t("activeTag"))}</span>` : `<span class="page-apply">${esc(t("applyShort"))}</span>`}
             </button>`;
         }).join("")}</div>`
       : `<div>
@@ -2580,32 +2675,40 @@ button:disabled { cursor: default; }
         </div>`;
 
     return `
-      <section class="panel">
-        <div class="section-head">
-          <span class="eyebrow">${esc(t("sumSpells"))}</span>
-          <button class="btn btn-ghost btn-sm" data-action="swap-spells">
-            <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
-            ${esc(t("swapDF"))}
-          </button>
+      <section class="panel" data-key="loadout-unified">
+        <div class="prep-sec" data-key="skins-panel">
+          ${skinsCarouselHtml(cs)}
         </div>
-        <div class="spell-pair">${slotBtn(1, s1Raw, s1Name)}${slotBtn(2, s2Raw, s2Name)}</div>
-        <div class="chip-grid">
-          ${spells.map(sp => {
-            const active = (ui.spellSlot === 1 ? cs.spell1_id : cs.spell2_id) === sp.id;
-            const nm = spellName(sp.id, sp.name);
-            return chip(active ? "active" : "", "pick-spell", `data-id="${sp.id}"`, pt("spell", sp.id, spellFallbackGlyph(sp.id, nm), 26, "no-rim"), nm);
-          }).join("")}
+        <div class="prep-sec">
+          <div class="prep-sec-head">
+            <span class="eyebrow">${esc(t("hlSpells"))}</span>
+            <span class="meta">${esc(t("changeSpellHint"))}</span>
+          </div>
+          <div class="spell-duel">
+            ${spellBtn(1, s1Raw, s1Name)}
+            <button class="spell-swap-orb" data-action="swap-spells" aria-label="${esc(t("swapDF"))}">
+              <svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
+            </button>
+            ${spellBtn(2, s2Raw, s2Name)}
+          </div>
+          ${ui.spellPickerOpen ? `<div class="chip-grid">
+            ${spells.map(sp => {
+              const active = (ui.spellSlot === 1 ? cs.spell1_id : cs.spell2_id) === sp.id;
+              const nm = spellName(sp.id, sp.name);
+              return chip(active ? "active" : "", "pick-spell", `data-id="${sp.id}"`, pt("spell", sp.id, spellFallbackGlyph(sp.id, nm), 26, "no-rim"), nm);
+            }).join("")}
+          </div>` : ""}
         </div>
-      </section>
-      <section class="panel">
-        <div class="section-head">
-          <span class="eyebrow">${esc(t("runes"))}</span>
-          <span class="seg">
-            <button class="${ui.runeSubView === "saved" ? "active" : ""}" data-action="rune-sub" data-mode="saved">${esc(t("pages"))}</button>
-            <button class="${ui.runeSubView === "custom" ? "active" : ""}" data-action="rune-sub" data-mode="custom">${esc(t("builder"))}</button>
-          </span>
+        <div class="prep-sec">
+          <div class="prep-sec-head">
+            <span class="eyebrow">${esc(t("runes"))}</span>
+            <span class="seg">
+              <button class="${ui.runeSubView === "saved" ? "active" : ""}" data-action="rune-sub" data-mode="saved">${esc(t("pages"))}</button>
+              <button class="${ui.runeSubView === "custom" ? "active" : ""}" data-action="rune-sub" data-mode="custom">${esc(t("builder"))}</button>
+            </span>
+          </div>
+          ${runeBody}
         </div>
-        ${runeBody}
       </section>`;
   }
 
@@ -2765,13 +2868,13 @@ button:disabled { cursor: default; }
       return `<section class="panel"><h2 class="title sm">${esc(t("champSelect"))}</h2><div class="meta" style="margin-top:4px">${esc(t("syncDraft"))}</div></section>`;
     }
     syncCustomRunesDefaults(cs);
+    if (ui.csTab === "skins") ui.csTab = "loadout";
     const act = cs.active_action;
     const isTurn = Boolean(act && act.is_my_turn && !act.completed);
     const isBan = Boolean(act && act.action_type === "ban");
     const incoming = (cs.incoming_swaps || []).length > 0;
     const tabs = tabsHtml([
       { id: "pick", label: t("tabPick") },
-      { id: "skins", label: t("tabSkins") },
       { id: "loadout", label: t("tabLoadout") },
       { id: "guide", label: t("tabGuide") },
       { id: "team", label: t("tabTeam"), dot: incoming && ui.csTab !== "team" }
@@ -2787,21 +2890,23 @@ button:disabled { cursor: default; }
       renderDock(tabs);
     }
     const body = ui.csTab === "pick" ? pickTab(cs, act, isBan)
-      : ui.csTab === "skins" ? skinsTab(cs)
       : ui.csTab === "loadout" ? loadoutTab(cs)
       : ui.csTab === "guide" ? helperTab(cs)
       : teamTab(cs);
     const flash = isTurn && Date.now() < ui.turnFlashUntil;
     const pos = laneInfo(cs.assigned_position);
+    const totalSec = Math.max(1, cs.total_time_sec || cs.time_left_sec || 30);
+    const frac = Math.min(1, Math.max(0, (cs.time_left_sec || 0) / totalSec));
     return `
-      <section class="panel ${isTurn ? "spot" : ""}${flash ? " turn-start" : ""}" data-key="cs-turn">
+      <section class="panel cs-turn-plate ${isTurn ? "spot" : ""}${flash ? " turn-start" : ""}" data-key="cs-turn">
         <div class="plate-head">
           <div class="grow">
             <h2 class="title">${esc(isTurn ? (isBan ? t("turnBan") : t("turnPick")) : subPhaseLabel(cs.sub_phase))}</h2>
             <div class="sub-meta">${laneSvg(pos.key, 13, pos.color)}<span class="ellipsis">${esc(pos.label)} · ${esc(queueLabel(cs.queue_type) || subPhaseLabel(cs.sub_phase))}</span></div>
           </div>
-          ${clockHtml(cs.time_left_sec, { down: true, total: cs.total_time_sec || cs.time_left_sec, fmt: "s", bar: true })}
+          ${clockHtml(cs.time_left_sec, { down: true, total: totalSec, fmt: "s" })}
         </div>
+        <div class="cs-turn-bar js-bar" aria-hidden="true"><i style="transform:scaleX(${frac.toFixed(3)})"></i></div>
       </section>
       ${draftHud(cs)}
       ${inlineSwapsHtml(cs)}
@@ -2821,6 +2926,22 @@ button:disabled { cursor: default; }
         <span class="side">${p.dead ? `<span class="respawn-chip">${p.respawn_sec}s</span>` : `<span class="kda-txt">${esc(p.kda)}</span>`}</span>
       </div>`;
   }
+  function livePitsHtml(lg) {
+    const pits = lg.pits || [];
+    if (!pits.length) return "";
+    return `<section class="pit-bar" aria-label="${esc(t("objectives"))}">
+        ${pits.map(p => {
+          const isUp = (p.in_sec || 0) <= 0;
+          const timerHtml = isUp
+            ? `<span class="pit-cell-val">${esc(t("pitUp"))}</span>`
+            : `<span class="js-clock-wrap" data-base="${p.in_sec}" data-dir="-1" data-total="0" data-fmt="mmss" data-calm="1" data-zero-label="${esc(t("pitUp"))}"><span class="pit-cell-val js-clock" role="timer">${fmtClock(p.in_sec, "mmss")}</span></span>`;
+          return `<div class="pit-cell ${isUp ? "up" : ""}">
+              <span class="pit-cell-top">${objectiveSvg(p.label, 14)}<span class="pit-cell-lbl">${esc(p.label)}</span></span>
+              ${timerHtml}
+            </div>`;
+        }).join("")}
+      </section>`;
+  }
   function renderLive(s) {
     const lg = s.live_game;
     renderDock(lg ? tabsHtml([{ id: "allies", label: t("allies") }, { id: "enemies", label: t("enemies") }], ui.liveTab, "live-tab") : "");
@@ -2831,8 +2952,13 @@ button:disabled { cursor: default; }
     const dead = Boolean(me && me.dead);
     const clockSec = parseClock(lg.clock);
     const list = ui.liveTab === "allies" ? (lg.allies || []) : (lg.enemies || []);
-    const meCard = dead
-      ? `<section class="panel death">
+    const opp = (!dead && me && me.lane && me.lane !== "FLEX")
+      ? (lg.enemies || []).find(e => e.lane === me.lane)
+      : null;
+
+    let heroCard;
+    if (dead) {
+      heroCard = `<section class="panel death">
           <div class="me">
             ${champPt(lg.active_champion_id, lg.active_champion, 60, "self dead")}
             <div class="grow">
@@ -2841,8 +2967,38 @@ button:disabled { cursor: default; }
             </div>
             ${clockHtml(me.respawn_sec, { down: true, fmt: "s", calm: true })}
           </div>
-        </section>`
-      : `<section class="panel">
+        </section>`;
+    } else if (opp) {
+      const dLvl = Number(lg.level || 0) - Number(opp.level || 0);
+      const dCs = Number(lg.cs || 0) - Number(opp.cs || 0);
+      heroCard = `<section class="panel duel-card">
+          <div class="duel-grid">
+            <div class="duel-side">
+              ${champPt(lg.active_champion_id, lg.active_champion, 40, "self")}
+              <div class="grow">
+                <div class="duel-nm ellipsis">${esc(lg.active_champion)}</div>
+                <div class="duel-kda">${esc(lg.kda)}</div>
+                <div class="duel-sub ellipsis">${lg.cs} ${esc(t("cs"))} · ${esc(t("lvl", lg.level))}</div>
+              </div>
+            </div>
+            <span class="duel-vs">VS</span>
+            <div class="duel-side enemy">
+              ${champPt(opp.champion_id, opp.champion, 40, "enemy")}
+              <div class="grow">
+                <div class="duel-nm ellipsis">${esc(opp.champion)}</div>
+                <div class="duel-kda">${esc(opp.kda)}</div>
+                <div class="duel-sub ellipsis">${opp.cs} ${esc(t("cs"))} · ${esc(t("lvl", opp.level))}</div>
+              </div>
+            </div>
+          </div>
+          <div class="duel-deltas">
+            <span class="duel-delta ${dLvl > 0 ? "pos" : dLvl < 0 ? "neg" : ""}">${esc(t("lvlDelta", dLvl))}</span>
+            <span class="duel-delta ${dCs > 0 ? "pos" : dCs < 0 ? "neg" : ""}">${esc(t("csDelta", dCs))}</span>
+            <span class="duel-delta gold">${fmtNum(Math.floor(lg.current_gold))} ${esc(t("gold"))}</span>
+          </div>
+        </section>`;
+    } else {
+      heroCard = `<section class="panel">
           <div class="me">
             ${champPt(lg.active_champion_id, lg.active_champion, 60, "self")}
             <div class="grow">
@@ -2852,6 +3008,8 @@ button:disabled { cursor: default; }
             <div class="me-kda"><b>${esc(lg.kda)}</b><span class="meta">K / D / A</span></div>
           </div>
         </section>`;
+    }
+
     return `
       <section class="hud">
         <div class="hud-side blue"><span class="score">${lg.my_kills}</span><span class="towers">${TOWER_SVG}${lg.my_towers}</span></div>
@@ -2861,12 +3019,13 @@ button:disabled { cursor: default; }
         </div>
         <div class="hud-side red"><span class="towers">${lg.enemy_towers}${TOWER_SVG}</span><span class="score">${lg.enemy_kills}</span></div>
       </section>
-      ${meCard}
+      ${livePitsHtml(lg)}
+      ${heroCard}
+      <section class="panel board">${list.map(p => liveRow(p, ui.liveTab === "allies")).join("")}</section>
       ${(lg.objectives || []).length ? `<section class="panel">
         <div class="eyebrow" style="margin-bottom:8px">${esc(t("objectives"))}</div>
         <div class="obj-strip">${lg.objectives.map(o => `<span class="obj ${o.mine ? "blue" : "red"}">${objectiveSvg(o.label)}<span>${esc(o.label)}</span></span>`).join("")}</div>
       </section>` : ""}
-      <section class="panel board">${list.map(p => liveRow(p, ui.liveTab === "allies")).join("")}</section>
       ${(lg.feed || []).length ? `<section class="panel">
         <div class="eyebrow" style="margin-bottom:6px">${esc(t("recentEvents"))}</div>
         ${lg.feed.map(f => {
@@ -3585,7 +3744,13 @@ button:disabled { cursor: default; }
     } else if (act === "set-skin") {
       sendCmd({ cmd: "set_skin", skin_id: Number(btn.dataset.id) });
     } else if (act === "focus-spell-slot") {
-      ui.spellSlot = Number(btn.dataset.slot);
+      const slot = Number(btn.dataset.slot);
+      if (ui.spellPickerOpen && ui.spellSlot === slot) {
+        ui.spellPickerOpen = false;
+      } else {
+        ui.spellSlot = slot;
+        ui.spellPickerOpen = true;
+      }
       renderState(ui.state);
     } else if (act === "swap-spells") {
       if (cs) sendCmd({ cmd: "set_summoner_spells", spell1_id: cs.spell2_id, spell2_id: cs.spell1_id });
@@ -3601,6 +3766,7 @@ button:disabled { cursor: default; }
         if (picked === s1) s1 = s2;
         s2 = picked;
       }
+      ui.spellPickerOpen = false;
       sendCmd({ cmd: "set_summoner_spells", spell1_id: s1, spell2_id: s2 });
     } else if (act === "rune-sub") {
       ui.runeSubView = btn.dataset.mode;

@@ -18,6 +18,20 @@ on:
         description: 'Mark GitHub Release as a pre-release'
         type: boolean
         default: false
+  # Called by release-plz.yml once the release PR is merged and tagged: a tag pushed
+  # with GITHUB_TOKEN does not trigger `push: tags` above.
+  workflow_call:
+    inputs:
+      tag_name:
+        description: 'Release tag created by release-plz (e.g. v0.6.0).'
+        type: string
+        required: true
+      draft:
+        type: boolean
+        default: false
+      prerelease:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -131,7 +145,7 @@ jobs:
         working-directory: crates/desktop
         run: |
           export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
-          slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint -o "$RUNNER_TEMP/hypatia.pot"
+          slint-tr-extractor ui/app.slint ui/parts.slint ui/theme.slint ui/stats.slint ui/helper.slint -o "$RUNNER_TEMP/hypatia.pot"
           msgcmp --use-untranslated lang/hypatia.pot "$RUNNER_TEMP/hypatia.pot"
           msgcmp --use-untranslated "$RUNNER_TEMP/hypatia.pot" lang/hypatia.pot
           msgfmt -c -o /dev/null lang/fr/LC_MESSAGES/hypatia.po
@@ -219,6 +233,30 @@ jobs:
       attestations: write
 
     steps:
+      - name: Checkout CHANGELOG.md
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
+      - name: Extract release notes from CHANGELOG.md
+        shell: bash
+        env:
+          TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          # Body of the `## [X.Y.Z]` section, up to the next `## [` heading.
+          awk -v heading="## [${TAG#v}]" '
+            /^## \[/ { if (found) exit; if (index($0, heading) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "Release notes for $TAG:"
+            cat "$RUNNER_TEMP/release-notes.md"
+          else
+            echo "::warning::No CHANGELOG.md section for $TAG; falling back to GitHub generated notes."
+            rm "$RUNNER_TEMP/release-notes.md"
+          fi
+
       - name: Download staged release archive
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -252,11 +290,17 @@ jobs:
           if [[ "$REF_TYPE" != "tag" ]]; then
             EXTRA_FLAGS+=(--target "$COMMIT_SHA")
           fi
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          if [[ -f "$NOTES_FILE" ]]; then
+            NOTES_FLAGS=(--notes-file "$NOTES_FILE")
+          else
+            NOTES_FLAGS=(--generate-notes)
+          fi
 
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --title "Hypatia $TAG" \
-              --generate-notes \
+              "${NOTES_FLAGS[@]}" \
               --draft \
               "${EXTRA_FLAGS[@]}"
           fi

@@ -1,0 +1,85 @@
+# Release automation: https://release-plz.dev/docs/config
+#
+# On every push to `main`, release-plz keeps a "chore: release vX.Y.Z" pull request
+# up to date: it bumps the shared workspace version and prepends the new section to
+# CHANGELOG.md, built from the Conventional Commit subjects (= squash-merged PR titles).
+# Merging that PR tags `vX.Y.Z`; `release.yml` then builds the binary and publishes the
+# GitHub Release with that changelog section as its notes.
+
+[workspace]
+# The crates are `publish = false`: versions come from the `vX.Y.Z` git tags, never crates.io.
+git_only = true
+# Desktop app, not a library: no API semver checks, and `feat` bumps 0.x minor (0.5 -> 0.6).
+semver_check = false
+features_always_increment_minor = true
+# Only release when the release PR is merged, not on every push to main.
+release_always = false
+# Leave Cargo.lock dependency updates to Dependabot.
+dependencies_update = false
+# `release.yml` creates the GitHub Release once the Windows binary is built and attested.
+git_release_enable = false
+# Only `hypatia` writes the changelog and the tag; the library crates just follow its version.
+changelog_update = false
+git_tag_enable = false
+git_tag_name = "v{{ version }}"
+pr_name = "chore: release v{{ version }}"
+
+[[package]]
+name = "hypatia"
+version_group = "hypatia"
+changelog_update = true
+changelog_path = "CHANGELOG.md"
+changelog_include = ["hypatia-shared", "hypatia-core"]
+git_tag_enable = true
+
+[[package]]
+name = "hypatia-core"
+version_group = "hypatia"
+
+[[package]]
+name = "hypatia-shared"
+version_group = "hypatia"
+
+[changelog]
+header = """# Changelog
+
+All notable changes to Hypatia are documented here, generated from Conventional Commits
+by [release-plz](https://release-plz.dev). Versions follow [Semantic Versioning](https://semver.org).
+
+## [Unreleased]
+
+"""
+body = """
+## [{{ version }}]{%- if release_link -%}({{ release_link }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+{%- if commit.scope -%}
+- *({{ commit.scope }})* {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}
+{% else -%}
+- {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}
+{% endif -%}
+{% endfor -%}
+{% endfor %}
+"""
+protect_breaking_commits = true
+sort_commits = "oldest"
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+"
+commit_preprocessors = [
+  # Link PR numbers: `(#22)` -> `([#22](…/pull/22))`.
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/RubenVP2/hypatia/pull/${1}))" },
+]
+# The HTML comments only order the sections; `striptags` hides them in the output.
+commit_parsers = [
+  { message = "^Merge ", skip = true },
+  { message = "^chore: release", skip = true },
+  { message = "^chore\\(deps", skip = true },
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^fix", group = "<!-- 1 -->Fixed" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^revert", group = "<!-- 3 -->Reverted" },
+  { message = "^refactor", group = "<!-- 4 -->Changed" },
+  { message = "^docs", group = "<!-- 5 -->Documentation" },
+  { message = "^(ci|build|chore|style|test)", skip = true },
+  { message = ".*", group = "<!-- 6 -->Other" },
+]

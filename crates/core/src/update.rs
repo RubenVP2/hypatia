@@ -37,6 +37,9 @@ pub const EXE_NAME: &str = "hypatia.exe";
 pub const RELEASE_PUBLIC_KEY: &str = "RWSf8L7IkDzI9TxR9cV2mloXM51lq/kH05iBqCUB4Gicu3SnKVgJboiq";
 /// How often a running Hypatia asks again, on top of the check at launch.
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+/// How soon a check that could not reach GitHub tries again: Hypatia often starts with
+/// Windows, before the network is up, and should not then wait a whole `CHECK_INTERVAL`.
+pub const RETRY_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 const DOWNLOAD_PREFIX: &str = "https://github.com/RubenVP2/hypatia/releases/download/";
 const USER_AGENT: &str = "Hypatia-Updater";
@@ -140,6 +143,11 @@ pub enum UpdateError {
 }
 
 impl UpdateError {
+    /// A check that failed this way is worth retrying after [`RETRY_INTERVAL`].
+    pub fn retry_soon(self) -> bool {
+        matches!(self, Self::Network | Self::BadResponse)
+    }
+
     pub fn message(self, lang: Lang) -> &'static str {
         match self {
             Self::Disabled => lang.pick(
@@ -642,6 +650,20 @@ mod tests {
             install_exe(b"MZ new", &missing),
             Err(UpdateError::NotWritable)
         );
+    }
+
+    #[test]
+    fn only_a_failure_to_reach_github_is_retried_soon() {
+        assert!(UpdateError::Network.retry_soon());
+        assert!(UpdateError::BadResponse.retry_soon());
+        assert!(!UpdateError::Disabled.retry_soon());
+        assert!(RETRY_INTERVAL < CHECK_INTERVAL);
+    }
+
+    #[tokio::test]
+    async fn unreachable_github_is_a_network_error() {
+        let updater = Updater::new(flags(UpdateCheck::On)).with_endpoint("http://127.0.0.1:9/");
+        assert_eq!(updater.check(v("0.5.0")).await, Err(UpdateError::Network));
     }
 
     #[tokio::test]

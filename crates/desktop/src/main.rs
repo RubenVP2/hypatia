@@ -90,6 +90,8 @@ struct Ui {
     update: RefCell<UpdateState>,
     /// Asks again every `update::CHECK_INTERVAL`; runs only while update checks are on.
     update_clock: Timer,
+    /// One retry `update::RETRY_INTERVAL` after a check that could not reach GitHub.
+    update_retry: Timer,
     /// Set once an update is installed: `main` starts this executable after the window closes.
     restart_into: RefCell<Option<PathBuf>>,
 }
@@ -537,6 +539,7 @@ impl Ui {
     fn sync_update_checks(&self) {
         if !self.app.flags.update_check() {
             self.update_clock.stop();
+            self.update_retry.stop();
             self.update.borrow_mut().found(None);
             self.push_update_view();
             return;
@@ -557,14 +560,25 @@ impl Ui {
             let _ = slint::invoke_from_event_loop(move || {
                 with_ui(|ui| match found {
                     Ok(release) => {
+                        ui.update_retry.stop();
                         if let Some(release) = &release {
                             info!("Hypatia {} is available", release.version);
                         }
                         ui.update.borrow_mut().found(release);
                         ui.push_update_view();
                     }
-                    // A failed background check stays quiet; the next one tries again.
-                    Err(err) => tracing::debug!("Update check failed: {err:?}"),
+                    // A failed background check stays quiet. GitHub out of reach (often the
+                    // network is not up yet at login): try again soon, not in 12 hours.
+                    Err(err) => {
+                        tracing::debug!("Update check failed: {err:?}");
+                        if err.retry_soon() && ui.app.flags.update_check() {
+                            ui.update_retry.start(
+                                TimerMode::SingleShot,
+                                update::RETRY_INTERVAL,
+                                || with_ui(|ui| ui.check_for_update()),
+                            );
+                        }
+                    }
                 });
             });
         });
@@ -1084,6 +1098,7 @@ fn main() {
         updater,
         update: RefCell::default(),
         update_clock: Timer::default(),
+        update_retry: Timer::default(),
         restart_into: RefCell::new(None),
     });
     UI.with(|slot| *slot.borrow_mut() = Some(ui.clone()));

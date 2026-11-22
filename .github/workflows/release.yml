@@ -237,10 +237,12 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout CHANGELOG.md
+      - name: Checkout CHANGELOG.md and the updater's public key
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: CHANGELOG.md
+          sparse-checkout: |
+            CHANGELOG.md
+            crates/core/src/update.rs
           sparse-checkout-cone-mode: false
 
       - name: Extract release notes from CHANGELOG.md
@@ -292,7 +294,8 @@ jobs:
             -x hypatia-windows-x86_64.zip.minisig \
             -t "hypatia $TAG hypatia-windows-x86_64.zip" < /dev/null
           rm -f "$RUNNER_TEMP/release.key"
-          minisign -V -P "RWSf8L7IkDzI9TxR9cV2mloXM51lq/kH05iBqCUB4Gicu3SnKVgJboiq" \
+          PUBLIC_KEY=$(grep -oP 'RELEASE_PUBLIC_KEY: &str = "\K[^"]+' "$GITHUB_WORKSPACE/crates/core/src/update.rs")
+          minisign -V -P "$PUBLIC_KEY" \
             -m hypatia-windows-x86_64.zip \
             -x hypatia-windows-x86_64.zip.minisig
 

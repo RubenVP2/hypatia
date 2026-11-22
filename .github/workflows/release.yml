@@ -287,8 +287,16 @@ jobs:
           fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends minisign
+          # A minisign secret key file is a comment line plus one base64 line. Keep only the
+          # base64 line, so a paste with or without the comment, CRLF or spaces all load.
+          KEY_LINE=$(printf '%s\n' "$MINISIGN_SECRET_KEY" | tr -d '\r' | grep -v '^untrusted comment:' \
+            | tr -d ' \t' | grep -E '^[A-Za-z0-9+/=]{100,}$' | tail -n 1 || true)
+          if [[ -z "$KEY_LINE" ]]; then
+            echo "::error::MINISIGN_SECRET_KEY holds no minisign secret key (expected the content of the .key file, not the public key)."
+            exit 1
+          fi
           umask 077
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/release.key"
+          printf 'untrusted comment: hypatia release key\n%s\n' "$KEY_LINE" > "$RUNNER_TEMP/release.key"
           minisign -S -s "$RUNNER_TEMP/release.key" \
             -m hypatia-windows-x86_64.zip \
             -x hypatia-windows-x86_64.zip.minisig \

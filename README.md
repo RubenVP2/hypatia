@@ -20,6 +20,10 @@ No installer, no account, no setup:
 2. Unzip it anywhere and launch **`hypatia.exe`**.
 3. Open League of Legends as usual — Hypatia detects the client automatically and follows your match.
 
+### Staying up to date
+
+On first launch Hypatia asks once whether it may check for updates. If you say yes, it asks GitHub at launch and twice a day whether a newer version is out — sending nothing about you or your games. When one is, an **Update to vX.Y.Z** button appears at the top of the window: one click downloads it, checks it is signed by Hypatia's release key, and restarts. Nothing downloads or installs until you click. You can change your answer under **Performance → Advanced controls → Connections**.
+
 ---
 
 ## What It Does
@@ -41,7 +45,7 @@ No installer, no account, no setup:
 
 ## Safe & Private by Design
 
-- **100% local, zero telemetry** — no account, no ads, no analytics, no external servers. Everything stays on your PC (and your local Wi-Fi if you turn on Mobile Remote).
+- **100% local, zero telemetry** — no account, no ads, no analytics, no external servers. Everything stays on your PC (and your local Wi-Fi if you turn on Mobile Remote). The only two online features ask first: **Online stats** (off by default) and the **update check** (you answer on first launch); neither sends anything about you.
 - **Read-only by default, no game overlay** — Hypatia never injects into League of Legends and never automates actions in the background. When Mobile Remote is enabled, every action requires an explicit tap on your phone.
 - **Respects Riot privacy** — Ranked Solo/Duo teammates remain hidden exactly as Riot leaves them, and local auth tokens stay masked by default.
 
@@ -76,6 +80,7 @@ You can also toggle individual features under **Performance** in the left rail (
 | Game icons | on | Shows initials instead of loading champion/item icons. |
 | Riot Client connection | on | Connects only to the League Client. |
 | Mobile Remote at launch | on | Keeps the local phone server off until you start it manually. |
+| Check for updates | asked on first launch | Never contacts GitHub; update by downloading the latest release yourself. |
 | Eco mode | off | When **on**: halves UI and live-game refresh rates. |
 | System footprint *(Observatory)* | on | Disables Riot process CPU/RAM and socket sampling. |
 | Endpoint catalog *(Observatory)* | on | Skips loading the local API endpoint list. |
@@ -112,7 +117,8 @@ bench/         # Whole-application footprint benchmark
 | **Allowlisted Mobile Remote (Opt-in)** | `LcuActionClient` only accepts variants of the closed `RemoteCommand` enum — no arbitrary paths or payloads, zero background automation. |
 | **128-bit QR Pairing & Host Guard** | Pairing uses a random 128-bit token (`/?token=...`) exchanged for an `HttpOnly; SameSite=Strict` session cookie, with one-click token rotation/revocation and `Host`/`Origin` validation. |
 | **Ephemeral Secret Vault** | Auth tokens (`accessToken`, JWTs, lockfile passwords) are masked as `{"$secret": { id, len, hint }}` in an in-memory LRU vault until explicitly revealed in the Observatory. |
-| **Zero External Network Calls** | Fonts and assets ship in the binary; all traffic stays on loopback (`127.0.0.1`) and the paired LAN. |
+| **No External Calls Without Consent** | Fonts and assets ship in the binary; traffic stays on loopback (`127.0.0.1`) and the paired LAN, except the two opt-in features: Online stats (MetaBot.GG) and the update check (GitHub). |
+| **Signed Updates** | The updater installs only a release zip carrying a minisign signature by the release key (`RELEASE_PUBLIC_KEY`, signed in `release.yml`) whose trusted comment names that exact tag, and only after a click. |
 
 ### Building & Running from Source
 

@@ -105,6 +105,48 @@ jobs:
         if: github.event_name != 'schedule'
         run: cargo test -p hypatia-shared -p hypatia-core --locked
 
+  signing-key:
+    name: Release signing key
+    runs-on: ubuntu-latest
+    # Secrets are not shared with pull requests from forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout updater source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: crates/core/src/update.rs
+          sparse-checkout-cone-mode: false
+
+      # Proves now, not at release time, that MINISIGN_SECRET_KEY signs what the in-app
+      # updater accepts: the key pair matches RELEASE_PUBLIC_KEY and the trusted comment format.
+      - name: Sign and verify with the release key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          if [[ -z "$MINISIGN_SECRET_KEY" ]]; then
+            echo "::error::MINISIGN_SECRET_KEY is not set: releases cannot be signed for the in-app updater."
+            exit 1
+          fi
+          PUBLIC_KEY=$(grep -oP 'RELEASE_PUBLIC_KEY: &str = "\K[^"]+' crates/core/src/update.rs)
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          # A minisign secret key file is a comment line plus one base64 line. Keep only the
+          # base64 line, so a paste with or without the comment, CRLF or spaces all load.
+          KEY_LINE=$(printf '%s\n' "$MINISIGN_SECRET_KEY" | tr -d '\r' | grep -v '^untrusted comment:' \
+            | tr -d ' \t' | grep -E '^[A-Za-z0-9+/=]{100,}$' | tail -n 1 || true)
+          if [[ -z "$KEY_LINE" ]]; then
+            echo "::error::MINISIGN_SECRET_KEY holds no minisign secret key (expected the content of the .key file, not the public key)."
+            exit 1
+          fi
+          umask 077
+          printf 'untrusted comment: hypatia release key\n%s\n' "$KEY_LINE" > "$RUNNER_TEMP/release.key"
+          echo "signing-key probe $GITHUB_SHA" > "$RUNNER_TEMP/probe.zip"
+          minisign -S -s "$RUNNER_TEMP/release.key" -m "$RUNNER_TEMP/probe.zip" \
+            -t "hypatia v0.0.0 hypatia-windows-x86_64.zip" < /dev/null
+          rm -f "$RUNNER_TEMP/release.key"
+          minisign -V -P "$PUBLIC_KEY" -m "$RUNNER_TEMP/probe.zip"
+
   windows:
     name: Windows (x86_64-pc-windows-msvc)
     if: github.event_name != 'schedule'

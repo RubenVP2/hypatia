@@ -32,6 +32,10 @@ on:
       prerelease:
         type: boolean
         default: false
+    secrets:
+      MINISIGN_SECRET_KEY:
+        description: 'minisign secret key signing the archive for the in-app updater.'
+        required: true
 
 permissions:
   contents: read
@@ -233,10 +237,12 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout CHANGELOG.md
+      - name: Checkout CHANGELOG.md and the updater's public key
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: CHANGELOG.md
+          sparse-checkout: |
+            CHANGELOG.md
+            crates/core/src/update.rs
           sparse-checkout-cone-mode: false
 
       - name: Extract release notes from CHANGELOG.md
@@ -266,6 +272,40 @@ jobs:
       - name: Verify archive SHA-256 checksum
         working-directory: dist
         run: sha256sum -c hypatia-windows-x86_64.zip.sha256
+
+      # The in-app updater installs only an archive signed by this key for this exact tag
+      # (`crates/core/src/update.rs`: RELEASE_PUBLIC_KEY, signed_comment). No key, no release.
+      - name: Sign archive for the in-app updater
+        working-directory: dist
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          if [[ -z "$MINISIGN_SECRET_KEY" ]]; then
+            echo "::error::MINISIGN_SECRET_KEY is not set: the in-app updater would refuse this release."
+            exit 1
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          # A minisign secret key file is a comment line plus one base64 line. Keep only the
+          # base64 line, so a paste with or without the comment, CRLF or spaces all load.
+          KEY_LINE=$(printf '%s\n' "$MINISIGN_SECRET_KEY" | tr -d '\r' | grep -v '^untrusted comment:' \
+            | tr -d ' \t' | grep -E '^[A-Za-z0-9+/=]{100,}$' | tail -n 1 || true)
+          if [[ -z "$KEY_LINE" ]]; then
+            echo "::error::MINISIGN_SECRET_KEY holds no minisign secret key (expected the content of the .key file, not the public key)."
+            exit 1
+          fi
+          umask 077
+          printf 'untrusted comment: hypatia release key\n%s\n' "$KEY_LINE" > "$RUNNER_TEMP/release.key"
+          minisign -S -s "$RUNNER_TEMP/release.key" \
+            -m hypatia-windows-x86_64.zip \
+            -x hypatia-windows-x86_64.zip.minisig \
+            -t "hypatia $TAG hypatia-windows-x86_64.zip" < /dev/null
+          rm -f "$RUNNER_TEMP/release.key"
+          PUBLIC_KEY=$(grep -oP 'RELEASE_PUBLIC_KEY: &str = "\K[^"]+' "$GITHUB_WORKSPACE/crates/core/src/update.rs")
+          minisign -V -P "$PUBLIC_KEY" \
+            -m hypatia-windows-x86_64.zip \
+            -x hypatia-windows-x86_64.zip.minisig
 
       - name: Attest build provenance (public repositories)
         if: ${{ !github.event.repository.private }}
@@ -308,6 +348,7 @@ jobs:
           gh release upload "$TAG" \
             dist/hypatia-windows-x86_64.zip \
             dist/hypatia-windows-x86_64.zip.sha256 \
+            dist/hypatia-windows-x86_64.zip.minisig \
             --clobber
 
           if [[ "$INPUT_DRAFT" != "true" ]]; then

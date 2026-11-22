@@ -438,6 +438,20 @@ pub struct Settings {
     /// Off by default; off, the provider performs no I/O at all. Requests never carry identity.
     /// A privacy choice, not a performance one: profiles keep it as the user set it.
     pub online_stats: bool,
+    /// Ask GitHub whether a newer Hypatia release exists. `Ask` until the player answers the
+    /// first-launch question; only `On` performs any I/O. Profiles keep it as the user set it.
+    pub update_check: UpdateCheck,
+}
+
+/// The player's answer about update checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateCheck {
+    /// Not answered yet: the question is shown at launch, and nothing is checked.
+    #[default]
+    Ask,
+    On,
+    Off,
 }
 
 impl Default for Settings {
@@ -482,6 +496,7 @@ impl Settings {
                 eco_mode: true,
                 pause_when_minimized: true,
                 online_stats: false,
+                update_check: UpdateCheck::Ask,
                 light_theme: false,
                 reduce_motion: true,
             },
@@ -503,6 +518,7 @@ impl Settings {
                 eco_mode: true,
                 pause_when_minimized: true,
                 online_stats: false,
+                update_check: UpdateCheck::Ask,
                 light_theme: false,
                 reduce_motion: false,
             },
@@ -524,6 +540,7 @@ impl Settings {
                 eco_mode: false,
                 pause_when_minimized: false,
                 online_stats: false,
+                update_check: UpdateCheck::Ask,
                 light_theme: false,
                 reduce_motion: false,
             },
@@ -637,9 +654,11 @@ impl Settings {
         }
         let light = self.light_theme;
         let online_stats = self.online_stats;
+        let update_check = self.update_check;
         *self = Self::for_profile(profile);
         self.light_theme = light;
         self.online_stats = online_stats;
+        self.update_check = update_check;
         true
     }
 
@@ -662,6 +681,7 @@ impl Settings {
         let mut p = Self::for_profile(preset);
         p.light_theme = self.light_theme;
         p.online_stats = self.online_stats;
+        p.update_check = self.update_check;
         p.profile = self.profile;
         *self == p
     }
@@ -731,6 +751,14 @@ impl Settings {
             self.sync_profile();
             return true;
         }
+        if key == "update_check" {
+            self.update_check = if self.update_check == UpdateCheck::On {
+                UpdateCheck::Off
+            } else {
+                UpdateCheck::On
+            };
+            return true;
+        }
 
         let field = match key {
             "live_game" => &mut self.live_game,
@@ -774,6 +802,7 @@ pub struct Flags {
     eco_mode: AtomicBool,
     pause_when_minimized: AtomicBool,
     online_stats: AtomicBool,
+    update_check: AtomicBool,
     telemetry: AtomicBool,
 }
 
@@ -826,6 +855,8 @@ impl Flags {
         self.pause_when_minimized
             .store(s.pause_when_minimized, Ordering::Relaxed);
         self.online_stats.store(s.online_stats, Ordering::Relaxed);
+        self.update_check
+            .store(s.update_check == UpdateCheck::On, Ordering::Relaxed);
     }
 
     pub fn set_telemetry(&self, on: bool) {
@@ -892,6 +923,12 @@ impl Flags {
     /// `StatsUnavailable::OnlineDisabled` before any network or disk access.
     pub fn online_stats(&self) -> bool {
         self.online_stats.load(Ordering::Relaxed)
+    }
+
+    /// The player agreed to update checks. Off (or not answered), the updater returns
+    /// `UpdateError::Disabled` before any network access.
+    pub fn update_check(&self) -> bool {
+        self.update_check.load(Ordering::Relaxed)
     }
 
     /// Telemetry Lab is open: record the full event history and the complete WAMP stream.
@@ -1110,6 +1147,42 @@ mod tests {
             !Settings::load_from(&path).online_stats,
             "older files keep it off"
         );
+    }
+
+    #[test]
+    fn update_check_waits_for_an_answer_and_survives_profiles() {
+        let defaults = Settings::default();
+        assert_eq!(defaults.update_check, UpdateCheck::Ask);
+        let flags = Flags::new(&defaults);
+        assert!(!flags.update_check(), "unanswered means no check");
+
+        // Settings files written before the question existed ask it too.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, br#"{"live_game": true, "online_stats": true}"#).unwrap();
+        assert_eq!(Settings::load_from(&path).update_check, UpdateCheck::Ask);
+
+        let mut s = defaults;
+        assert!(s.toggle("update_check"));
+        assert_eq!(s.update_check, UpdateCheck::On);
+        flags.apply(&s);
+        assert!(flags.update_check());
+        assert_eq!(
+            s.profile,
+            PerformanceProfile::Balanced,
+            "not a performance switch"
+        );
+
+        assert!(s.apply_profile(PerformanceProfile::UltraLight));
+        assert_eq!(s.update_check, UpdateCheck::On, "profiles keep the answer");
+        assert_eq!(s.profile, PerformanceProfile::UltraLight);
+
+        assert!(s.toggle("update_check"));
+        assert_eq!(s.update_check, UpdateCheck::Off);
+        flags.apply(&s);
+        assert!(!flags.update_check());
+        s.save_to(&path).unwrap();
+        assert_eq!(Settings::load_from(&path).update_check, UpdateCheck::Off);
     }
 
     #[test]

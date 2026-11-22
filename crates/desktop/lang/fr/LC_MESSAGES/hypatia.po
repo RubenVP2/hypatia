@@ -1870,3 +1870,71 @@ msgstr "Picks suggérés"
 msgctxt "BuildBlock"
 msgid "vs {0}"
 msgstr "vs {0}"
+
+msgctxt "MainWindow"
+msgid "Update to {0}"
+msgstr "Mettre à jour vers {0}"
+
+msgctxt "MainWindow"
+msgid "CHECK FOR UPDATES?"
+msgstr "VÉRIFIER LES MISES À JOUR ?"
+
+msgctxt "MainWindow"
+msgid "Asked once. You can change it later in Performance."
+msgstr "Demandé une seule fois. Modifiable ensuite dans Performance."
+
+msgctxt "MainWindow"
+msgid "Hypatia can ask GitHub, where it is published, whether a newer version is out: when it starts, then twice a day. The request says nothing about you, your account or your games."
+msgstr "Hypatia peut demander à GitHub, où il est publié, si une nouvelle version est sortie : au démarrage, puis deux fois par jour. La requête ne dit rien de vous, de votre compte ni de vos parties."
+
+msgctxt "MainWindow"
+msgid "When one is out, a button appears at the top of the window. Nothing is downloaded or installed until you click it."
+msgstr "Quand une version sort, un bouton apparaît en haut de la fenêtre. Rien n'est téléchargé ni installé tant que vous ne cliquez pas dessus."
+
+msgctxt "MainWindow"
+msgid "Check for updates"
+msgstr "Vérifier les mises à jour"
+
+msgctxt "MainWindow"
+msgid "Don't check"
+msgstr "Ne pas vérifier"
+
+msgctxt "MainWindow"
+msgid "HYPATIA {0} IS OUT"
+msgstr "HYPATIA {0} EST DISPONIBLE"
+
+msgctxt "MainWindow"
+msgid "You have {0}"
+msgstr "Vous avez la {0}"
+
+msgctxt "MainWindow"
+msgid "WHAT'S NEW"
+msgstr "NOUVEAUTÉS"
+
+msgctxt "MainWindow"
+msgid "Hypatia downloads the new version from GitHub, checks it is signed by Hypatia's release key, then restarts. Your settings stay as they are."
+msgstr "Hypatia télécharge la nouvelle version depuis GitHub, vérifie qu'elle est signée par la clé de publication d'Hypatia, puis redémarre. Vos réglages restent tels quels."
+
+msgctxt "MainWindow"
+msgid "Download the new version from the release page and put its hypatia.exe in place of this one. Your settings stay as they are."
+msgstr "Téléchargez la nouvelle version depuis la page de la version et remplacez ce hypatia.exe par le sien. Vos réglages restent tels quels."
+
+msgctxt "MainWindow"
+msgid "Downloading…"
+msgstr "Téléchargement…"
+
+msgctxt "MainWindow"
+msgid "Install and restart"
+msgstr "Installer et redémarrer"
+
+msgctxt "MainWindow"
+msgid "Open release page"
+msgstr "Ouvrir la page de la version"
+
+msgctxt "MainWindow"
+msgid "Later"
+msgstr "Plus tard"
+
+msgctxt "MainWindow"
+msgid "Asks GitHub at launch and twice a day whether a newer Hypatia is out. Sends nothing about you; installs only when you click."
+msgstr "Demande à GitHub au démarrage et deux fois par jour si une nouvelle version d'Hypatia est sortie. N'envoie rien sur vous ; n'installe que sur votre clic."

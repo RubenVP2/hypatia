@@ -8,16 +8,28 @@ use crate::i18n::Lang;
 /// Hosts a link may point to (or any of their subdomains).
 pub const ALLOWED_HOSTS: &[&str] = &["dpm.lol", "metabot.gg"];
 
+/// Hypatia's own releases: the one page outside the stats providers a view may open.
+pub const HYPATIA_RELEASES: &str = "https://github.com/RubenVP2/hypatia/releases";
+
 /// dpm.lol's tier list page.
 pub const DPM_TIER_LIST: &str = "https://dpm.lol/tierlist";
 
-/// Whether `url` is a plain `https` page on an allowed host, safe to hand to a browser.
+/// Whether `url` is a plain `https` page on an allowed host (or below [`HYPATIA_RELEASES`]),
+/// safe to hand to a browser.
 pub fn is_allowed(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else {
-        return false;
-    };
-    if url.len() > 2048
-        || url.chars().any(|c| {
+    if url == HYPATIA_RELEASES {
+        return true;
+    }
+    if let Some(rest) = url.strip_prefix(HYPATIA_RELEASES) {
+        return rest.starts_with('/') && !rest.contains("..") && is_plain_page(url);
+    }
+    is_plain_page(url) && is_allowed_host(url)
+}
+
+fn is_plain_page(url: &str) -> bool {
+    url.starts_with("https://")
+        && url.len() <= 2048
+        && !url.chars().any(|c| {
             c.is_whitespace()
                 || c.is_control()
                 || matches!(
@@ -25,9 +37,12 @@ pub fn is_allowed(url: &str) -> bool {
                     '"' | '\'' | '<' | '>' | '`' | '^' | '|' | '\\' | '&' | '%'
                 )
         })
-    {
+}
+
+fn is_allowed_host(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else {
         return false;
-    }
+    };
     let host = rest
         .split(['/', '?', '#'])
         .next()
@@ -96,6 +111,19 @@ mod tests {
         assert!(!is_allowed("https://dpm.lol/a b"));
         assert!(!is_allowed("https://dpm.lol/\"&calc"));
         assert!(!is_allowed("file:///C:/Windows"));
+
+        assert!(is_allowed(HYPATIA_RELEASES));
+        assert!(is_allowed(
+            "https://github.com/RubenVP2/hypatia/releases/tag/v0.6.0"
+        ));
+        assert!(!is_allowed("https://github.com/RubenVP2/hypatia"));
+        assert!(!is_allowed(
+            "https://github.com/RubenVP2/hypatia/releases-evil"
+        ));
+        assert!(!is_allowed(
+            "https://github.com/RubenVP2/hypatia/releases/../../other"
+        ));
+        assert!(!is_allowed("https://github.com/someone/else/releases"));
     }
 
     #[test]

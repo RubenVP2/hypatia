@@ -14,6 +14,7 @@ pub mod settings;
 pub mod signal;
 pub mod stats;
 pub mod store;
+pub mod update;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};

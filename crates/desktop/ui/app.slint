@@ -59,6 +59,21 @@ export struct PerfSettings {
     pause-when-minimized: bool,
     reduce-motion: bool,
     online-stats: bool,
+    update-check: bool,
+}
+
+// A newer Hypatia release, pushed by `updates.rs` once the Update Check found one.
+export struct UpdateView {
+    available: bool,
+    version: string,
+    current: string,
+    notes: string,
+    page-url: string,
+    // The signed archive can be installed from here (Windows builds only).
+    installable: bool,
+    busy: bool,
+    status: string,
+    failed: bool,
 }
 
 // Live self-footprint metrics sampled only while the Performance sheet is open.
@@ -2392,6 +2407,13 @@ export component MainWindow inherits Window {
     in-out property <bool> stats-open: false;
     callback open-stats();
 
+    // Update Check: the first-launch question, then the sheet of a newer release.
+    in-out property <bool> update-consent-open: false;
+    in-out property <bool> update-open: false;
+    in property <UpdateView> update;
+    callback answer-update-check(bool);
+    callback install-update();
+
     callback toggle-remote-panel();
     callback rotate-remote-token();
     callback disable-remote();
@@ -2407,7 +2429,7 @@ export component MainWindow inherits Window {
     callback clear-telemetry-events();
     callback execute-get-call(int, string);
     callback set-endpoint-filter(string);
-    // Opens a stats provider's attribution page in the browser.
+    // Opens an allowlisted page (a stats provider, Hypatia's releases) in the browser.
     callback open-link(string);
 
     // PhaseLine stop for the current screen: 0 lobby .. 4 results, -1 before the lobby.
@@ -2754,6 +2776,17 @@ export component MainWindow inherits Window {
                             selected: root.remote-panel-open;
                             clicked => { root.toggle-remote-panel(); }
                         }
+
+                        if root.update.available: Action {
+                            y: (parent.height - self.height) / 2;
+                            text: @tr("Update to {0}", root.update.version);
+                            selected: root.update-open;
+                            clicked => {
+                                root.settings-open = false;
+                                root.remote-panel-open = false;
+                                root.update-open = true;
+                            }
+                        }
                     }
                 }
             }
@@ -2965,6 +2998,110 @@ export component MainWindow inherits Window {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // First-launch question: may Hypatia ask GitHub for new releases?
+                if root.update-consent-open: ModalSheet {
+                    title: @tr("CHECK FOR UPDATES?");
+                    subtitle: @tr("Asked once. You can change it later in Performance.");
+                    panel-width: 560px;
+                    dismiss => { root.update-consent-open = false; }
+
+                    Text {
+                        text: @tr("Hypatia can ask GitHub, where it is published, whether a newer version is out: when it starts, then twice a day. The request says nothing about you, your account or your games.");
+                        color: Theme.text;
+                        font-size: Type.body;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("When one is out, a button appears at the top of the window. Nothing is downloaded or installed until you click it.");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Space.sm;
+                        alignment: start;
+                        Action {
+                            primary: true;
+                            text: @tr("Check for updates");
+                            clicked => { root.answer-update-check(true); }
+                        }
+                        Action {
+                            text: @tr("Don't check");
+                            clicked => { root.answer-update-check(false); }
+                        }
+                    }
+                }
+
+                // A newer release: its notes, then install in place or open the release page.
+                if root.update-open: ModalSheet {
+                    title: @tr("HYPATIA {0} IS OUT", root.update.version);
+                    subtitle: @tr("You have {0}", root.update.current);
+                    panel-width: 600px;
+                    dismiss => {
+                        if (!root.update.busy) {
+                            root.update-open = false;
+                        }
+                    }
+
+                    if root.update.notes != "": VerticalLayout {
+                        spacing: Space.xs;
+                        SectionLabel { text: @tr("WHAT'S NEW"); }
+                        Rectangle {
+                            background: Theme.ground;
+                            border-radius: Theme.radius-sm;
+                            border-width: 1px;
+                            border-color: Theme.rule;
+                            VerticalLayout {
+                                padding: Space.md;
+                                Text {
+                                    text: root.update.notes;
+                                    color: Theme.text;
+                                    font-size: Type.small;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: root.update.installable
+                            ? @tr("Hypatia downloads the new version from GitHub, checks it is signed by Hypatia's release key, then restarts. Your settings stay as they are.")
+                            : @tr("Download the new version from the release page and put its hypatia.exe in place of this one. Your settings stay as they are.");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        wrap: word-wrap;
+                    }
+
+                    if root.update.status != "": Text {
+                        text: root.update.status;
+                        color: root.update.failed ? Theme.danger : Theme.text;
+                        font-size: Type.small;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: Space.sm;
+                        alignment: start;
+                        if root.update.installable: Action {
+                            primary: true;
+                            enabled: !root.update.busy;
+                            text: root.update.busy ? @tr("Downloading…") : @tr("Install and restart");
+                            clicked => { root.install-update(); }
+                        }
+                        Action {
+                            primary: !root.update.installable;
+                            text: @tr("Open release page");
+                            clicked => { root.open-link(root.update.page-url); }
+                        }
+                        Action {
+                            text: @tr("Later");
+                            enabled: !root.update.busy;
+                            clicked => { root.update-open = false; }
                         }
                     }
                 }
@@ -3342,6 +3479,12 @@ export component MainWindow inherits Window {
                             detail: @tr("Global builds, tier lists and matchups from MetaBot.GG. Sends only champion, role, queue and patch, never who you are.");
                             checked: root.perf.online-stats;
                             toggled => { root.toggle-setting("online_stats"); }
+                        }
+                        SettingRow {
+                            title: @tr("Check for updates");
+                            detail: @tr("Asks GitHub at launch and twice a day whether a newer Hypatia is out. Sends nothing about you; installs only when you click.");
+                            checked: root.perf.update-check;
+                            toggled => { root.toggle-setting("update_check"); }
                         }
 
                         Divider { }

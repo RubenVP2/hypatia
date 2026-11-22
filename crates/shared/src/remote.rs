@@ -453,6 +453,11 @@ pub fn project_remote_state(
         }
     });
 
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+
     let champ_select = summary.champ_select.as_ref().map(|cs| {
         let self_ally = cs.my_team.iter().find(|m| m.is_self);
         let assigned_position = self_ally
@@ -497,7 +502,7 @@ pub fn project_remote_state(
 
         RemoteChampSelectState {
             sub_phase: cs.sub_phase.clone(),
-            time_left_sec: cs.time_left_sec,
+            time_left_sec: cs.time_left_sec_at(now_ms),
             total_time_sec: cs.total_time_sec,
             queue_type: cs.queue_type.clone(),
             local_cell_id: cs.local_cell_id,

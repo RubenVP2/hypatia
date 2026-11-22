@@ -409,19 +409,19 @@ async fn sync_live_lcu_aux(st: &RemoteRouterState) {
         let p = guard.phase().map(|gp| gp.phase).unwrap_or_default();
         let np = guard
             .get_state(SourceId::LeagueClient, "/lol-perks/v1/pages")
-            .is_none();
+            .is_none_or(|s| s.current.is_null());
         let npick = guard
             .get_state(
                 SourceId::LeagueClient,
                 "/lol-champ-select/v1/pickable-champion-ids",
             )
-            .is_none();
+            .is_none_or(|s| s.current.is_null());
         let nskins = guard
             .get_state(
                 SourceId::LeagueClient,
                 "/lol-champ-select/v1/skin-carousel-skins",
             )
-            .is_none();
+            .is_none_or(|s| s.current.is_null());
         (p, np, npick, nskins)
     };
 

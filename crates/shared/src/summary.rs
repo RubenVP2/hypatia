@@ -150,6 +150,10 @@ pub struct ChampSelectSummary {
     /// Full length of the current timer phase, in seconds (0 when the LCU omits it).
     #[serde(default)]
     pub total_time_sec: i64,
+    /// Epoch timestamp (ms) when the current phase timer expires, derived from
+    /// `timer.internalNowInEpochMs + timer.adjustedTimeLeftInPhase` when the LCU provides it.
+    #[serde(default)]
+    pub timer_deadline_ms: Option<i64>,
     pub queue_type: String,
     pub is_ranked_solo_anonymized: bool,
     pub my_team: Vec<ChampSelectAlly>,
@@ -193,6 +197,23 @@ pub struct ChampSelectSummary {
     /// Build, lane matchup and team comps for the player's own pick (champ-select helper).
     #[serde(default)]
     pub helper: ChampSelectHelper,
+}
+
+impl ChampSelectSummary {
+    /// Remaining whole seconds in the current phase at `now_ms`, using `timer_deadline_ms`
+    /// when the LCU supplied `internalNowInEpochMs` and falling back to `time_left_sec`.
+    pub fn time_left_sec_at(&self, now_ms: i64) -> i64 {
+        if let Some(deadline) = self.timer_deadline_ms {
+            let start_ms = deadline.saturating_sub(self.time_left_sec.saturating_mul(1000));
+            if now_ms >= start_ms.saturating_sub(5_000)
+                && now_ms <= deadline.saturating_add(3_600_000)
+            {
+                let rem_ms = (deadline - now_ms).max(0);
+                return (rem_ms + 999) / 1000;
+            }
+        }
+        self.time_left_sec
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -682,7 +703,7 @@ fn extract_summoner_summary(
     presences_val: Option<&Value>,
     lang: Lang,
 ) -> Option<SummonerSummary> {
-    let sum = summoner_val?;
+    let sum = summoner_val.filter(|v| v.is_object())?;
     let display_name = sum
         .get("gameName")
         .and_then(|v| v.as_str())
@@ -789,7 +810,7 @@ fn extract_lobby_summary(
     summoner: Option<&SummonerSummary>,
     lang: Lang,
 ) -> Option<LobbySummary> {
-    let lob = lobby_val?;
+    let lob = lobby_val.filter(|v| v.is_object())?;
     let party_id = lob
         .get("partyId")
         .and_then(|v| v.as_str())
@@ -930,6 +951,8 @@ fn extract_matchmaking_summary(
     lobby: Option<&LobbySummary>,
     lang: Lang,
 ) -> Option<MatchmakingSummary> {
+    let search_val = search_val.filter(|v| v.is_object());
+    let ready_val = ready_val.filter(|v| v.is_object());
     if search_val.is_none() && ready_val.is_none() {
         return None;
     }
@@ -1107,7 +1130,7 @@ fn extract_champ_select_summary(
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> Option<ChampSelectSummary> {
-    let cs = inputs.champ_select?;
+    let cs = inputs.champ_select.filter(|v| v.is_object())?;
     let timer = cs.get("timer");
     let sub_phase = timer
         .and_then(|t| t.get("phase"))
@@ -1118,6 +1141,12 @@ fn extract_champ_select_summary(
         .and_then(|t| t.get("adjustedTimeLeftInPhase"))
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
+    let internal_now_ms = timer
+        .and_then(|t| t.get("internalNowInEpochMs"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let timer_deadline_ms =
+        (internal_now_ms > 0 && raw_time > 0).then_some(internal_now_ms.saturating_add(raw_time));
     // The LCU (and the demo fixtures, which mirror it) report milliseconds. Round up so
     // "0" only shows once the phase has really expired.
     let time_left_sec = (raw_time.max(0) + 999) / 1000;
@@ -1405,8 +1434,18 @@ fn extract_champ_select_summary(
         lang,
     );
     let (rune_pages, editable_rune_page_id) = extract_rune_pages(inputs.rune_pages, lang);
-    let recommended_rune_pages =
+    let mut recommended_rune_pages =
         recommended_pages_for_localized(champ_for_skins, assigned_position, lang);
+    if let Some(active) = rune_pages.iter().find(|p| p.current) {
+        for preset in &mut recommended_rune_pages {
+            if preset.primary_style_id == active.primary_style_id
+                && preset.sub_style_id == active.sub_style_id
+                && preset.selected_perk_ids == active.selected_perk_ids
+            {
+                preset.current = true;
+            }
+        }
+    }
 
     let bench_enabled = cs
         .get("benchEnabled")
@@ -1453,6 +1492,7 @@ fn extract_champ_select_summary(
         sub_phase,
         time_left_sec,
         total_time_sec,
+        timer_deadline_ms,
         queue_type,
         is_ranked_solo_anonymized: any_anonymized,
         my_team,
@@ -1475,34 +1515,30 @@ fn extract_available_skins(
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> Vec<RemoteSkinOption> {
-    let from_lcu = skins_val
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
-                .filter_map(|s| {
-                    let id = s.get("id")?.as_i64()?;
-                    let name = game_name_or(GameTextKind::Skin, id, lang, s.get("name")?.as_str()?);
-                    let tile_path = s
-                        .get("tilePath")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    Some(RemoteSkinOption {
-                        id,
-                        name,
-                        selected: id == selected_skin_id,
-                        tile_path,
-                    })
+    if let Some(arr) = skins_val.and_then(|v| v.as_array()) {
+        return arr
+            .iter()
+            .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
+            .filter_map(|s| {
+                let id = s.get("id")?.as_i64()?;
+                let name = game_name_or(GameTextKind::Skin, id, lang, s.get("name")?.as_str()?);
+                let tile_path = s
+                    .get("tilePath")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                Some(RemoteSkinOption {
+                    id,
+                    name,
+                    selected: id == selected_skin_id,
+                    tile_path,
                 })
-                .collect::<Vec<_>>()
-        })
-        .filter(|v| !v.is_empty());
+            })
+            .collect();
+    }
 
-    from_lcu.unwrap_or_else(|| {
-        let cname = champions.resolve_champion_name_localized(champ_for_skins, lang);
-        builtin_skins_for_localized(champ_for_skins, &cname, selected_skin_id, lang)
-    })
+    let cname = champions.resolve_champion_name_localized(champ_for_skins, lang);
+    builtin_skins_for_localized(champ_for_skins, &cname, selected_skin_id, lang)
 }
 
 fn extract_rune_pages(pages_val: Option<&Value>, lang: Lang) -> (Vec<RemoteRunePage>, Option<i64>) {
@@ -2027,7 +2063,7 @@ fn extract_eog_summary(
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> Option<EndOfGameSummary> {
-    let eog = eog_val?;
+    let eog = eog_val.filter(|v| v.is_object())?;
     let mut result = eog
         .get("gameResult")
         .and_then(|v| v.as_str())
@@ -2649,5 +2685,56 @@ mod tests {
         assert!((me.damage_share - 0.7).abs() < 1e-3);
         let enemy = &summary.teams[1].players[0];
         assert!(enemy.is_ace);
+    }
+
+    #[test]
+    fn champ_select_timer_deadline_and_empty_lcu_skins_respect_live_payloads() {
+        let cs = json!({
+            "localPlayerCellId": 0,
+            "timer": {
+                "phase": "BAN_PICK",
+                "adjustedTimeLeftInPhase": 45_000,
+                "totalTimeInPhase": 45_000,
+                "internalNowInEpochMs": 1_000_000
+            },
+            "actions": [[
+                {"id": 0, "actorCellId": 0, "type": "pick", "championId": 799, "completed": false, "isInProgress": true}
+            ]],
+            "myTeam": [
+                {"cellId": 0, "assignedPosition": "TOP", "championId": 799, "summonerId": 1, "puuid": "p-self"}
+            ]
+        });
+        let empty_skins = json!([]);
+        let snap = project_match(
+            &MatchInputs {
+                champ_select: Some(&cs),
+                skin_carousel: Some(&empty_skins),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        let p = snap.champ_select.unwrap();
+        assert_eq!(p.time_left_sec, 45);
+        // 38 seconds after internalNowInEpochMs, 7 seconds remain.
+        assert_eq!(p.time_left_sec_at(1_038_000), 7);
+        // Live LCU returning `[]` before lock must not fabricate fake demo skins.
+        assert!(p.available_skins.is_empty());
+
+        // Deleted resources (Value::Null) resolve to None rather than ghost summaries.
+        let deleted = Value::Null;
+        let cleared = project_match(
+            &MatchInputs {
+                lobby: Some(&deleted),
+                champ_select: Some(&deleted),
+                end_of_game: Some(&deleted),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        assert!(cleared.lobby.is_none());
+        assert!(cleared.champ_select.is_none());
+        assert!(cleared.end_of_game.is_none());
     }
 }

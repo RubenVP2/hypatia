@@ -1421,12 +1421,17 @@ pub fn phase_clock_at(snap: &SummarySnapshot, view: Screen, now: Instant) -> Opt
             .and_then(|m| m.ready_check_timer_sec)
             .map(|left| PhaseClock::down_at(now, f64::from(left), 10.max(left))),
         Screen::ChampSelect => snap.champ_select.as_ref().map(|cs| {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            let left = cs.time_left_sec_at(now_ms);
             let total = if cs.total_time_sec > 0 {
                 cs.total_time_sec
             } else {
-                cs.time_left_sec
+                left
             };
-            PhaseClock::down_at(now, cs.time_left_sec as f64, total as i32)
+            PhaseClock::down_at(now, left as f64, total as i32)
         }),
         Screen::InGame => snap
             .live_game

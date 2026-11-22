@@ -14,7 +14,7 @@ Local, read-only League of Legends companion in Rust + Slint. Crates: `shared` (
 Trust is the product. Every change keeps these true:
 
 - Riot access is `GET` plus passive WebSocket subscriptions through `ReadOnlyRiotClient`. The only writes are `RemoteCommand` variants, run by `LcuActionClient` after an explicit tap on the paired phone.
-- Data comes from local Riot APIs on `127.0.0.1`; fonts and assets ship in the binary. Traffic stays on loopback and the paired LAN.
+- Data comes from local Riot APIs on `127.0.0.1`; fonts and assets ship in the binary. Traffic stays on loopback and the paired LAN, except two opt-in features that carry no identity: Online stats (`Settings::online_stats`) and the Update Check (`Settings::update_check`, GitHub releases only, installs signed archives on a click).
 - Ranked Solo/Duo teammates stay exactly as anonymized as Riot leaves them.
 - Secrets pass through `redaction` and stay masked until the user reveals them in the Observatory.
 - Demo identities live in `crates/core/src/fixtures.rs` and `DemoRemoteState`; production extractors fall back to neutral empty values.

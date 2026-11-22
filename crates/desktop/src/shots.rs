@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use hypatia_core::settings::Settings;
+use hypatia_core::update::{plain_notes, Release, Version, RELEASES_PAGE};
 use hypatia_core::AppState;
 use hypatia_shared::Lang;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
@@ -18,6 +19,7 @@ use slint::platform::{Platform, WindowAdapter};
 use slint::{ComponentHandle, Global, PhysicalSize, PlatformError, Rgb8Pixel};
 
 use crate::stats_view::StatsView;
+use crate::updates::UpdateState;
 use crate::{MainWindow, Theme};
 
 struct ShotPlatform {
@@ -146,5 +148,39 @@ fn shots() {
             capture(&format!("remote-{code}"));
         }
         main.set_remote_panel_open(false);
+    }
+    if only.is_empty() || only.contains("update") {
+        // The first-launch question, then the sheet of a (sample) newer release.
+        let release = Release {
+            version: Version::parse("v0.6.0").unwrap(),
+            tag: "v0.6.0".into(),
+            page_url: format!("{RELEASES_PAGE}/tag/v0.6.0"),
+            notes: plain_notes(
+                "### Added\n- *(update)* Check for new releases and install them in one click ([#24](https://github.com/RubenVP2/hypatia/pull/24))\n\n### Fixed\n- *(remote)* Champ-select countdown",
+            ),
+            archive: None,
+            signature: None,
+        };
+        let mut state = UpdateState::default();
+        state.found(Some(release));
+        for (lang, code) in [(Lang::En, "en"), (Lang::Fr, "fr")] {
+            app.set_lang(lang);
+            slint::select_bundled_translation(code).unwrap();
+            main.set_language(code.into());
+            for dark in [true, false] {
+                Theme::get(&main).set_dark(dark);
+                let theme = if dark { "dark" } else { "light" };
+                main.set_update_consent_open(true);
+                capture(&format!("update-consent-{theme}-{code}"));
+                main.set_update_consent_open(false);
+                // As on Windows, where the signed archive installs in place.
+                let mut view = state.view(Version::parse("0.5.0").unwrap(), lang);
+                view.installable = true;
+                main.set_update(view);
+                main.set_update_open(true);
+                capture(&format!("update-{theme}-{code}"));
+                main.set_update_open(false);
+            }
+        }
     }
 }

@@ -9,9 +9,11 @@ mod links;
 mod shots;
 mod stats_view;
 mod telemetry;
+mod updates;
 mod win_dpi;
 
 use std::cell::{Cell, RefCell};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,7 +22,9 @@ use clap::Parser;
 use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
 use hypatia_core::settings::{
     HardwareSpec, PerformanceProfile, ProcessFootprint, ProcessMonitor, Settings, UiClockRate,
+    UpdateCheck,
 };
+use hypatia_core::update::{self, UpdateError, Updater, Version};
 use hypatia_core::AppState;
 use hypatia_shared::{Lang, SourceId};
 use serde_json::Value;
@@ -34,6 +38,7 @@ use crate::companion::Companion;
 use crate::labels::format_bytes;
 use crate::stats_view::StatsView;
 use crate::telemetry::{apply_telemetry_to_window, TelemetryUiState};
+use crate::updates::{InstallStep, UpdateState};
 
 slint::include_modules!();
 
@@ -80,6 +85,13 @@ struct Ui {
     restore_timer: Timer,
     remote: RefCell<Option<RemoteServerHandle>>,
     remote_starting: Cell<bool>,
+    /// Update Check: asks GitHub only while `Settings::update_check` is on.
+    updater: Arc<Updater>,
+    update: RefCell<UpdateState>,
+    /// Asks again every `update::CHECK_INTERVAL`; runs only while update checks are on.
+    update_clock: Timer,
+    /// Set once an update is installed: `main` starts this executable after the window closes.
+    restart_into: RefCell<Option<PathBuf>>,
 }
 
 impl Ui {
@@ -213,6 +225,7 @@ impl Ui {
         if self.main.get_settings_open() {
             self.update_perf_metrics(false);
         }
+        self.push_update_view();
         self.refresh();
     }
 
@@ -345,6 +358,9 @@ impl Ui {
             .set_perf(perf_settings(settings, self.hw, self.app.lang()));
         if settings.reduce_motion != prev.reduce_motion {
             self.apply_motion();
+        }
+        if settings.update_check != prev.update_check {
+            self.sync_update_checks();
         }
         if settings.mobile_remote != prev.mobile_remote {
             if settings.mobile_remote {
@@ -503,6 +519,125 @@ impl Ui {
         }
     }
 
+    // --- Update Check --------------------------------------------------------------------
+
+    fn push_update_view(&self) {
+        let view = self
+            .update
+            .borrow()
+            .view(Version::current(), self.app.lang());
+        if !view.available {
+            self.main.set_update_open(false);
+        }
+        self.main.set_update(view);
+    }
+
+    /// Checks now, then every `CHECK_INTERVAL`, while update checks are on. Off, nothing runs
+    /// and what an earlier check found is dropped.
+    fn sync_update_checks(&self) {
+        if !self.app.flags.update_check() {
+            self.update_clock.stop();
+            self.update.borrow_mut().found(None);
+            self.push_update_view();
+            return;
+        }
+        self.check_for_update();
+        if !self.update_clock.running() {
+            self.update_clock
+                .start(TimerMode::Repeated, update::CHECK_INTERVAL, || {
+                    with_ui(|ui| ui.check_for_update());
+                });
+        }
+    }
+
+    fn check_for_update(&self) {
+        let updater = self.updater.clone();
+        self.rt.spawn(async move {
+            let found = updater.check(Version::current()).await;
+            let _ = slint::invoke_from_event_loop(move || {
+                with_ui(|ui| match found {
+                    Ok(release) => {
+                        if let Some(release) = &release {
+                            info!("Hypatia {} is available", release.version);
+                        }
+                        ui.update.borrow_mut().found(release);
+                        ui.push_update_view();
+                    }
+                    // A failed background check stays quiet; the next one tries again.
+                    Err(err) => tracing::debug!("Update check failed: {err:?}"),
+                });
+            });
+        });
+    }
+
+    fn answer_update_check(&self, check: bool) {
+        self.main.set_update_consent_open(false);
+        let (prev, next) = {
+            let mut settings = self.settings.borrow_mut();
+            let prev = *settings;
+            settings.update_check = if check {
+                UpdateCheck::On
+            } else {
+                UpdateCheck::Off
+            };
+            (prev, *settings)
+        };
+        self.apply_updated_settings(&next, &prev, false);
+    }
+
+    /// Downloads, verifies and installs the release on the player's click, then restarts.
+    fn install_update(&self) {
+        let release = {
+            let state = self.update.borrow();
+            match &state.release {
+                Some(release) if release.installable() && !state.busy() => release.clone(),
+                _ => return,
+            }
+        };
+        let Ok(exe) = std::env::current_exe() else {
+            self.finish_install(Err(UpdateError::NotWritable), PathBuf::new());
+            return;
+        };
+        self.update.borrow_mut().step = InstallStep::Downloading;
+        self.push_update_view();
+        let updater = self.updater.clone();
+        self.rt.spawn(async move {
+            let result = match updater.download(&release).await {
+                Ok(new_exe) => {
+                    let target = exe.clone();
+                    tokio::task::spawn_blocking(move || update::install_exe(&new_exe, &target))
+                        .await
+                        .unwrap_or(Err(UpdateError::NotWritable))
+                }
+                Err(err) => Err(err),
+            };
+            let _ = slint::invoke_from_event_loop(move || {
+                with_ui(|ui| ui.finish_install(result, exe));
+            });
+        });
+    }
+
+    fn finish_install(&self, result: Result<(), UpdateError>, exe: PathBuf) {
+        match result {
+            Ok(()) => {
+                info!("Update installed; restarting Hypatia");
+                self.update.borrow_mut().step = InstallStep::Restarting;
+                self.push_update_view();
+                // Free the Mobile Remote port before the new process binds it.
+                self.stop_remote();
+                *self.restart_into.borrow_mut() = Some(exe);
+                if let Err(err) = slint::quit_event_loop() {
+                    tracing::warn!("Could not close the window to restart: {err}");
+                }
+            }
+            Err(err) => {
+                tracing::warn!("Update not installed: {err:?}");
+                self.update.borrow_mut().step = InstallStep::Failed(err);
+                self.push_update_view();
+            }
+        }
+    }
+
     // --- Telemetry Lab GET tester --------------------------------------------------------
 
     /// Runs the GET off the UI thread; the window stays responsive even if Riot is slow.
@@ -643,6 +778,7 @@ fn perf_settings(s: &Settings, hw: HardwareSpec, lang: Lang) -> PerfSettings {
         pause_when_minimized: s.pause_when_minimized,
         reduce_motion: s.reduce_motion,
         online_stats: s.online_stats,
+        update_check: s.update_check == UpdateCheck::On,
     }
 }
 
@@ -810,6 +946,9 @@ fn wire_callbacks(ui: &Rc<Ui>) {
         with_ui(|ui| ui.on_performance_panel_changed(open));
     });
 
+    main.on_answer_update_check(|check| with_ui(|ui| ui.answer_update_check(check)));
+    main.on_install_update(|| with_ui(|ui| ui.install_update()));
+
     main.on_open_stats(|| {
         with_ui(|ui| {
             ui.main.set_stats_open(true);
@@ -909,6 +1048,8 @@ fn main() {
         );
     }
     let app = AppState::start_with(cli.demo, cli.demo_rate, lang, &settings);
+    spawn_update_cleanup(rt.handle());
+    let updater = Arc::new(Updater::new(app.flags.clone()));
 
     let main = MainWindow::new().expect("Failed to create MainWindow");
     main.set_demo(cli.demo);
@@ -916,6 +1057,8 @@ fn main() {
     main.set_dev_tools(cfg!(debug_assertions) || cli.demo);
     main.set_perf(perf_settings(&settings, hw, lang));
     main.set_perf_metrics(PerfMetrics::default());
+    // Asked once; Demo runs (screenshots, development) leave the answer for a real launch.
+    main.set_update_consent_open(settings.update_check == UpdateCheck::Ask && !cli.demo);
 
     let ui = Rc::new(Ui {
         main,
@@ -938,6 +1081,10 @@ fn main() {
         restore_timer: Timer::default(),
         remote: RefCell::new(None),
         remote_starting: Cell::new(false),
+        updater,
+        update: RefCell::default(),
+        update_clock: Timer::default(),
+        restart_into: RefCell::new(None),
     });
     UI.with(|slot| *slot.borrow_mut() = Some(ui.clone()));
     wire_callbacks(&ui);
@@ -972,11 +1119,44 @@ fn main() {
         });
     }
     spawn_refresh_bridge(rt.handle(), &ui.app);
+    ui.sync_update_checks();
 
     ui.main.run().expect("Slint event loop exited with error");
 
+    let restart = ui.restart_into.borrow_mut().take();
+    drop(ui);
     UI.with(|slot| slot.borrow_mut().take());
     rt.shutdown_background();
+    if let Some(exe) = restart {
+        if let Err(err) = std::process::Command::new(&exe)
+            .args(std::env::args_os().skip(1))
+            .spawn()
+        {
+            tracing::error!("Could not restart Hypatia after the update: {err}");
+        }
+    }
+}
+
+/// Removes the executable an update replaced. The previous process may still be closing, so
+/// this retries for a few seconds; local files only, whatever the Update Check setting.
+fn spawn_update_cleanup(rt: &tokio::runtime::Handle) {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let previous = update::previous_exe_path(&exe);
+    if !previous.exists() {
+        return;
+    }
+    rt.spawn(async move {
+        for _ in 0..20 {
+            update::cleanup_previous(&exe);
+            if !previous.exists() {
+                info!("Removed the executable replaced by the last update");
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
 }
 
 #[cfg(test)]

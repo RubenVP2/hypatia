@@ -61,6 +61,12 @@ The inspection surface capturing live local endpoint traffic, discovered endpoin
 The single process-wide notification bumped whenever something a view could display has changed (a projected Riot payload, discovery, an icon landing in the cache, the language, a paired phone).
 - **Invariant**: Desktop views and the Mobile Remote broadcaster wait on this signal instead of polling; an unchanged signal revision means nothing needs to be projected, serialized or painted.
 
+### Update Check
+Learning that a newer Hypatia release is published, and installing it on the player's click (`crates/core/src/update.rs`, desktop side `crates/desktop/src/updates.rs`).
+- **Invariant**: Asked once on first launch (`Settings::update_check`: `Ask`, `On`, `Off`); anything but `On` performs no network I/O. Profiles keep the answer as the player set it.
+- **Invariant**: The check is one `GET` to GitHub's `releases/latest` with a generic User-Agent; it carries nothing about the player, their account or their games. Drafts, pre-releases and versions not newer than the running build are never offered.
+- **Invariant**: Nothing downloads before the player clicks Install. The archive installs only if it carries a minisign signature by `RELEASE_PUBLIC_KEY` whose trusted comment is `hypatia <tag> hypatia-windows-x86_64.zip`; `release.yml` signs it and refuses to publish without the key. The asset names are a contract with every installed copy.
+
 ### Settings
-The persisted set of user switches, one per background activity (live game polling, game icons, Riot Client connection, Mobile Remote autostart, eco mode, and the Telemetry-only scans).
+The persisted set of user switches, one per background activity (live game polling, game icons, Riot Client connection, Mobile Remote autostart, eco mode, Online stats, the Update Check, and the Telemetry-only scans).
 - **Invariant**: A switched-off activity performs no I/O and no periodic work; switches apply immediately without restarting.

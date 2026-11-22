@@ -95,3 +95,6 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag_name: ${{ needs.tag.outputs.tag }}
+    # The archive signature for the in-app updater needs the release key.
+    secrets:
+      MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}

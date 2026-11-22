@@ -1313,13 +1313,13 @@ fn demo_activeplayer(game_time_sec: u32) -> Value {
         "riotId": "HypatiaObserver#EUW",
         "riotIdGameName": "HypatiaObserver",
         "summonerName": "HypatiaObserver#EUW",
-        "currentGold": (1500 + ((game_time_sec % 120) * 15)),
-        "level": (1 + (game_time_sec / 90)).min(18),
+        "currentGold": (1450 + ((game_time_sec % 120) * 15)),
+        "level": 12,
         "scores": {
             "kills": kills,
             "deaths": deaths,
             "assists": assists,
-            "creepScore": 154
+            "creepScore": 138
         },
         "championStats": {
             "attackDamage": 85.0 + (game_time_sec as f32 * 0.2),
@@ -1370,7 +1370,7 @@ fn demo_allgamedata(game_time_sec: u32) -> Value {
             "summonerName": "HypatiaObserver#EUW",
             "currentGold": 1450 + (game_time_sec % 120) * 15,
             "level": 12,
-            "scores": { "kills": kda[2].0, "deaths": kda[2].1, "assists": kda[2].2, "creepScore": 154 }
+            "scores": { "kills": kda[2].0, "deaths": kda[2].1, "assists": kda[2].2, "creepScore": 138 }
         },
         "allPlayers": players,
         "events": demo_eventdata(game_time_sec),

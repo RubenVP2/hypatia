@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::board::ObjectiveKind;
 use crate::champions::Position;
 use crate::draft_helper::ChampSelectHelper;
 use crate::i18n::Lang;
@@ -138,6 +139,15 @@ pub struct RemoteLivePlayer {
     pub skin_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteLivePitTimer {
+    /// `"drake"`, `"elder"`, `"baron"`, `"herald"`, or `"grubs"`.
+    pub kind: String,
+    pub label: String,
+    /// Seconds until spawn (`0` when currently alive on the map).
+    pub in_sec: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RemoteLiveState {
     pub game_mode: String,
@@ -164,6 +174,8 @@ pub struct RemoteLiveState {
     pub objectives: Vec<RemoteLiveObjective>,
     #[serde(default)]
     pub active_buffs: Vec<RemoteActiveBuff>,
+    #[serde(default)]
+    pub pits: Vec<RemoteLivePitTimer>,
     pub feed: Vec<RemoteLiveFeedItem>,
 }
 
@@ -652,15 +664,32 @@ pub fn project_remote_state(
                 .iter()
                 .map(|b| RemoteActiveBuff {
                     label: match b.kind {
-                        crate::board::ObjectiveKind::Baron => "Baron".to_string(),
-                        crate::board::ObjectiveKind::Elder => {
-                            lang.pick("Elder", "Ancestral").to_string()
-                        }
+                        ObjectiveKind::Baron => "Baron".to_string(),
+                        ObjectiveKind::Elder => lang.pick("Elder", "Ancestral").to_string(),
                         _ => String::new(),
                     },
                     mine: b.by_order == board.my_team_is_order,
                     remaining_sec: b.remaining_sec.ceil() as u32,
                     holders_alive: b.holders_alive,
+                })
+                .collect();
+            let pits = board
+                .pits
+                .iter()
+                .map(|p| {
+                    let (kind, label) = match p.kind {
+                        ObjectiveKind::Drake => ("drake", lang.pick("Drake", "Dragon")),
+                        ObjectiveKind::Elder => ("elder", lang.pick("Elder", "Ancestral")),
+                        ObjectiveKind::Baron => ("baron", "Baron"),
+                        ObjectiveKind::Herald => ("herald", lang.pick("Herald", "Héraut")),
+                        ObjectiveKind::Grubs => ("grubs", lang.pick("Grubs", "Larves")),
+                    };
+                    let in_sec = (p.spawn_sec - lg.game_time_sec).ceil().max(0.0) as i32;
+                    RemoteLivePitTimer {
+                        kind: kind.to_string(),
+                        label: label.to_string(),
+                        in_sec,
+                    }
                 })
                 .collect();
             let feed = board
@@ -698,6 +727,7 @@ pub fn project_remote_state(
                 enemies,
                 objectives,
                 active_buffs,
+                pits,
                 feed,
             }
         })
@@ -769,5 +799,46 @@ mod tests {
             remote.champ_select.unwrap().available_spells[0].name,
             "Saut éclair"
         );
+    }
+
+    #[test]
+    fn projects_live_pit_timers_in_both_languages() {
+        let allgame = json!({
+            "activePlayer": {
+                "riotId": "HypatiaObserver#EUW",
+                "level": 12,
+                "currentGold": 1675.0,
+                "scores": { "kills": 6, "deaths": 1, "assists": 8, "creepScore": 138 }
+            },
+            "allPlayers": [
+                { "riotId": "HypatiaObserver#EUW", "championName": "Ahri", "team": "ORDER", "position": "MIDDLE", "level": 12, "isDead": false, "respawnTimer": 0.0, "skinID": 0, "scores": { "kills": 6, "deaths": 1, "assists": 8, "creepScore": 138 } },
+                { "riotId": "EnemyMid#EUW", "championName": "Syndra", "team": "CHAOS", "position": "MIDDLE", "level": 10, "isDead": false, "respawnTimer": 0.0, "skinID": 0, "scores": { "kills": 2, "deaths": 4, "assists": 3, "creepScore": 119 } }
+            ],
+            "events": { "Events": [] },
+            "gameData": { "gameMode": "CLASSIC", "gameTime": 1100.0, "mapNumber": 11 }
+        });
+        let summary = project_match(
+            &MatchInputs {
+                phase: Some(crate::event::GamePhase {
+                    phase: "InProgress".to_string(),
+                    since: 0,
+                }),
+                live_allgame: Some(&allgame),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        let mut alerts = AlertTracker::default();
+        let remote = project_remote_state(&summary, true, Lang::Fr, &mut alerts);
+        let live = remote.live_game.expect("live_game projected");
+        assert!(
+            !live.pits.is_empty(),
+            "Summoner's Rift pit timers projected"
+        );
+        assert!(live
+            .pits
+            .iter()
+            .any(|p| p.kind == "drake" && p.label == "Dragon"));
     }
 }

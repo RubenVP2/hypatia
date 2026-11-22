@@ -5,6 +5,11 @@ by [release-plz](https://release-plz.dev). Versions follow [Semantic Versioning]
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/RubenVP2/hypatia/compare/v0.6.0...v0.6.1) - 2026-11-22
+
+### Fixed
+- *(update)* Retry a failed update check after 10 minutes ([#26](https://github.com/RubenVP2/hypatia/pull/26))
+
 ## [0.6.0](https://github.com/RubenVP2/hypatia/compare/v0.5.0...v0.6.0) - 2026-11-22
 
 ### Added

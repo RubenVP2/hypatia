@@ -1,0 +1,97 @@
+name: Release-plz
+
+# Keeps the "chore: release vX.Y.Z" PR (version bump + CHANGELOG.md) up to date, and
+# once it is merged, tags `vX.Y.Z` and hands over to release.yml to build and publish.
+# Config: release-plz.toml.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-pr:
+    name: Open or update the release PR
+    if: github.repository_owner == 'RubenVP2'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+
+      - name: Run release-plz release-pr
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tag:
+    name: Tag the merged release
+    if: github.repository_owner == 'RubenVP2'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+
+      # With `release_always = false`, this only tags when the pushed commit is a merged
+      # release PR; otherwise it is a no-op.
+      - name: Run release-plz release
+        id: release
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read the created tag
+        id: tag
+        if: steps.release.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release.outputs.releases }}
+        run: |
+          tag=$(jq -r '(.releases? // .) | map(select(.package_name == "hypatia")) | .[0].tag // empty' <<<"$RELEASES")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Released tag: ${tag:-<none>}"
+
+  publish:
+    name: Build and publish
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag_name: ${{ needs.tag.outputs.tag }}

@@ -906,7 +906,7 @@ button:disabled { cursor: default; }
 .me-name { font: 800 24px/1 var(--font-display); text-transform: uppercase; }
 .me-kda { margin-left: auto; text-align: right; }
 .me-kda b { display: block; font: 800 30px/1 var(--font-display); font-variant-numeric: tabular-nums; }
-.stats-line { display: flex; gap: 14px; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.stats-line { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 13px; color: var(--muted); }
 .stats-line b { color: var(--text); font-weight: 700; }
 .death { border-color: var(--danger); background: linear-gradient(180deg, var(--danger-soft), transparent), var(--glass); }
 .death .js-clock-wrap { align-items: flex-end; }
@@ -975,6 +975,11 @@ button:disabled { cursor: default; }
 .st-role span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
 .st-role.active { border-color: var(--text); background: var(--raised); color: var(--text); }
 .st-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; border: 1px solid var(--rule); border-radius: var(--r-sm); margin-top: 10px; }
+.st-seg.one { grid-template-columns: 1fr; }
+.st-seg.two { grid-template-columns: 1fr 1fr; }
+.st-seg.four { grid-template-columns: repeat(2, 1fr); }
+.st-seg.wrap { display: flex; flex-wrap: wrap; }
+.st-seg.wrap button { flex: 1 1 30%; padding: 0 8px; }
 .st-seg button { min-height: var(--tap); border-radius: 3px; border: 1px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
 .st-seg button.active { background: var(--raised); border-color: var(--text); color: var(--text); }
 .st-state { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
@@ -1018,10 +1023,14 @@ button:disabled { cursor: default; }
 .st-row:first-of-type { border-top: 0; }
 .st-row:active { background: var(--raised); }
 .st-rank { width: 22px; flex-shrink: 0; text-align: right; font: 600 12px var(--font-mono); color: var(--muted); }
-.tier-badge { width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); font: 800 17px var(--font-display); color: var(--muted); }
+.tier-badge { width: 30px; height: 28px; flex-shrink: 0; display: grid; place-items: center; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); font: 800 16px var(--font-display); color: var(--muted); }
+.tier-badge.SPlus { color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(200, 170, 110, 0.28); }
 .tier-badge.S { color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(200, 170, 110, 0.16); }
 .tier-badge.A { color: var(--accent); border-color: var(--accent); }
 .tier-badge.B { color: var(--text); border-color: var(--rule-strong); }
+.verdict-chip { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--r-sm); border: 1px solid var(--rule); font: 700 11px var(--font-mono); color: var(--muted); background: var(--raised); }
+.verdict-chip.Good { color: var(--blue); border-color: var(--blue); background: rgba(59, 158, 255, 0.14); }
+.verdict-chip.Hard { color: var(--red); border-color: var(--red); background: rgba(240, 96, 90, 0.14); }
 .st-fig { flex-shrink: 0; text-align: right; }
 .st-fig b { display: block; font: 700 15px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
 .st-fig span { font: 600 11px var(--font-mono); color: var(--muted); white-space: nowrap; }
@@ -1034,9 +1043,31 @@ button:disabled { cursor: default; }
 .res { display: inline-grid; place-items: center; min-width: 44px; height: 22px; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid; font: 700 11px var(--font-mono); letter-spacing: 0.04em; }
 .res.win { color: var(--blue); border-color: var(--blue); background: var(--blue-soft); }
 .res.loss { color: var(--red); border-color: var(--red); background: var(--red-soft); }
-.kit { display: flex; align-items: center; gap: 3px; margin-top: 5px; }
+.res.rmk { color: var(--muted); border-color: var(--rule-strong); background: var(--raised); }
+.kit { display: flex; align-items: center; gap: 3px; margin-top: 5px; flex-wrap: wrap; }
 .st-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .st-tiles .tile.wide b { font-size: 30px; }
+.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.rp-col { display: flex; flex-direction: column; gap: 6px; }
+.rp-row { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.rp-node { display: inline-flex; border-radius: 9999px; }
+.rp-node.dim { opacity: 0.25; }
+.rp-node.key-on { outline: 1px solid var(--gold-bright); }
+.rp-node.on { outline: 1px solid var(--accent); }
+.rank-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--gold); border-radius: var(--r-sm); background: var(--raised); margin-bottom: 10px; }
+.rank-card b { font: 800 20px var(--font-display); color: var(--gold-bright); letter-spacing: 0.02em; }
+.role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
+.role-card { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--panel); color: var(--text); text-align: left; min-height: 44px; cursor: pointer; }
+.role-card.active { border-color: var(--text); background: var(--raised); }
+.sess-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; margin: 8px 0 4px; border-radius: var(--r-sm); background: var(--backdrop); font: 700 11px var(--font-mono); color: var(--muted); }
+.sess-head b { color: var(--text); }
+.sc-pill { display: inline-flex; align-items: center; gap: 4px; }
+.sc-num { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 20px; padding: 0 4px; border-radius: var(--r-sm); border: 1px solid var(--rule); background: var(--raised); font: 700 11px var(--font-mono); color: var(--muted); }
+.sc-num.hi { border-color: var(--gold-bright); color: var(--gold-bright); }
+.sc-num.mid { border-color: var(--accent); color: var(--text); }
+.mbadge { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 5px; border-radius: var(--r-sm); font: 700 11px var(--font-mono); border: 1px solid var(--rule-strong); background: var(--raised); color: var(--text); }
+.mbadge.mvp { border-color: var(--gold-bright); color: var(--gold-bright); background: rgba(110,87,48,0.28); }
+.mbadge.ace { border-color: var(--accent); color: var(--accent); background: rgba(10,200,185,0.16); }
 
 @media (max-width: 360px) {
   .clock.specimen { font-size: 48px; }
@@ -1326,23 +1357,64 @@ button:disabled { cursor: default; }
       stPage_popular: "Most popular page",
       stPage_alternative: "Alternative page",
       stPage_client: "Client's recommended page",
+      stPage_local: "Your most played page",
       stSameAsClient: "Same as the client's recommended page",
       stShards: "Shards",
       stItemPath: "Item path",
+      stByStage: "By stage",
+      stBySlot: "By slot",
       stage_Starting: "Starting",
       stage_Core: "Core",
       stage_Boots: "Boots",
       stage_Situational: "Situational",
+      stage_Slot1: "Item 1",
+      stage_Slot2: "Item 2",
+      stage_Slot3: "Item 3",
+      stage_Slot4: "Item 4",
+      stage_Slot5: "Item 5",
       stage_Items: "Items",
       stSkillOrder: "Skill order",
       stMaxFirst: "Max first",
+      stAltSkill: "Alternative",
+      stYourGames: "Your games",
+      stAllRanks: "All ranks",
+      stEmeraldPlus: "Emerald+",
+      stDiamondPlus: "Diamond+",
+      stMasterPlus: "Master+",
+      stRankPos: (r, tot) => `Rank ${r}/${tot}`,
+      stAllQueues: "All",
       stQueueSolo: "Solo/Duo",
+      stQueueFlex: "Flex",
       stQueueArena: "Arena",
       stAllRoles: "All",
+      stByRole: "By role",
       stPatch: p => `Patch ${p}`,
       stTierHint: "Tap a champion to open its build.",
       stNoTier: "No champion listed for this role.",
       stTierAria: (tier, name) => `Tier ${tier}, ${name}, open its build`,
+      stOffMeta: "Off-meta",
+      stSortTier: "Tier",
+      stSortWin: "Win",
+      stSortPick: "Pick",
+      stSortBan: "Ban",
+      stSortGames: "Games",
+      stGoodLane: "Good lane",
+      stEvenLane: "Even",
+      stHardLane: "Hard lane",
+      stYourMatchups: "Your matchups",
+      stShowAll: "Show all",
+      stTop8: "Top 8",
+      stYouRecord: r => `You: ${r}`,
+      stChampProfile: "Champion profile & benchmarks",
+      stDmgSplit: (p, m, tr) => `${p}% Physical · ${m}% Magic · ${tr}% True`,
+      stGpm: "Gold/m",
+      stVsMin: "VS/m",
+      stCsMin: "CS/m",
+      hlSuggestedPicks: "Suggested picks",
+      csBench: "ARAM Bench",
+      csBenchSwap: n => `Swap with ${n}`,
+      eogScoreboard: "Scoreboard",
+      eogDmgGold: "Damage & Gold",
       stHardest: "Hardest matchups",
       stEasiest: "Easiest matchups",
       stHardestFor: n => `Lowest win rate for ${n}`,
@@ -1357,6 +1429,9 @@ button:disabled { cursor: default; }
       stNoGames: "No games in your recent history yet.",
       stWinShort: "WIN",
       stLossShort: "LOSS",
+      stRmkShort: "RMK",
+      stNotInTotals: "not in totals",
+      stAvgScore: "Avg",
       stRecord: (w, l) => `${w}W ${l}L`,
       stWinRate: "Win rate",
       stDpm: "DPM",
@@ -1576,23 +1651,64 @@ button:disabled { cursor: default; }
       stPage_popular: "Page la plus jouée",
       stPage_alternative: "Page alternative",
       stPage_client: "Page recommandée par le client",
+      stPage_local: "Votre page la plus jouée",
       stSameAsClient: "Identique à la page recommandée par le client",
       stShards: "Fragments",
       stItemPath: "Objets",
+      stByStage: "Par étape",
+      stBySlot: "Par emplacement",
       stage_Starting: "Départ",
       stage_Core: "Cœur",
       stage_Boots: "Bottes",
       stage_Situational: "Situationnels",
+      stage_Slot1: "Objet 1",
+      stage_Slot2: "Objet 2",
+      stage_Slot3: "Objet 3",
+      stage_Slot4: "Objet 4",
+      stage_Slot5: "Objet 5",
       stage_Items: "Objets",
       stSkillOrder: "Ordre des compétences",
       stMaxFirst: "Monter d'abord",
+      stAltSkill: "Alternative",
+      stYourGames: "Vos parties",
+      stAllRanks: "Tous rangs",
+      stEmeraldPlus: "Émeraude+",
+      stDiamondPlus: "Diamant+",
+      stMasterPlus: "Maître+",
+      stRankPos: (r, tot) => `Rang ${r}/${tot}`,
+      stAllQueues: "Toutes",
       stQueueSolo: "Solo/Duo",
+      stQueueFlex: "Flexible",
       stQueueArena: "Arène",
       stAllRoles: "Tous",
+      stByRole: "Par rôle",
       stPatch: p => `Patch ${p}`,
       stTierHint: "Touchez un champion pour ouvrir son build.",
       stNoTier: "Aucun champion classé pour ce rôle.",
       stTierAria: (tier, name) => `Rang ${tier}, ${name}, ouvrir son build`,
+      stOffMeta: "Hors-méta",
+      stSortTier: "Rang",
+      stSortWin: "Vict.",
+      stSortPick: "Pick",
+      stSortBan: "Ban",
+      stSortGames: "Parties",
+      stGoodLane: "Bonne lane",
+      stEvenLane: "Équilibré",
+      stHardLane: "Lane dure",
+      stYourMatchups: "Vos matchups",
+      stShowAll: "Tout afficher",
+      stTop8: "Top 8",
+      stYouRecord: r => `Vous : ${r}`,
+      stChampProfile: "Profil du champion & repères",
+      stDmgSplit: (p, m, tr) => `${p}% Phys. · ${m}% Mag. · ${tr}% Bruts`,
+      stGpm: "Or/m",
+      stVsMin: "Vis./m",
+      stCsMin: "CS/m",
+      hlSuggestedPicks: "Picks suggérés",
+      csBench: "Banc ARAM",
+      csBenchSwap: n => `Échanger avec ${n}`,
+      eogScoreboard: "Tableau",
+      eogDmgGold: "Dégâts & Or",
       stHardest: "Matchups les plus durs",
       stEasiest: "Matchups les plus faciles",
       stHardestFor: n => `Plus faible taux de victoire de ${n}`,
@@ -1607,6 +1723,9 @@ button:disabled { cursor: default; }
       stNoGames: "Aucune partie dans votre historique récent.",
       stWinShort: "VICT.",
       stLossShort: "DÉF.",
+      stRmkShort: "RMK",
+      stNotInTotals: "hors totaux",
+      stAvgScore: "Moy.",
       stRecord: (w, l) => `${w}V ${l}D`,
       stWinRate: "Victoires",
       stDpm: "DPM",
@@ -1736,8 +1855,19 @@ button:disabled { cursor: default; }
     statsChamp: 0,
     statsPos: "",
     statsSearch: "",
+    buildQueue: "ranked_solo",
+    buildBracket: "emerald_plus",
+    itemView: "stage",
     tierQueue: "ranked_solo",
+    tierBracket: "emerald_plus",
     tierRole: "ALL",
+    tierSort: "tier",
+    tierDir: "asc",
+    tierOffMeta: false,
+    muAll: false,
+    eogTab: "board",
+    myQueue: "all",
+    myRole: "ALL",
     statsData: {},
     statsPending: "",
     statsSeq: 0,
@@ -2842,7 +2972,16 @@ button:disabled { cursor: default; }
     const link = shownOnline && h.attribution
       ? `<a class="hl-link" href="${esc(h.attribution.url)}" target="_blank" rel="noopener noreferrer">${esc(t("dataFrom", h.attribution.provider))}</a>` : "";
     const tips = (h.tips || []).length ? `<ul class="tips">${h.tips.map(tip => `<li>${esc(tip)}</li>`).join("")}</ul>` : "";
+    const sugg = (h.suggested_picks || []).length ? `<section class="panel">
+        <div class="eyebrow" style="margin-bottom:8px">${esc(t("hlSuggestedPicks"))}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">${h.suggested_picks.map(s => `<div class="row" style="gap:6px;padding:6px 8px;border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--raised)">
+            ${champPt(s.champion_id, s.champion_name, 28)}
+            <span><b style="display:block;font-size:13px">${esc(s.champion_name)}${s.tier ? ` · ${esc(tierLabel(s.tier))}` : ""}</b>
+            <span class="meta mono" style="font-size:11px">${s.personal_games > 0 ? `${s.personal_games}g${s.personal_win_rate != null ? " " + esc(fmtPct(s.personal_win_rate)) : ""}` : (s.meta_win_rate != null ? esc(fmtPct(s.meta_win_rate)) : "")}</span></span>
+          </div>`).join("")}</div>
+      </section>` : "";
     return `
+      ${sugg}
       <section class="panel" aria-label="${esc(t("yourBuild"))}">
         <div class="hl-head">
           <span class="eyebrow">${esc(t("yourBuild"))}</span>
@@ -2893,6 +3032,16 @@ button:disabled { cursor: default; }
       : ui.csTab === "loadout" ? loadoutTab(cs)
       : ui.csTab === "guide" ? helperTab(cs)
       : teamTab(cs);
+    const bench = cs.bench_enabled && cs.bench_champions && cs.bench_champions.length ? `
+      <section class="panel" data-key="aram-bench">
+        <div class="eyebrow" style="margin-bottom:8px">${esc(t("csBench"))}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">${cs.bench_champions.map(b => `
+          <button class="btn btn-ghost" style="min-height:44px;padding:4px 10px;gap:6px" data-action="bench-swap" data-id="${b.champion_id}" aria-label="${esc(t("csBenchSwap", b.champion_name))}">
+            ${champPt(b.champion_id, b.champion_name, 30)}
+            <span>${esc(b.champion_name)}</span>
+          </button>`).join("")}
+        </div>
+      </section>` : "";
     const flash = isTurn && Date.now() < ui.turnFlashUntil;
     const pos = laneInfo(cs.assigned_position);
     const totalSec = Math.max(1, cs.total_time_sec || cs.time_left_sec || 30);
@@ -2910,18 +3059,23 @@ button:disabled { cursor: default; }
       </section>
       ${draftHud(cs)}
       ${inlineSwapsHtml(cs)}
+      ${bench}
       ${body}`;
   }
 
   // ---- Live game ------------------------------------------------------------------------------
   function liveRow(p, mine) {
+    const csRate = p.cs_per_min > 0 ? ` · ${fmtDec(p.cs_per_min)} CS/m` : "";
+    const csDiff = p.cs_diff_vs_lane != null
+      ? ` <span style="color:${p.cs_diff_vs_lane > 0 ? "var(--green)" : (p.cs_diff_vs_lane < 0 ? "var(--red)" : "var(--muted)")}">(${p.cs_diff_vs_lane > 0 ? "+" : p.cs_diff_vs_lane < 0 ? "−" : "±"}${Math.abs(p.cs_diff_vs_lane)})</span>`
+      : "";
     return `<div class="ally ${p.champion_id > 0 ? "locked" : ""} ${p.dead ? "dead" : ""} ${p.is_self ? "self" : ""}" data-key="lp-${mine ? "a" : "e"}-${p.champion_id}">
         ${bannerHtml(p.skin_id, p.champion_id)}
         ${roundel(p.lane)}
         ${champPt(p.champion_id, p.champion, 38, (p.is_self ? "self " : "") + (mine ? "" : "enemy ") + (p.dead ? "dead" : ""))}
         <div class="grow">
           <div class="ally-name ellipsis">${esc(p.champion)}</div>
-          <div class="ally-sub">${esc(t("lvl", p.level))} · ${p.cs} ${esc(t("cs"))}</div>
+          <div class="ally-sub">${esc(t("lvl", p.level))} · ${p.cs} ${esc(t("cs"))}${esc(csRate)}${csDiff}</div>
         </div>
         <span class="side">${p.dead ? `<span class="respawn-chip">${p.respawn_sec}s</span>` : `<span class="kda-txt">${esc(p.kda)}</span>`}</span>
       </div>`;
@@ -2952,6 +3106,9 @@ button:disabled { cursor: default; }
     const dead = Boolean(me && me.dead);
     const clockSec = parseClock(lg.clock);
     const list = ui.liveTab === "allies" ? (lg.allies || []) : (lg.enemies || []);
+    const selfCsMeta = lg.self_cs_per_min > 0
+      ? `<span><b>${esc(fmtDec(lg.self_cs_per_min))}</b> ${esc(t("stCsMin"))}${lg.lane_cs_diff != null ? ` (${lg.lane_cs_diff > 0 ? "+" : lg.lane_cs_diff < 0 ? "−" : "±"}${Math.abs(lg.lane_cs_diff)})` : ""}${lg.personal_avg_cs_per_min > 0 ? ` · ${esc(t("stAvgScore"))} ${esc(fmtDec(lg.personal_avg_cs_per_min))}` : ""}</span>`
+      : "";
     const opp = (!dead && me && me.lane && me.lane !== "FLEX")
       ? (lg.enemies || []).find(e => e.lane === me.lane)
       : null;
@@ -3003,12 +3160,17 @@ button:disabled { cursor: default; }
             ${champPt(lg.active_champion_id, lg.active_champion, 60, "self")}
             <div class="grow">
               <div class="me-name ellipsis">${esc(lg.active_champion)}</div>
-              <div class="stats-line"><span>${esc(t("lvl", lg.level))}</span><span><b>${lg.cs}</b> ${esc(t("cs"))}</span><span><b>${fmtNum(Math.floor(lg.current_gold))}</b> ${esc(t("gold"))}</span></div>
+              <div class="stats-line"><span>${esc(t("lvl", lg.level))}</span><span><b>${lg.cs}</b> ${esc(t("cs"))}</span>${selfCsMeta}<span><b>${fmtNum(Math.floor(lg.current_gold))}</b> ${esc(t("gold"))}</span></div>
             </div>
             <div class="me-kda"><b>${esc(lg.kda)}</b><span class="meta">K / D / A</span></div>
           </div>
         </section>`;
     }
+    const buffs = (lg.active_buffs || []).map(b => {
+      const m = Math.floor(b.remaining_sec / 60);
+      const sec = String(b.remaining_sec % 60).padStart(2, "0");
+      return `<span class="obj ${b.mine ? "blue" : "red"}" style="border-color:var(--gold-bright)">${objectiveSvg(b.label)}<span>${esc(b.label)} ${m}:${sec} · ${b.holders_alive}/5</span></span>`;
+    }).join("");
 
     return `
       <section class="hud">
@@ -3022,9 +3184,9 @@ button:disabled { cursor: default; }
       ${livePitsHtml(lg)}
       ${heroCard}
       <section class="panel board">${list.map(p => liveRow(p, ui.liveTab === "allies")).join("")}</section>
-      ${(lg.objectives || []).length ? `<section class="panel">
+      ${(buffs || (lg.objectives || []).length) ? `<section class="panel">
         <div class="eyebrow" style="margin-bottom:8px">${esc(t("objectives"))}</div>
-        <div class="obj-strip">${lg.objectives.map(o => `<span class="obj ${o.mine ? "blue" : "red"}">${objectiveSvg(o.label)}<span>${esc(o.label)}</span></span>`).join("")}</div>
+        <div class="obj-strip">${buffs}${(lg.objectives || []).map(o => `<span class="obj ${o.mine ? "blue" : "red"}">${objectiveSvg(o.label)}<span>${esc(o.label)}</span></span>`).join("")}</div>
       </section>` : ""}
       ${(lg.feed || []).length ? `<section class="panel">
         <div class="eyebrow" style="margin-bottom:6px">${esc(t("recentEvents"))}</div>
@@ -3060,24 +3222,48 @@ button:disabled { cursor: default; }
     const mins = Math.max(1, (e.game_length_sec || 0) / 60);
     const ratio = e.deaths > 0 ? ((e.kills + e.assists) / e.deaths).toFixed(2) : t("perfect");
     const tile = (val, label) => `<div class="tile"><b>${val}</b><span>${esc(label)}</span></div>`;
-    const teamBlock = (tm) => `
+    const allPlayers = (e.teams || []).flatMap(tm => tm.players || []);
+    const maxDmg = Math.max(1, ...allPlayers.map(p => Number(p.damage_to_champions || 0)));
+    const dmgMode = ui.eogTab === "dmg";
+    const teamBlock = (tm) => {
+      const totals = (tm.total_kills || tm.total_gold)
+        ? `<span class="meta mono" style="font-size:11px">${tm.total_kills} · ${fmtNum(tm.total_gold)} ${esc(t("gold"))} · ${fmtNum(tm.total_damage)}</span>`
+        : "";
+      return `
       <section class="panel board">
         <div class="team-head">
           <span class="eyebrow">${esc(tm.is_player_team ? t("yourTeam") : t("enemyTeam"))}</span>
-          <span class="tag ${tm.won ? "gold" : ""}">${esc(tm.won ? t("victory") : t("defeat"))}</span>
+          <span class="row" style="gap:6px">${totals}<span class="tag ${tm.won ? "gold" : ""}">${esc(tm.won ? t("victory") : t("defeat"))}</span></span>
         </div>
-        ${(tm.players || []).map((p, i) => `
+        ${(tm.players || []).map((p, i) => {
+          const badge = p.is_mvp
+            ? `<span class="tag gold">MVP</span>`
+            : (p.is_ace ? `<span class="tag online">ACE</span>` : "");
+          const score = p.performance_score > 0 ? `<span class="meta mono" style="font-size:11px">${p.performance_score}</span>` : "";
+          const kp = p.kill_participation > 0 ? ` · ${Math.round(p.kill_participation * 100)}% KP` : "";
+          const pct = Math.max(4, Math.round((Number(p.damage_to_champions || 0) / maxDmg) * 100));
+          const sub = dmgMode
+            ? `<div class="dmg-bar" style="height:6px;border-radius:3px;overflow:hidden;background:var(--raised);margin:4px 0 2px"><span style="display:block;height:100%;width:${pct}%;background:${tm.is_player_team ? "var(--blue)" : "var(--red)"}"></span></div>
+               <div class="ally-sub mono">${fmtNum(p.damage_to_champions || 0)} (${Math.round((p.damage_share || 0) * 100)}%) · ${fmtNum(p.gold_earned || 0)} ${esc(t("gold"))}</div>`
+            : `<div class="ally-sub">${esc(t("lvl", p.level))} · ${p.creep_score} ${esc(t("cs"))}${esc(kp)}</div>`;
+          return `
           <div class="ally locked ${p.is_self ? "self" : ""}" data-key="eog-${tm.is_player_team ? "a" : "e"}-${i}">
             ${bannerHtml(p.skin_id, p.champion_id)}
             ${roundel(p.position)}
             ${champPt(p.champion_id, p.champion_name, 38, (p.is_self ? "self " : "") + (tm.is_player_team ? "" : "enemy"))}
             <div class="grow">
-              <div class="ally-name ellipsis">${esc(p.champion_name)}</div>
-              <div class="ally-sub">${esc(t("lvl", p.level))} · ${p.creep_score} ${esc(t("cs"))}</div>
+              <div class="row" style="gap:6px"><span class="ally-name ellipsis">${esc(p.champion_name)}</span>${badge}${score}</div>
+              ${sub}
             </div>
             <span class="side"><span class="kda-txt">${p.kills}/${p.deaths}/${p.assists}</span></span>
-          </div>`).join("")}
+          </div>`;
+        }).join("")}
       </section>`;
+    };
+    const switcher = (e.teams || []).length ? `<div class="st-seg two" style="margin:0 0 8px" role="radiogroup">
+        <button class="${!dmgMode ? "active" : ""}" data-action="eog-tab" data-tab="board">${esc(t("eogScoreboard"))}</button>
+        <button class="${dmgMode ? "active" : ""}" data-action="eog-tab" data-tab="dmg">${esc(t("eogDmgGold"))}</button>
+      </div>` : "";
     return `
       <section class="panel result ${lost ? "defeat" : "victory"}">
         <div class="crest">${imgTag("art", lost ? ART.defeat : ART.victory, "art")}${CREST_SVG}</div>
@@ -3090,6 +3276,7 @@ button:disabled { cursor: default; }
         ${tile(fmtNum(e.total_gold), t("gold"))}
         ${tile(fmtNum(e.damage_to_champions), t("damage"))}
       </div>
+      ${switcher}
       ${(e.teams || []).map(teamBlock).join("")}`;
   }
 
@@ -3114,8 +3301,10 @@ button:disabled { cursor: default; }
 
   function statsKey(tab) {
     const lang = activeLang();
-    if (tab === "tiers") return `tiers|${ui.tierQueue}|${ui.tierRole}|${lang}`;
-    if (tab === "mine") return `profile|${lang}`;
+    if (tab === "tiers") return `tiers|${ui.tierQueue}|${ui.tierBracket}|${ui.tierRole}|${ui.tierSort}|${ui.tierDir}|${ui.tierOffMeta ? 1 : 0}|${lang}`;
+    if (tab === "mine") return `profile|${ui.myQueue}|${ui.myRole}|${lang}`;
+    if (tab === "build") return `build|${ui.statsChamp}|${ui.statsPos}|${ui.buildQueue}|${ui.buildBracket}|${lang}`;
+    if (tab === "matchups") return `matchups|${ui.statsChamp}|${ui.statsPos}|${ui.muAll ? 1 : 0}|${lang}`;
     return `${tab}|${ui.statsChamp}|${ui.statsPos}|${lang}`;
   }
   function statsUrl(tab) {
@@ -3125,9 +3314,22 @@ button:disabled { cursor: default; }
     if (tab === "build" || tab === "matchups") {
       if (ui.statsChamp > 0) p.set("champion", String(ui.statsChamp));
       if (ui.statsPos) p.set("position", ui.statsPos);
+      if (tab === "build") {
+        p.set("queue", ui.buildQueue);
+        p.set("bracket", ui.buildBracket);
+      } else if (ui.muAll) {
+        p.set("all", "true");
+      }
     } else if (tab === "tiers") {
       p.set("queue", ui.tierQueue);
+      p.set("bracket", ui.tierBracket);
       if (ui.tierRole !== "ALL") p.set("role", ui.tierRole);
+      p.set("sort", ui.tierSort);
+      p.set("dir", ui.tierDir);
+      if (ui.tierOffMeta) p.set("off_meta", "true");
+    } else if (tab === "mine") {
+      if (ui.myQueue !== "all") p.set("queue", ui.myQueue);
+      if (ui.myRole !== "ALL") p.set("role", ui.myRole);
     }
     return `/api/stats/${STATS_VIEW[tab]}?${p}`;
   }
@@ -3275,11 +3477,25 @@ button:disabled { cursor: default; }
 
   function runePageHtml(p) {
     const shard = n => SHARD_NAMES[n.id] ? shardName(n.id) : n.name;
-    return `<div class="rp">
-        <div class="rp-head"><b class="grow">${esc(tk("stPage_", p.kind))}</b>${originTag(p.origin)}</div>
-        ${p.rates ? `<div class="meta mono" style="margin-top:2px">${esc(rateLine(p.rates))}</div>` : ""}
-        ${p.matches_client ? `<div class="meta" style="margin-top:2px">${esc(t("stSameAsClient"))}</div>` : ""}
-        ${p.keystone ? `<div class="rp-key">
+    const hasGrid = p.primary_rows && p.primary_rows.length > 0;
+    const renderNode = (n, sz, isKey) => {
+      const cls = n.active ? (isKey ? "rp-node key-on" : "rp-node on") : "rp-node dim";
+      return `<span class="${cls}" title="${esc(n.name)}">${pt("perk", n.id, esc(initials(n.name)), sz, "round")}</span>`;
+    };
+    const body = hasGrid
+      ? `<div class="rp-grid">
+          <div class="rp-col">
+            <span class="rp-style">${pt("style", p.primary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.primary.id, p.primary.name))}</span></span>
+            ${p.primary_rows.map((row, ri) => `<div class="rp-row">${row.map(n => renderNode(n, ri === 0 ? 32 : 24, ri === 0)).join("")}</div>`).join("")}
+            ${p.keystone ? `<b class="ellipsis" style="font-size:12px">${esc(p.keystone.name)}</b>` : ""}
+          </div>
+          <div class="rp-col">
+            <span class="rp-style">${pt("style", p.secondary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.secondary.id, p.secondary.name))}</span></span>
+            ${(p.secondary_rows || []).map(row => `<div class="rp-row">${row.map(n => renderNode(n, 22, false)).join("")}</div>`).join("")}
+            ${(p.shard_rows && p.shard_rows.length) ? `<div class="sub-k" style="margin-top:4px">${esc(t("stShards"))}</div>${p.shard_rows.map(row => `<div class="rp-row">${row.map(n => renderNode({ id: n.id, name: shard(n), active: n.active }, 18, false)).join("")}</div>`).join("")}` : ""}
+          </div>
+        </div>`
+      : `${p.keystone ? `<div class="rp-key">
           ${pt("perk", p.keystone.id, esc(initials(p.keystone.name)), 40, "round")}
           <div class="grow"><b class="ellipsis" style="display:block">${esc(p.keystone.name)}</b>
             <span class="meta">${esc(styleName(p.primary.id, p.primary.name))} + ${esc(styleName(p.secondary.id, p.secondary.name))}</span></div>
@@ -3288,7 +3504,12 @@ button:disabled { cursor: default; }
           <div class="stack"><span class="rp-style">${pt("style", p.primary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.primary.id, p.primary.name))}</span></span>${p.primary_perks.map(n => perkRow(n, 26)).join("")}</div>
           <div class="stack"><span class="rp-style">${pt("style", p.secondary.id, "", 16, "round no-rim")}<span>${esc(styleName(p.secondary.id, p.secondary.name))}</span></span>${p.secondary_perks.map(n => perkRow(n, 26)).join("")}</div>
         </div>
-        ${p.shards.length ? `<div class="sub-k" style="margin-top:10px">${esc(t("stShards"))}</div><div class="shards" style="margin-top:0">${p.shards.map(n => `<span class="tag">${esc(shard(n))}</span>`).join("")}</div>` : ""}
+        ${p.shards.length ? `<div class="sub-k" style="margin-top:10px">${esc(t("stShards"))}</div><div class="shards" style="margin-top:0">${p.shards.map(n => `<span class="tag">${esc(shard(n))}</span>`).join("")}</div>` : ""}`;
+    return `<div class="rp">
+        <div class="rp-head"><b class="grow">${esc(tk("stPage_", p.kind))}</b>${originTag(p.origin)}</div>
+        ${p.rates ? `<div class="meta mono" style="margin-top:2px">${esc(rateLine(p.rates))}</div>` : ""}
+        ${p.matches_client ? `<div class="meta" style="margin-top:2px">${esc(t("stSameAsClient"))}</div>` : ""}
+        ${body}
       </div>`;
   }
 
@@ -3297,6 +3518,22 @@ button:disabled { cursor: default; }
     const online = v.build.origin === "Online";
     const credit = online ? creditLink(v.build) : "";
     const out = [pickerPanel(v)];
+    const queues = [["ranked_solo", t("stQueueSolo")], ["aram", "ARAM"], ["arena", t("stQueueArena")]];
+    const brackets = [["all", t("stAllRanks")], ["emerald_plus", t("stEmeraldPlus")], ["diamond_plus", t("stDiamondPlus")], ["master_plus", t("stMasterPlus")]];
+    out.push(`<section class="panel" data-key="st-build-controls">
+        <div class="st-seg" role="radiogroup">${queues.map(([k, l]) => `<button class="${ui.buildQueue === k ? "active" : ""}" role="radio" aria-checked="${ui.buildQueue === k}" data-action="st-build-queue" data-queue="${k}">${esc(l)}</button>`).join("")}</div>
+        ${ui.buildQueue === "ranked_solo" ? `<div class="st-seg four" style="margin-top:8px" role="radiogroup">${brackets.map(([k, l]) => `<button class="${ui.buildBracket === k ? "active" : ""}" role="radio" aria-checked="${ui.buildBracket === k}" data-action="st-build-bracket" data-bracket="${k}">${esc(l)}</button>`).join("")}</div>` : ""}
+        ${v.tier_rank ? `<div class="row" style="gap:8px;margin-top:8px"><span class="tier-badge ${esc(v.tier_rank[0])}">${esc(v.tier_rank[0] === "SPlus" ? "S+" : v.tier_rank[0])}</span><span class="meta mono">${esc(t("stRankPos", v.tier_rank[1], v.tier_rank[2]))}</span></div>` : ""}
+      </section>`);
+    if (v.local_build) {
+      const lb = v.local_build;
+      const wr = lb.wins / Math.max(1, lb.games);
+      out.push(`<section class="panel">
+          ${blockHead(t("stYourGames"), lb.origin)}
+          <div class="meta mono" style="margin-top:-4px">${esc(t("stGamesN", lb.games))} · ${esc(t("stRecord", lb.wins, lb.games - lb.wins))} · ${esc(fmtPct(wr))} · ${esc(fmtDec(kdaRatio(lb.kills, lb.deaths, lb.assists)))} ${esc(t("kdaRatio"))}</div>
+          <div class="kit" style="margin-top:8px">${lb.keystone ? pt("perk", lb.keystone.id, esc(initials(lb.keystone.name)), 26, "round") : ""}${lb.spells ? lb.spells.map(s => pt("spell", s.id, spellFallbackGlyph(s.id, spellName(s.id, s.name)), 24)).join("") : ""}${lb.items.map(n => itemPt(n, 26)).join("")}</div>
+        </section>`);
+    }
     if (v.build.state !== "Ready") {
       out.push(`<section class="panel">${blockHead(t("stGlobalBuild"), null)}${blockState(v.build)}</section>`);
     }
@@ -3316,14 +3553,20 @@ button:disabled { cursor: default; }
           </div>`).join("")}</section>`);
     }
     if (v.items.length) {
-      out.push(`<section class="panel">${blockHead(t("stItemPath"), v.build.origin)}${v.items.map(st => {
+      const isSlot = st => st.stage && st.stage.startsWith("Slot");
+      const stageItems = v.items.filter(st => !isSlot(st));
+      const slotItems = v.items.filter(isSlot);
+      const shownItems = (ui.itemView === "slot" && slotItems.length) ? slotItems : stageItems;
+      const toggle = slotItems.length ? `<div class="st-seg two" style="margin-bottom:8px" role="radiogroup"><button class="${ui.itemView !== "slot" ? "active" : ""}" data-action="st-item-view" data-view="stage">${esc(t("stByStage"))}</button><button class="${ui.itemView === "slot" ? "active" : ""}" data-action="st-item-view" data-view="slot">${esc(t("stBySlot"))}</button></div>` : "";
+      const itemOrig = v.items_origin || v.build.origin;
+      out.push(`<section class="panel">${blockHead(t("stItemPath"), itemOrig)}${toggle}${shownItems.map(st => {
           const core = st.stage === "Core";
           const items = st.items.map(n => `<span class="it">${itemPt(n, 40)}<span class="meta">${esc(n.name)}</span></span>`);
           return `<div class="stage">
               <div class="stage-head"><span class="slot-k">${esc(tk("stage_", (st.stage || "Items")).toUpperCase())}</span>${st.rates ? `<span class="meta mono">${esc(rateLine(st.rates))}</span>` : ""}</div>
               <div class="stage-items">${core ? items.join(`<span class="chev">${CHEV_SVG}</span>`) : items.join("")}</div>
             </div>`;
-        }).join("")}${online ? `<div class="st-links">${credit}</div>` : ""}</section>`);
+        }).join("")}${itemOrig === "Online" ? `<div class="st-links">${credit}</div>` : ""}</section>`);
     }
     if (v.skills) {
       const sk = v.skills;
@@ -3333,18 +3576,49 @@ button:disabled { cursor: default; }
           return `<span class="sk ${on ? "on" : ""} ${on && L === "R" ? "r" : ""}">${on ? i + 1 : ""}</span>`;
         }).join("")}`).join("");
       const prio = sk.priority.length ? `<div class="prio" aria-label="${esc(t("stMaxFirst"))}">${sk.priority.map(L => `<span class="${L === "R" ? "r" : ""}">${L}</span>`).join(`<span class="chev">${CHEV_SVG}</span>`)}<span class="meta" style="font:600 12px var(--font-ui);margin-left:6px">${esc(t("stMaxFirst"))}</span></div>` : "";
+      const alts = (v.alt_skills || []).map(a => `<div class="prio" style="margin-top:8px">${a.priority.map(L => `<span>${L}</span>`).join(`<span class="chev">${CHEV_SVG}</span>`)}<span class="meta mono" style="margin-left:6px">${esc(t("stAltSkill"))}${a.rates ? " · " + esc(rateLine(a.rates)) : ""}</span></div>`).join("");
       out.push(`<section class="panel">${blockHead(t("stSkillOrder"), sk.origin)}
           ${sk.rates ? `<div class="meta mono">${esc(rateLine(sk.rates))}</div>` : ""}
           ${prio}
           <div class="skill-grid" aria-hidden="true">${grid}</div>
+          ${alts}
           ${sk.origin === "Online" ? `<div class="st-links">${credit}</div>` : ""}
+        </section>`);
+    }
+    if (v.champ_profile) {
+      const cp = v.champ_profile;
+      const pPct = Math.round(cp.physical * 100);
+      const mPct = Math.round(cp.magic * 100);
+      const tPct = Math.round(cp.true_damage * 100);
+      const traits = (cp.traits || []).map(tr => `<span class="tag">${esc(tr)}</span>`).join("");
+      const bench = (cp.gpm != null && cp.vision_per_min != null && v.local_build) ? `<div class="st-tiles" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">
+          <div class="tile"><b>${esc(fmtDec(kdaRatio(v.local_build.kills, v.local_build.deaths, v.local_build.assists)))}</b><span>${esc(t("kdaRatio"))}</span></div>
+          <div class="tile"><b>${esc(fmtDec(v.local_build.cs_per_min))}</b><span>${esc(t("stCsMin"))}</span></div>
+          <div class="tile"><b>${esc(fmtNum(Math.round(cp.gpm)))}</b><span>${esc(t("stGpm"))}</span></div>
+          <div class="tile"><b>${esc(fmtDec(cp.vision_per_min))}</b><span>${esc(t("stVsMin"))}</span></div>
+        </div>` : "";
+      out.push(`<section class="panel">${blockHead(t("stChampProfile"), cp.local_origin)}
+          <div class="meta mono" style="margin-bottom:6px">${esc(t("stDmgSplit", pPct, mPct, tPct))}</div>
+          <div class="dmg-bar">
+            <i class="p" style="width:${pPct}%"></i>
+            <i class="m" style="width:${mPct}%"></i>
+            <i class="t" style="width:${tPct}%"></i>
+          </div>
+          ${traits ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">${traits}</div>` : ""}
+          ${bench}
         </section>`);
     }
     return out.join("");
   }
 
+  function tierLabel(tier) {
+    return tier === "SPlus" ? "S+" : tier;
+  }
+
   function tierBody(v) {
     const queues = [["ranked_solo", t("stQueueSolo")], ["aram", "ARAM"], ["arena", t("stQueueArena")]];
+    const brackets = [["all", t("stAllRanks")], ["emerald_plus", t("stEmeraldPlus")], ["diamond_plus", t("stDiamondPlus")], ["master_plus", t("stMasterPlus")]];
+    const sorts = [["tier", t("stSortTier")], ["win", t("stSortWin")], ["pick", t("stSortPick")], ["ban", t("stSortBan")], ["games", t("stSortGames")]];
     const lanes = ui.tierQueue === "ranked_solo";
     const roleBtn = (k, inner) => `<button class="st-role ${ui.tierRole === k ? "active" : ""}" role="radio" aria-checked="${ui.tierRole === k}" data-action="st-tier-role" data-role="${k}">${inner}</button>`;
     const controls = `<section class="panel" data-key="st-tier-controls">
@@ -3353,25 +3627,33 @@ button:disabled { cursor: default; }
           <span class="row" style="gap:6px">${v && v.patch ? `<span class="tag">${esc(t("stPatch", v.patch))}</span>` : ""}${v ? originTag(v.block.origin) : ""}</span>
         </div>
         <div class="st-seg" role="radiogroup">${queues.map(([k, l]) => `<button class="${ui.tierQueue === k ? "active" : ""}" role="radio" aria-checked="${ui.tierQueue === k}" data-action="st-queue" data-queue="${k}">${esc(l)}</button>`).join("")}</div>
+        ${lanes ? `<div class="st-seg four" style="margin-top:8px" role="radiogroup">${brackets.map(([k, l]) => `<button class="${ui.tierBracket === k ? "active" : ""}" role="radio" aria-checked="${ui.tierBracket === k}" data-action="st-tier-bracket" data-bracket="${k}">${esc(l)}</button>`).join("")}</div>` : ""}
         ${lanes ? `<div class="st-roles six" role="radiogroup" aria-label="${esc(t("roles"))}">
           ${roleBtn("ALL", `<span style="font-size:12px">${esc(t("stAllRoles"))}</span>`)}
           ${ROLE_KEYS.map(k => { const l = laneInfo(k); return roleBtn(k, `${laneSvg(k, 17, l.color)}<span>${esc(l.label)}</span>`); }).join("")}
         </div>` : ""}
+        <div class="st-seg" style="margin-top:8px" role="radiogroup">${sorts.map(([k, l]) => `<button class="${ui.tierSort === k ? "active" : ""}" role="radio" aria-checked="${ui.tierSort === k}" data-action="st-tier-sort" data-sort="${k}">${esc(l)}</button>`).join("")}<button class="${ui.tierOffMeta ? "active" : ""}" role="checkbox" aria-checked="${ui.tierOffMeta}" data-action="st-tier-off-meta">${esc(t("stOffMeta"))}</button></div>
         <div class="st-links">${extLink(v && v.dpm_url, t("stOpenDpm"))}${v ? creditLink(v.block) : ""}</div>
       </section>`;
     if (!v) return controls + `<section class="panel">${skeleton()}</section>`;
     if (v.block.state !== "Ready") return controls + `<section class="panel">${blockState(v.block)}</section>`;
-    const rows = v.entries.map((e, i) => `
-        <button class="st-row" data-key="tr-${e.champion.id}-${e.position || ""}" data-action="st-open" data-id="${e.champion.id}" data-pos="${laneOf(e.position)}" aria-label="${esc(t("stTierAria", e.tier, e.champion.name))}">
+    const rows = v.entries.map((e, i) => {
+      const lbl = tierLabel(e.tier);
+      const delta = e.win_rate_delta != null && Math.abs(e.win_rate_delta) >= 0.0005
+        ? `<span style="color:${e.win_rate_delta > 0 ? "var(--green)" : "var(--red)"}">${e.win_rate_delta > 0 ? "+" : "−"}${esc(fmtPct(Math.abs(e.win_rate_delta)))}</span>`
+        : "";
+      return `
+        <button class="st-row" data-key="tr-${e.champion.id}-${e.position || ""}" data-action="st-open" data-id="${e.champion.id}" data-pos="${laneOf(e.position)}" aria-label="${esc(t("stTierAria", lbl, e.champion.name))}">
           <span class="st-rank">${i + 1}</span>
-          <span class="tier-badge ${e.tier}">${e.tier}</span>
+          <span class="tier-badge ${esc(e.tier)}">${esc(lbl)}</span>
           ${champPt(e.champion.id, e.champion.name, 36)}
           <span class="grow">
             <span class="st-nm ellipsis" style="display:block">${esc(e.champion.name)}</span>
             <span class="meta row" style="gap:5px">${e.position ? `<span style="display:inline-flex" title="${esc(laneInfo(laneOf(e.position)).label)}">${laneSvg(laneOf(e.position), 13, laneInfo(laneOf(e.position)).color)}</span>` : ""}<span class="mono ellipsis" style="font-size:11px">${esc(t("stPickBan", fmtPct(e.rates.pick_rate), fmtPct(e.rates.ban_rate)))}</span></span>
           </span>
-          <span class="st-fig"><b>${esc(fmtPct(e.rates.win_rate))}</b><span>${esc(t("stWin"))}</span></span>
-        </button>`).join("");
+          <span class="st-fig"><b>${esc(fmtPct(e.rates.win_rate))}</b>${delta || `<span>${esc(t("stWin"))}</span>`}</span>
+        </button>`;
+    }).join("");
     return controls + `<section class="panel" style="padding-top:8px;padding-bottom:8px">
         ${rows || `<div class="empty-note">${esc(t("stNoTier"))}</div>`}
         ${rows ? `<div class="hl-hint">${esc(t("stTierHint"))}</div>` : ""}
@@ -3383,11 +3665,13 @@ button:disabled { cursor: default; }
     const span = Math.min(50, Math.abs(win - 0.5) / 0.1 * 50);
     const gold = m.gold_diff_15 != null
       ? t("stGold15", (m.gold_diff_15 > 0.5 ? "+" : m.gold_diff_15 < -0.5 ? "−" : "±") + fmtNum(Math.abs(Math.round(m.gold_diff_15)))) : "";
+    const vText = m.verdict === "Good" ? t("stGoodLane") : m.verdict === "Hard" ? t("stHardLane") : t("stEvenLane");
+    const localRec = m.local ? ` · <span style="color:var(--accent)">${esc(t("stYouRecord", t("stRecord", m.local.wins, Math.max(0, m.local.games - m.local.wins))))}</span>` : "";
     return `<button class="st-row" data-key="mu-${m.opponent.id}" data-action="st-open" data-id="${m.opponent.id}" data-pos="" aria-label="${esc(t("stOpenBuild", m.opponent.name))}">
         ${champPt(m.opponent.id, m.opponent.name, 36, "enemy")}
         <span class="grow">
-          <span class="st-nm ellipsis" style="display:block">${esc(m.opponent.name)}</span>
-          <span class="meta ellipsis" style="display:block">${esc(t("stGamesN", fmtNum(m.rates.games)))}${gold ? " · " + esc(gold) : ""}</span>
+          <span class="row" style="gap:6px"><span class="st-nm ellipsis">${esc(m.opponent.name)}</span><span class="verdict-chip ${esc(m.verdict || "Even")}">${esc(vText)}</span></span>
+          <span class="meta ellipsis" style="display:block">${esc(t("stGamesN", fmtNum(m.rates.games)))}${gold ? " · " + esc(gold) : ""}${localRec}</span>
           <span class="mu-bar"><i class="${win >= 0.5 ? "blue" : "red"}" style="width:${span.toFixed(1)}%"></i></span>
         </span>
         <span class="st-fig"><b style="color:${win >= 0.5 ? "var(--blue)" : "var(--red)"}">${esc(fmtPct(win))}</b></span>
@@ -3396,9 +3680,23 @@ button:disabled { cursor: default; }
   function matchupsBody(v) {
     if (!v.champion) return pickerPanel(v);
     const out = [pickerPanel(v)];
+    if (v.local_matchups && v.local_matchups.length) {
+      const lrows = v.local_matchups.map(m => {
+        const wr = m.wins / Math.max(1, m.games);
+        return `<button class="st-row" data-key="lmu-${m.opponent.id}" data-action="st-open" data-id="${m.opponent.id}" data-pos="">
+            ${champPt(m.opponent.id, m.opponent.name, 34, "enemy")}
+            <span class="grow"><span class="st-nm ellipsis" style="display:block">${esc(m.opponent.name)}</span><span class="meta mono">${esc(t("stRecord", m.wins, Math.max(0, m.games - m.wins)))} · ${esc(fmtDec(m.kda))} KDA</span></span>
+            <span class="st-fig"><b style="color:${wr >= 0.5 ? "var(--blue)" : "var(--red)"}">${esc(fmtPct(wr))}</b></span>
+          </button>`;
+      }).join("");
+      out.push(`<section class="panel">${blockHead(t("stYourMatchups"), v.local_origin || "Local")}${lrows}</section>`);
+    }
     if (v.block.state !== "Ready") {
       out.push(`<section class="panel">${blockHead(t("stTabMatchups"), null)}${blockState(v.block)}</section>`);
       return out.join("");
+    }
+    if (v.total_entries > 16 || ui.muAll) {
+      out.push(`<div class="st-seg one" style="margin:0 0 8px"><button class="${ui.muAll ? "active" : ""}" data-action="st-mu-all">${esc(ui.muAll ? t("stTop8") : t("stShowAll"))}</button></div>`);
     }
     const col = (title, sub, list) => `<section class="panel">
         ${blockHead(title, v.block.origin)}
@@ -3423,8 +3721,11 @@ button:disabled { cursor: default; }
         ${blockState(v.block)}
       </section>`;
     if (v.block.state !== "Ready") return head;
+    const rankCard = v.rank ? `<div class="rank-card">
+        <div><b>${esc(v.rank.tier)}${v.rank.division ? " " + esc(v.rank.division) : ""}</b><div class="meta mono">${esc(v.rank.lp)} LP</div></div>
+        <div style="text-align:right"><div class="mono" style="font-weight:700">${esc(fmtPct(v.rank.wins / Math.max(1, v.rank.wins + v.rank.losses)))}</div><div class="meta mono">${esc(t("stRecord", v.rank.wins, v.rank.losses))}</div></div>
+      </div>` : "";
     const games = v.games;
-    if (!games.length) return head + `<section class="panel"><div class="empty-note">${esc(t("stNoGames"))}</div></section>`;
     // Totals cover the summarised games (Summoner's Rift when there are any); ARAM, event
     // modes and remakes stay in the list below.
     const counted = games.filter(g => g.summarised);
@@ -3432,13 +3733,29 @@ button:disabled { cursor: default; }
     const sum = (f) => counted.reduce((n, g) => n + Number(f(g) || 0), 0);
     const minutes = Math.max(1, sum(g => g.duration_secs) / 60);
     const tile = (val, label) => `<div class="tile"><b>${esc(val)}</b><span>${esc(label)}</span></div>`;
-    const totals = `<div class="st-tiles">
+    const totals = counted.length ? `<div class="st-tiles">
         <div class="tile wide"><b>${esc(fmtPct(wins / Math.max(1, counted.length)))}</b><span>${esc(t("stWinRate"))} · ${esc(t("stRecord", wins, counted.length - wins))}</span></div>
         ${tile(fmtDec(kdaRatio(sum(g => g.kills), sum(g => g.deaths), sum(g => g.assists))), t("kdaRatio"))}
         ${tile(fmtDec(sum(g => g.cs) / minutes), t("csMin"))}
         ${tile(fmtNum(Math.round(sum(g => g.damage_to_champions) / minutes)), t("stDpm"))}
-      </div>`;
-    const champs = `<section class="panel" style="padding-bottom:8px">
+      </div>` : "";
+    const roles = (v.roles && v.roles.length) ? `<section class="panel">
+        ${blockHead(t("stByRole"), v.block.origin)}
+        <div class="role-grid">${v.roles.map(r => {
+          const rk = laneOf(r.position);
+          const l = laneInfo(rk);
+          const wr = r.wins / Math.max(1, r.games);
+          const on = ui.myRole === rk;
+          return `<button class="role-card ${on ? "active" : ""}" data-action="st-my-role" data-role="${on ? "ALL" : rk}">
+              ${laneSvg(rk, 20, l.color)}
+              <span class="grow">
+                <span class="row" style="justify-content:space-between"><b style="font-size:13px">${esc(l.label)}</b><span class="mono" style="font-size:12px;color:${wr >= 0.5 ? "var(--blue)" : "var(--red)"}">${esc(fmtPct(wr))}</span></span>
+                <span class="meta mono">${esc(t("stGamesN", r.games))} · ${esc(fmtDec(r.kda))} KDA</span>
+              </span>
+            </button>`;
+        }).join("")}</div>
+      </section>` : "";
+    const champs = v.champions.length ? `<section class="panel" style="padding-bottom:8px">
         ${blockHead(t("stByChampion"), v.block.origin)}
         ${v.champions.map(c => `
           <button class="st-row" data-key="mc-${c.champion.id}" data-action="st-open" data-id="${c.champion.id}" data-pos="" aria-label="${esc(t("stOpenBuild", c.champion.name))}">
@@ -3450,23 +3767,72 @@ button:disabled { cursor: default; }
             </span>
             <span class="st-fig"><b>${esc(fmtPct(c.wins / Math.max(1, c.games)))}</b><span>${esc(t("stGamesN", c.games))}</span></span>
           </button>`).join("")}
-      </section>`;
+      </section>` : "";
+
+    const qFilters = [["all", t("stAllQueues")], ["ranked_solo", t("stQueueSolo")], ["ranked_flex", t("stQueueFlex")], ["aram", "ARAM"], ["arena", t("stQueueArena")]];
+    const roleBtn = (k, inner) => `<button class="st-role ${ui.myRole === k ? "active" : ""}" role="radio" aria-checked="${ui.myRole === k}" data-action="st-my-role" data-role="${k}">${inner}</button>`;
+    const filters = `<div class="st-seg wrap" style="margin-bottom:8px" role="radiogroup">${qFilters.map(([k, l]) => `<button class="${ui.myQueue === k ? "active" : ""}" data-action="st-my-queue" data-queue="${k}">${esc(l)}</button>`).join("")}</div>
+      <div class="st-roles six" style="margin-bottom:8px" role="radiogroup" aria-label="${esc(t("roles"))}">
+        ${roleBtn("ALL", `<span style="font-size:12px">${esc(t("stAllRoles"))}</span>`)}
+        ${ROLE_KEYS.map(k => { const l = laneInfo(k); return roleBtn(k, `${laneSvg(k, 17, l.color)}<span>${esc(l.label)}</span>`); }).join("")}
+      </div>`;
+
+    // Group visible games by UTC calendar day for session headers.
+    const dayOf = ms => ms > 0 ? Math.floor(ms / 86400000) : 0;
+    const sessionMeta = new Map();
+    for (const g of games) {
+      const dk = dayOf(g.started_at_ms);
+      if (!sessionMeta.has(dk)) sessionMeta.set(dk, { w: 0, l: 0, sSum: 0, sCnt: 0 });
+      const m = sessionMeta.get(dk);
+      if (!g.remake) { if (g.win) m.w++; else m.l++; }
+      if (g.performance_score != null) { m.sSum += g.performance_score; m.sCnt++; }
+    }
+    let lastDay = null;
+    const badgeHtml = (b) => {
+      if (!b) return "";
+      if (b === "Mvp") return `<span class="mbadge mvp">MVP</span>`;
+      if (b === "Ace") return `<span class="mbadge ace">ACE</span>`;
+      if (typeof b === "object" && b.Multikill) return `<span class="mbadge">${b.Multikill}K</span>`;
+      return "";
+    };
+    const gameRows = games.map((g, i) => {
+      const dk = dayOf(g.started_at_ms);
+      let sess = "";
+      if (dk !== lastDay) {
+        lastDay = dk;
+        const m = sessionMeta.get(dk);
+        const avg = m.sCnt > 0 ? ` · ${t("stAvgScore")} ${Math.round(m.sSum / m.sCnt)}` : "";
+        sess = `<div class="sess-head"><b>${esc(dayLabel(g.started_at_ms))}</b><span>${esc(t("stRecord", m.w, m.l))}${esc(avg)}</span></div>`;
+      }
+      const mins = Math.max(1, g.duration_secs / 60);
+      const pos = laneOf(g.position);
+      const resCls = g.remake ? "rmk" : (g.win ? "win" : "loss");
+      const resTxt = g.remake ? t("stRmkShort") : (g.win ? t("stWinShort") : t("stLossShort"));
+      const scCls = g.performance_score >= 80 ? "hi" : g.performance_score >= 65 ? "mid" : "";
+      const kp = g.kill_participation != null ? ` · ${Math.round(g.kill_participation * 100)}% KP` : "";
+      const vs = `${fmtDec((g.vision_score || 0) / mins)} VS/m`;
+      const kit = `<span class="kit">${g.keystone ? pt("perk", g.keystone.id, esc(initials(g.keystone.name)), 18, "round") : ""}${(g.spells || []).map(s => pt("spell", s.id, spellFallbackGlyph(s.id, spellName(s.id, s.name)), 18)).join("")}${(g.items || []).map(n => itemPt(n, 18)).join("")}</span>`;
+      return `${sess}<button class="st-row" style="${g.summarised ? "" : "opacity:0.78"}" data-key="mg-${i}" data-action="st-open" data-id="${g.champion.id}" data-pos="${pos}" aria-label="${esc(t("stOpenBuild", g.champion.name))}">
+          ${champPt(g.champion.id, g.champion.name, 38)}
+          <span class="grow">
+            <span class="row" style="gap:6px"><span class="res ${resCls}">${esc(resTxt)}</span><span class="st-nm ellipsis">${esc(g.champion.name)}</span>${g.opponent ? `<span class="meta mono">VS</span>${champPt(g.opponent.id, g.opponent.name, 18, "enemy")}` : ""}</span>
+            <span class="meta ellipsis" style="display:block;margin-top:2px">${pos ? esc(laneInfo(pos).label) + " · " : ""}${g.queue ? esc(tk("q_", g.queue)) + " · " : ""}${esc(fmtSec(g.duration_secs))}${g.summarised ? "" : " · " + esc(t("stNotInTotals"))}</span>
+            ${kit}
+          </span>
+          <span class="st-fig">
+            <b>${g.kills}/${g.deaths}/${g.assists}</b>
+            <span>${esc(fmtDec(g.cs / mins))} CS · ${esc(vs)}${esc(kp)}</span>
+            ${(g.performance_score != null || g.badge) ? `<span class="sc-pill" style="margin-top:3px">${badgeHtml(g.badge)}${g.performance_score != null ? `<span class="sc-num ${scCls}">${g.performance_score}</span>` : ""}</span>` : ""}
+          </span>
+        </button>`;
+    }).join("");
+
     const recent = `<section class="panel" style="padding-bottom:8px">
         ${blockHead(t("stRecent"), v.block.origin)}
-        ${games.map((g, i) => {
-          const mins = Math.max(1, g.duration_secs / 60);
-          const pos = laneOf(g.position);
-          return `<button class="st-row" data-key="mg-${i}" data-action="st-open" data-id="${g.champion.id}" data-pos="${pos}" aria-label="${esc(t("stOpenBuild", g.champion.name))}">
-              ${champPt(g.champion.id, g.champion.name, 38)}
-              <span class="grow">
-                <span class="row" style="gap:6px"><span class="res ${g.win ? "win" : "loss"}">${esc(g.win ? t("stWinShort") : t("stLossShort"))}</span><span class="st-nm ellipsis">${esc(g.champion.name)}</span></span>
-                <span class="meta ellipsis" style="display:block;margin-top:2px">${pos ? esc(laneInfo(pos).label) + " · " : ""}${g.queue ? esc(tk("q_", g.queue)) + " · " : ""}${esc(dayLabel(g.started_at_ms))}</span>
-              </span>
-              <span class="st-fig"><b>${g.kills}/${g.deaths}/${g.assists}</b><span>${esc(fmtDec(g.cs / mins))} CS · ${esc(fmtSec(g.duration_secs))}</span></span>
-            </button>`;
-        }).join("")}
+        ${filters}
+        ${gameRows || `<div class="empty-note">${esc(t("stNoGames"))}</div>`}
       </section>`;
-    return head + totals + champs + recent;
+    return head + (rankCard ? `<section class="panel">${rankCard}${totals}</section>` : totals) + roles + champs + recent;
   }
 
   function renderStats() {
@@ -3682,11 +4048,44 @@ button:disabled { cursor: default; }
     } else if (act === "st-role") {
       ui.statsPos = btn.dataset.role;
       renderState(ui.state);
+    } else if (act === "st-build-queue") {
+      ui.buildQueue = btn.dataset.queue;
+      renderState(ui.state);
+    } else if (act === "st-build-bracket") {
+      ui.buildBracket = btn.dataset.bracket;
+      renderState(ui.state);
+    } else if (act === "st-item-view") {
+      ui.itemView = btn.dataset.view;
+      renderState(ui.state);
     } else if (act === "st-queue") {
       ui.tierQueue = btn.dataset.queue;
       renderState(ui.state);
+    } else if (act === "st-tier-bracket") {
+      ui.tierBracket = btn.dataset.bracket;
+      renderState(ui.state);
     } else if (act === "st-tier-role") {
       ui.tierRole = btn.dataset.role;
+      renderState(ui.state);
+    } else if (act === "st-tier-sort") {
+      const col = btn.dataset.sort;
+      if (ui.tierSort === col) {
+        ui.tierDir = ui.tierDir === "desc" ? "asc" : "desc";
+      } else {
+        ui.tierSort = col;
+        ui.tierDir = col === "tier" ? "asc" : "desc";
+      }
+      renderState(ui.state);
+    } else if (act === "st-tier-off-meta") {
+      ui.tierOffMeta = !ui.tierOffMeta;
+      renderState(ui.state);
+    } else if (act === "st-mu-all") {
+      ui.muAll = !ui.muAll;
+      renderState(ui.state);
+    } else if (act === "st-my-queue") {
+      ui.myQueue = btn.dataset.queue;
+      renderState(ui.state);
+    } else if (act === "st-my-role") {
+      ui.myRole = btn.dataset.role;
       renderState(ui.state);
     } else if (act === "demo-phase") {
       sendCmd({ cmd: "demo_set_phase", phase: btn.dataset.phase });
@@ -3732,6 +4131,9 @@ button:disabled { cursor: default; }
     } else if (act === "live-tab") {
       ui.liveTab = btn.dataset.tab;
       renderState(ui.state);
+    } else if (act === "eog-tab") {
+      ui.eogTab = btn.dataset.tab;
+      renderState(ui.state);
     } else if (act === "champ-role") {
       ui.champRole = btn.dataset.role;
       renderState(ui.state);
@@ -3741,6 +4143,8 @@ button:disabled { cursor: default; }
       }
     } else if (act === "lock-action") {
       sendCmd({ cmd: "lock_action", action_id: Number(btn.dataset.actionId) });
+    } else if (act === "bench-swap") {
+      sendCmd({ cmd: "swap_bench_champion", champion_id: Number(btn.dataset.id) });
     } else if (act === "set-skin") {
       sendCmd({ cmd: "set_skin", skin_id: Number(btn.dataset.id) });
     } else if (act === "focus-spell-slot") {

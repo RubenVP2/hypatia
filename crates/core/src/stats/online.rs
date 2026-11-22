@@ -574,6 +574,8 @@ pub fn assemble_build(
         spells: Vec::new(),
         items,
         skills: Vec::new(),
+        role_distribution: Vec::new(),
+        tier_rank: None,
         attribution: attribution(&build.content),
     })
 }
@@ -667,6 +669,8 @@ pub fn assemble_tier_list(
                     ban_rate: stat(e, "Ban rate").and_then(parse_percent).unwrap_or(0.0),
                     games: 0,
                 },
+                win_rate_delta: None,
+                lane_presence: None,
             });
         }
     }
@@ -682,7 +686,11 @@ pub fn assemble_tier_list(
 }
 
 fn parse_tier(raw: &str) -> Option<Tier> {
-    match raw.trim().chars().next()?.to_ascii_uppercase() {
+    let trimmed = raw.trim();
+    if trimmed.eq_ignore_ascii_case("S+") {
+        return Some(Tier::SPlus);
+    }
+    match trimmed.chars().next()?.to_ascii_uppercase() {
         'S' => Some(Tier::S),
         'A' => Some(Tier::A),
         'B' => Some(Tier::B),

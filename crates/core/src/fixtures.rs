@@ -364,6 +364,12 @@ impl DemoRemoteState {
                     self.sub_phase = "FINALIZATION".to_string();
                 }
             }
+            RemoteCommand::SwapBenchChampion { champion_id } => {
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                self.my_champion_id = *champion_id;
+                self.ally_champions[2] = *champion_id;
+                self.selected_skin_id = *champion_id * 1000;
+            }
             RemoteCommand::SetSummonerSpells {
                 spell1_id,
                 spell2_id,
@@ -817,6 +823,32 @@ impl DemoRemoteState {
             (3, 6, 5, 221, 6, 15, 11300, 19800, 13),
             (1, 4, 9, 29, 0, 12, 7400, 7100, 52),
         ];
+        const KEYSTONES: [i64; 10] = [8010, 8010, 8112, 8008, 8439, 8010, 8010, 8112, 8008, 8439];
+        const SUBSTYLES: [i64; 10] = [8400, 8100, 8200, 8300, 8300, 8400, 8100, 8200, 8300, 8300];
+        const SPELLS: [(i64, i64); 10] = [
+            (4, 12),
+            (4, 11),
+            (4, 14),
+            (4, 7),
+            (4, 14),
+            (4, 6),
+            (4, 11),
+            (4, 14),
+            (4, 7),
+            (4, 14),
+        ];
+        const ITEMS: [[i64; 4]; 10] = [
+            [3078, 3053, 3047, 3742],
+            [6692, 3071, 3158, 3053],
+            [3118, 4645, 3089, 3020],
+            [6672, 3031, 3085, 3006],
+            [3190, 3109, 3050, 3117],
+            [3078, 3053, 3047, 3742],
+            [3153, 6672, 3006, 3053],
+            [6692, 6696, 3158, 6694],
+            [6672, 3124, 3006, 3157],
+            [3190, 3050, 3047, 3109],
+        ];
         let players: Vec<Value> = DEMO_PLAYERS
             .iter()
             .enumerate()
@@ -828,6 +860,9 @@ impl DemoRemoteState {
                     "championName": champ,
                     "detectedTeamPosition": pos,
                     "isLocalPlayer": i == 2,
+                    "spell1Id": SPELLS[i].0,
+                    "spell2Id": SPELLS[i].1,
+                    "items": ITEMS[i],
                     "skinSplashPath": format!("/lol-game-data/assets/v1/champion-splashes/{}/{skin}.jpg", IDS[i]),
                     "stats": {
                         "CHAMPIONS_KILLED": k,
@@ -838,7 +873,10 @@ impl DemoRemoteState {
                         "LEVEL": level,
                         "GOLD_EARNED": gold,
                         "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": damage,
-                        "VISION_SCORE": vision
+                        "TOTAL_DAMAGE_TAKEN": damage * 8 / 10 + 4200,
+                        "VISION_SCORE": vision,
+                        "PERK0": KEYSTONES[i],
+                        "PERK_SUB_STYLE": SUBSTYLES[i]
                     }
                 })
             })

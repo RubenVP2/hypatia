@@ -5,8 +5,8 @@ use crate::champions::Position;
 use crate::draft_helper::ChampSelectHelper;
 use crate::i18n::Lang;
 use crate::summary::{
-    format_clock_mm_ss, ChampSelectEnemy, EndOfGameSummary, LiveGamePlayerSummary, SummarySnapshot,
-    SummonerSummary,
+    format_clock_mm_ss, ChampSelectBenchChampion, ChampSelectEnemy, EndOfGameSummary,
+    LiveGamePlayerSummary, SummarySnapshot, SummonerSummary,
 };
 
 /// Strict, closed allowlist of user-initiated commands accepted by the Mobile Remote.
@@ -30,6 +30,8 @@ pub enum RemoteCommand {
     HoverChampion { action_id: i64, champion_id: i64 },
     /// Lock in the currently hovered ban or pick action.
     LockAction { action_id: i64 },
+    /// Swap with a champion on the ARAM bench (`POST /lol-champ-select/v1/session/bench/swap/{champion_id}`).
+    SwapBenchChampion { champion_id: i64 },
     /// Select both summoner spells (`spell1_id` = D, `spell2_id` = F).
     SetSummonerSpells { spell1_id: i64, spell2_id: i64 },
     /// Select a skin for the locked-in champion.
@@ -109,6 +111,14 @@ pub struct RemoteLiveObjective {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteActiveBuff {
+    pub label: String,
+    pub mine: bool,
+    pub remaining_sec: u32,
+    pub holders_alive: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RemoteLivePlayer {
     pub lane: String,
     #[serde(default)]
@@ -117,6 +127,10 @@ pub struct RemoteLivePlayer {
     pub level: u32,
     pub kda: String,
     pub cs: u32,
+    #[serde(default)]
+    pub cs_per_min: f32,
+    #[serde(default)]
+    pub cs_diff_vs_lane: Option<i32>,
     pub is_self: bool,
     pub dead: bool,
     pub respawn_sec: i32,
@@ -149,9 +163,17 @@ pub struct RemoteLiveState {
     pub current_gold: i64,
     pub kda: String,
     pub cs: u32,
+    #[serde(default)]
+    pub self_cs_per_min: f32,
+    #[serde(default)]
+    pub lane_cs_diff: Option<i32>,
+    #[serde(default)]
+    pub personal_avg_cs_per_min: Option<f32>,
     pub allies: Vec<RemoteLivePlayer>,
     pub enemies: Vec<RemoteLivePlayer>,
     pub objectives: Vec<RemoteLiveObjective>,
+    #[serde(default)]
+    pub active_buffs: Vec<RemoteActiveBuff>,
     #[serde(default)]
     pub pits: Vec<RemoteLivePitTimer>,
     pub feed: Vec<RemoteLiveFeedItem>,
@@ -312,6 +334,12 @@ pub struct RemoteChampSelectState {
     pub rune_pages: Vec<RemoteRunePage>,
     pub recommended_rune_pages: Vec<RemoteRunePage>,
     pub rune_trees: Vec<RemoteRuneTree>,
+    /// True in ARAM / ARAM: Mayhem when the bench swap pool is active.
+    #[serde(default)]
+    pub bench_enabled: bool,
+    /// Champions currently available on the ARAM bench.
+    #[serde(default)]
+    pub bench_champions: Vec<ChampSelectBenchChampion>,
     /// The champ-select helper, as projected for the desktop.
     #[serde(default)]
     pub helper: ChampSelectHelper,
@@ -491,6 +519,8 @@ pub fn project_remote_state(
             rune_pages: cs.rune_pages.clone(),
             recommended_rune_pages: cs.recommended_rune_pages.clone(),
             rune_trees: default_rune_trees_localized(lang),
+            bench_enabled: cs.bench_enabled,
+            bench_champions: cs.bench_champions.clone(),
             helper: cs.helper.clone(),
         }
     });
@@ -585,6 +615,8 @@ pub fn project_remote_state(
                 level: p.level,
                 kda: format!("{}/{}/{}", p.kills, p.deaths, p.assists),
                 cs: p.creep_score,
+                cs_per_min: p.cs_per_min,
+                cs_diff_vs_lane: p.cs_diff_vs_lane,
                 is_self: p.is_self,
                 dead: p.is_dead,
                 respawn_sec: p.respawn_timer_sec.ceil() as i32,
@@ -625,6 +657,20 @@ pub fn project_remote_state(
                     label: o.label.clone(),
                     mine: o.by_order == board.my_team_is_order,
                     weight: o.kind.weight(),
+                })
+                .collect();
+            let active_buffs = board
+                .active_buffs
+                .iter()
+                .map(|b| RemoteActiveBuff {
+                    label: match b.kind {
+                        ObjectiveKind::Baron => "Baron".to_string(),
+                        ObjectiveKind::Elder => lang.pick("Elder", "Ancestral").to_string(),
+                        _ => String::new(),
+                    },
+                    mine: b.by_order == board.my_team_is_order,
+                    remaining_sec: b.remaining_sec.ceil() as u32,
+                    holders_alive: b.holders_alive,
                 })
                 .collect();
             let pits = board
@@ -674,9 +720,13 @@ pub fn project_remote_state(
                 current_gold: lg.current_gold,
                 kda: format!("{}/{}/{}", lg.kills, lg.deaths, lg.assists),
                 cs: lg.creep_score,
+                self_cs_per_min: lg.self_cs_per_min,
+                lane_cs_diff: lg.lane_cs_diff,
+                personal_avg_cs_per_min: lg.personal_avg_cs_per_min,
                 allies,
                 enemies,
                 objectives,
+                active_buffs,
                 pits,
                 feed,
             }

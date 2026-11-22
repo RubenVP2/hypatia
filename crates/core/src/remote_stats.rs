@@ -11,9 +11,11 @@ use std::collections::HashMap;
 
 use hypatia_shared::links::{self, DPM_TIER_LIST};
 use hypatia_shared::{
-    builtin_champion_roles, default_stats_position, summarised_games, Attribution, ChampionBuild,
-    ChampionLookup, GameDataNames, ItemStage, Lang, Position, RankBracket, Rates, RuneSetup, Skill,
-    StatsOrigin, StatsQuery, StatsQueue, StatsState, StatsUnavailable, Tier,
+    aggregate_local_matchups, builtin_champion_roles, builtin_rune_style_slots, champion_traits,
+    comp_trait_label, default_stats_position, normalize_champion_key, summarised_games,
+    Attribution, ChampionBuild, ChampionLookup, GameData, GameDataNames, ItemStage, LaneVerdict,
+    Lang, LocalMatchup, MatchBadge, Position, RankBracket, Rates, RoleSummary, RuneSetup, Skill,
+    StatsOrigin, StatsQuery, StatsQueue, StatsState, StatsUnavailable, Tier, STAT_SHARD_ROWS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +23,7 @@ use crate::AppState;
 
 /// Champions offered under the search field: the player's most played.
 const PICKS: usize = 8;
-/// Opponents per matchup column.
+/// Opponents per matchup column when collapsed.
 const MATCHUPS: usize = 8;
 
 /// What the phone asks for, all optional: the server picks the same defaults as the desktop.
@@ -30,10 +32,22 @@ pub struct StatsParams {
     pub champion: Option<i64>,
     /// Any Riot role token (`TOP`, `MIDDLE`, `UTILITY`, ...).
     pub position: Option<String>,
-    /// Tier list queue: `ranked_solo` (default), `aram`, `arena`.
+    /// Queue: `ranked_solo`, `ranked_flex`, `aram`, `arena` (or `all` for profile filter).
     pub queue: Option<String>,
-    /// Tier list role filter (Ranked Solo/Duo only); absent or `ALL` for every role.
+    /// Rank bracket: `all`, `emerald_plus`, `diamond_plus`, `master_plus`.
+    pub bracket: Option<String>,
+    /// Role filter (Tier list or My Stats); absent or `ALL` for every role.
     pub role: Option<String>,
+    /// Text filter for Tier List or Matchups.
+    pub search: Option<String>,
+    /// Tier List sort column (`tier`, `win`, `pick`, `ban`, `games`).
+    pub sort: Option<String>,
+    /// Sort direction (`asc` or `desc`).
+    pub dir: Option<String>,
+    /// Include low-pickrate off-meta entries in Tier List.
+    pub off_meta: Option<bool>,
+    /// Expand all matchups beyond the default 8 per column.
+    pub all: Option<bool>,
     /// `en` or `fr`, for champion names and built-in fallbacks; the app language otherwise.
     pub lang: Option<String>,
 }
@@ -111,9 +125,16 @@ pub struct ChampionRef {
     pub roles: Vec<Position>,
 }
 
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct RuneNodeView {
+    pub id: i64,
+    pub name: String,
+    pub active: bool,
+}
+
 #[derive(Debug, Serialize)]
 pub struct RunePageView {
-    /// `popular` (the global page), `alternative`, or `client` (Riot's recommended page).
+    /// `popular`, `alternative`, `client` (Riot's recommended page), or `local` (player's own).
     pub kind: &'static str,
     pub origin: StatsOrigin,
     pub rates: Option<Rates>,
@@ -125,6 +146,12 @@ pub struct RunePageView {
     pub primary_perks: Vec<Named>,
     pub secondary_perks: Vec<Named>,
     pub shards: Vec<Named>,
+    /// Spatial primary tree rows (4 rows: keystone + 3 perk rows), when style slots are known.
+    pub primary_rows: Vec<Vec<RuneNodeView>>,
+    /// Spatial secondary tree rows (3 regular perk rows), when style slots are known.
+    pub secondary_rows: Vec<Vec<RuneNodeView>>,
+    /// Spatial 3x3 stat shard rows.
+    pub shard_rows: Vec<Vec<RuneNodeView>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,20 +177,56 @@ pub struct SkillView {
     pub rates: Option<Rates>,
 }
 
-/// Champion Build: the global build (Online or Demo) beside the client's recommended page.
+/// Player's own local stats & most-used kit on the selected champion.
+#[derive(Debug, Serialize)]
+pub struct LocalBuildView {
+    pub origin: StatsOrigin,
+    pub games: u32,
+    pub wins: u32,
+    pub kills: f32,
+    pub deaths: f32,
+    pub assists: f32,
+    pub cs_per_min: f32,
+    pub dpm: f32,
+    pub keystone: Option<Named>,
+    pub spells: Option<[Named; 2]>,
+    pub items: Vec<Named>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChampProfileView {
+    pub physical: f32,
+    pub magic: f32,
+    pub true_damage: f32,
+    pub traits: Vec<String>,
+    pub local_origin: Option<StatsOrigin>,
+    pub gpm: Option<f32>,
+    pub vision_per_min: Option<f32>,
+}
+
+/// Champion Build: the global build (Online or Demo) beside the client's recommended page and
+/// the player's own local games on that champion.
 #[derive(Debug, Serialize)]
 pub struct BuildView {
     pub champion: Option<ChampionRef>,
     pub position: Option<Position>,
+    pub queue: StatsQueue,
+    pub bracket: RankBracket,
     pub picks: Vec<ChampionRef>,
     pub dpm_url: Option<String>,
     pub build: Block,
     pub client: Block,
     pub rates: Option<Rates>,
+    pub role_distribution: Vec<(Position, f32)>,
+    pub tier_rank: Option<(Tier, u32, u32)>,
+    pub local_build: Option<LocalBuildView>,
+    pub champ_profile: Option<ChampProfileView>,
     pub rune_pages: Vec<RunePageView>,
     pub spells: Vec<SpellRowView>,
     pub items: Vec<ItemStageView>,
+    pub items_origin: Option<StatsOrigin>,
     pub skills: Option<SkillView>,
+    pub alt_skills: Vec<SkillView>,
 }
 
 #[derive(Debug, Serialize)]
@@ -173,11 +236,14 @@ pub struct TierRow {
     pub position: Option<Position>,
     pub tier: Tier,
     pub rates: Rates,
+    pub win_rate_delta: Option<f32>,
+    pub lane_presence: Option<f32>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct TierView {
     pub queue: StatsQueue,
+    pub bracket: RankBracket,
     pub role: Option<Position>,
     pub patch: String,
     pub dpm_url: String,
@@ -190,6 +256,16 @@ pub struct MatchupRow {
     pub opponent: ChampionRef,
     pub rates: Rates,
     pub gold_diff_15: Option<f32>,
+    pub verdict: LaneVerdict,
+    pub local: Option<LocalMatchup>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LocalMatchupView {
+    pub opponent: ChampionRef,
+    pub games: u32,
+    pub wins: u32,
+    pub kda: f32,
 }
 
 #[derive(Debug, Serialize)]
@@ -201,12 +277,25 @@ pub struct MatchupView {
     pub block: Block,
     pub hardest: Vec<MatchupRow>,
     pub easiest: Vec<MatchupRow>,
+    pub total_entries: usize,
+    pub local_origin: Option<StatsOrigin>,
+    pub local_matchups: Vec<LocalMatchupView>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RankedStanding {
+    pub tier: String,
+    pub division: String,
+    pub lp: i32,
+    pub wins: u32,
+    pub losses: u32,
 }
 
 #[derive(Debug, Serialize)]
 pub struct GameRow {
     pub champion: Named,
     pub win: bool,
+    pub remake: bool,
     pub position: Option<Position>,
     pub queue: Option<StatsQueue>,
     pub kills: u32,
@@ -214,10 +303,20 @@ pub struct GameRow {
     pub assists: u32,
     pub cs: u32,
     pub damage_to_champions: u32,
+    pub vision_score: u32,
     pub duration_secs: u32,
     pub started_at_ms: i64,
     /// Counted in the totals ([`summarised_games`]); ARAM, event modes and remakes are only listed.
     pub summarised: bool,
+    pub opponent: Option<Named>,
+    pub keystone: Option<Named>,
+    pub spells: Option<[Named; 2]>,
+    pub items: Vec<Named>,
+    pub kill_participation: Option<f32>,
+    pub damage_share: Option<f32>,
+    pub performance_score: Option<u8>,
+    pub placement: Option<u8>,
+    pub badge: Option<MatchBadge>,
 }
 
 #[derive(Debug, Serialize)]
@@ -234,10 +333,12 @@ pub struct ChampionSummaryRow {
     pub items: Vec<Named>,
 }
 
-/// My Stats: the player's recent games and per-champion summary, from the local history.
+/// My Stats: the player's ranked standing, role performance, recent games and per-champion summary.
 #[derive(Debug, Serialize)]
 pub struct ProfileView {
     pub block: Block,
+    pub rank: Option<RankedStanding>,
+    pub roles: Vec<RoleSummary>,
     pub games: Vec<GameRow>,
     pub champions: Vec<ChampionSummaryRow>,
 }
@@ -247,13 +348,20 @@ struct Namer<'a> {
     app: &'a AppState,
     lang: Lang,
     names: GameDataNames,
+    game_data: Option<std::sync::Arc<GameData>>,
 }
 
 impl<'a> Namer<'a> {
     fn new(app: &'a AppState, lang: Lang, with_game_data: bool) -> Self {
         let data = with_game_data.then(|| app.stats.game_data_in(lang));
-        let names = GameDataNames::new(data.as_ref().and_then(|d| d.ready()).map(|g| g.as_ref()));
-        Self { app, lang, names }
+        let game_data = data.and_then(|d| d.ready().cloned());
+        let names = GameDataNames::new(game_data.as_deref());
+        Self {
+            app,
+            lang,
+            names,
+            game_data,
+        }
     }
 
     fn named(&self, category: &str, id: i64) -> Named {
@@ -284,6 +392,13 @@ impl<'a> Namer<'a> {
         }
     }
 
+    fn style_rows(&self, style_id: i64) -> Option<Vec<Vec<i64>>> {
+        self.game_data
+            .as_deref()
+            .and_then(|g| g.style_rows(style_id))
+            .or_else(|| builtin_rune_style_slots(style_id))
+    }
+
     fn rune_page(
         &self,
         kind: &'static str,
@@ -295,6 +410,57 @@ impl<'a> Namer<'a> {
         let perks = &page.perk_ids;
         let slice =
             |from: usize, to: usize| perks.get(from..to.min(perks.len())).unwrap_or_default();
+        let primary_rows = self
+            .style_rows(page.primary_style_id)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|id| RuneNodeView {
+                                id,
+                                name: self.names.name("perk", id, self.lang),
+                                active: perks.contains(&id),
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let secondary_rows = self
+            .style_rows(page.sub_style_id)
+            .map(|rows| {
+                rows.into_iter()
+                    .skip(1)
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|id| RuneNodeView {
+                                id,
+                                name: self.names.name("perk", id, self.lang),
+                                active: perks.contains(&id),
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let shard_rows = if page.shard_ids.is_empty() {
+            Vec::new()
+        } else {
+            STAT_SHARD_ROWS
+                .iter()
+                .enumerate()
+                .map(|(row_idx, row)| {
+                    let chosen = page.shard_ids.get(row_idx).copied();
+                    row.iter()
+                        .map(|&id| RuneNodeView {
+                            id,
+                            name: self.names.name("perk", id, self.lang),
+                            active: chosen == Some(id),
+                        })
+                        .collect()
+                })
+                .collect()
+        };
         RunePageView {
             kind,
             origin,
@@ -316,6 +482,9 @@ impl<'a> Namer<'a> {
                 .iter()
                 .map(|&id| self.named("perk", id))
                 .collect(),
+            primary_rows,
+            secondary_rows,
+            shard_rows,
         }
     }
 }
@@ -335,6 +504,25 @@ fn some_rates(rates: &Rates) -> Option<Rates> {
 fn parse_position(raw: Option<&str>) -> Option<Position> {
     raw.and_then(Position::parse)
         .filter(|p| *p != Position::Fill)
+}
+
+fn parse_queue(raw: Option<&str>) -> StatsQueue {
+    match raw.map(str::to_ascii_lowercase).as_deref() {
+        Some("ranked_flex") | Some("flex") => StatsQueue::RankedFlex,
+        Some("normal") => StatsQueue::Normal,
+        Some("aram") => StatsQueue::Aram,
+        Some("arena") => StatsQueue::Arena,
+        _ => StatsQueue::RankedSolo,
+    }
+}
+
+fn parse_bracket(raw: Option<&str>) -> RankBracket {
+    match raw.map(str::to_ascii_lowercase).as_deref() {
+        Some("all") => RankBracket::All,
+        Some("diamond_plus") | Some("diamond") => RankBracket::DiamondPlus,
+        Some("master_plus") | Some("master") => RankBracket::MasterPlus,
+        _ => RankBracket::EmeraldPlus,
+    }
 }
 
 /// The champion and role a Build or Matchups request is about: the asked one, else the
@@ -391,12 +579,17 @@ fn picks(app: &AppState, namer: &Namer<'_>) -> Vec<ChampionRef> {
     }
 }
 
-fn query(champion_id: i64, position: Option<Position>) -> StatsQuery {
+fn query(
+    champion_id: i64,
+    position: Option<Position>,
+    queue: StatsQueue,
+    bracket: RankBracket,
+) -> StatsQuery {
     StatsQuery {
         champion_id,
         position,
-        queue: StatsQueue::RankedSolo,
-        bracket: RankBracket::default(),
+        queue,
+        bracket,
         patch: None,
     }
 }
@@ -427,12 +620,16 @@ pub fn champions_view(app: &AppState, params: &StatsParams) -> Vec<ChampionRef> 
 pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
     let lang = params.lang(app);
     let namer = Namer::new(app, lang, true);
+    let queue = parse_queue(params.queue.as_deref());
+    let bracket = parse_bracket(params.bracket.as_deref());
     let (champion_id, position) = selection(app, params);
     let picks = picks(app, &namer);
     if champion_id <= 0 {
         return BuildView {
             champion: None,
             position: None,
+            queue,
+            bracket,
             picks,
             dpm_url: None,
             build: block(
@@ -444,23 +641,66 @@ pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
                 |_| (StatsOrigin::Local, None),
             ),
             rates: None,
+            role_distribution: Vec::new(),
+            tier_rank: None,
+            local_build: None,
+            champ_profile: None,
             rune_pages: Vec::new(),
             spells: Vec::new(),
             items: Vec::new(),
+            items_origin: None,
             skills: None,
+            alt_skills: Vec::new(),
         };
     }
-    let q = query(champion_id, position);
+    let q = query(champion_id, position, queue, bracket);
     let build_state = app.stats.build(&q);
     let client_state = app.stats.recommended_build(&q);
+    let profile_state = app.stats.player_profile();
     let build_block = block(&build_state, |b: &ChampionBuild| {
         (b.origin, b.attribution.clone())
     });
     let client_block = block(&client_state, |b: &ChampionBuild| (b.origin, None));
     let build = build_state.ready();
     let client = client_state.ready();
+    let profile = profile_state.ready();
 
-    // Rune pages: the global ones first, then the client's own unless it is one of them.
+    // Local player build for this champion, if they have played it.
+    let local_champ = profile.and_then(|p| {
+        p.champions
+            .iter()
+            .find(|c| c.champion_id == champion_id)
+            .map(|c| (p.origin, c))
+    });
+    let local_build = local_champ.map(|(origin, c)| LocalBuildView {
+        origin,
+        games: c.games,
+        wins: c.wins,
+        kills: c.kills,
+        deaths: c.deaths,
+        assists: c.assists,
+        cs_per_min: c.cs_per_min,
+        dpm: c.dpm,
+        keystone: c
+            .runes
+            .as_ref()
+            .and_then(|r| r.perk_ids.first())
+            .map(|&id| namer.named("perk", id)),
+        spells: c.spells.map(|s| {
+            [
+                namer.named("spell", s.first),
+                namer.named("spell", s.second),
+            ]
+        }),
+        items: c
+            .items
+            .iter()
+            .take(6)
+            .map(|&id| namer.named("item", id))
+            .collect(),
+    });
+
+    // Rune pages: the global ones first, then the client's own, then the player's own if distinct.
     let client_page = client.and_then(|c| c.runes.first().map(|(page, _)| page));
     let mut rune_pages = Vec::new();
     if let Some(b) = build {
@@ -481,11 +721,22 @@ pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
             rune_pages.push(namer.rune_page("client", page, c.origin, &Rates::default(), false));
         }
     }
+    if let Some((origin, c)) = local_champ {
+        if let Some(page) = c.runes.as_ref() {
+            let local_rates = Rates {
+                win_rate: c.wins as f32 / c.games.max(1) as f32,
+                pick_rate: 0.0,
+                ban_rate: 0.0,
+                games: c.games,
+            };
+            rune_pages.push(namer.rune_page("local", page, origin, &local_rates, false));
+        }
+    }
 
-    // Summoner spells: the global pair, and the client's when it differs.
+    // Summoner spells: top 2 global pairs, then client's when distinct.
     let mut spells = Vec::new();
     if let Some(b) = build {
-        if let Some((pair, rates)) = b.spells.first() {
+        for (pair, rates) in b.spells.iter().take(2) {
             spells.push(SpellRowView {
                 origin: b.origin,
                 first: namer.named("spell", pair.first),
@@ -496,9 +747,7 @@ pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
     }
     if let Some(c) = client {
         if let Some((pair, _)) = c.spells.first() {
-            let same = build
-                .and_then(|b| b.spells.first())
-                .is_some_and(|(p, _)| p == pair);
+            let same = build.is_some_and(|b| b.spells.iter().take(2).any(|(p, _)| p == pair));
             if !same {
                 spells.push(SpellRowView {
                     origin: c.origin,
@@ -510,7 +759,21 @@ pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
         }
     }
 
-    let items = build
+    if spells.is_empty() {
+        if let Some((origin, c)) = local_champ {
+            if let Some(pair) = c.spells {
+                spells.push(SpellRowView {
+                    origin,
+                    first: namer.named("spell", pair.first),
+                    second: namer.named("spell", pair.second),
+                    rates: None,
+                });
+            }
+        }
+    }
+
+    let mut items_origin = build.map(|b| b.origin);
+    let mut items: Vec<ItemStageView> = build
         .map(|b| {
             b.items
                 .iter()
@@ -527,6 +790,23 @@ pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
                 .collect()
         })
         .unwrap_or_default();
+    if items.is_empty() {
+        if let Some((origin, c)) = local_champ {
+            if !c.items.is_empty() {
+                items_origin = Some(origin);
+                items.push(ItemStageView {
+                    stage: Some(ItemStage::Core),
+                    items: c
+                        .items
+                        .iter()
+                        .take(6)
+                        .map(|&id| namer.named("item", id))
+                        .collect(),
+                    rates: None,
+                });
+            }
+        }
+    }
 
     let skills = build
         .and_then(|b| b.skills.first().map(|s| (s, b.origin)))
@@ -538,19 +818,59 @@ pub fn build_view(app: &AppState, params: &StatsParams) -> BuildView {
             priority: s.priority.clone(),
             rates: some_rates(&s.rates),
         });
+    let alt_skills = build
+        .map(|b| {
+            b.skills
+                .iter()
+                .skip(1)
+                .take(2)
+                .filter(|s| !s.priority.is_empty())
+                .map(|s| SkillView {
+                    origin: b.origin,
+                    levels: s.levels.clone(),
+                    priority: s.priority.clone(),
+                    rates: some_rates(&s.rates),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let champ_profile = champion_traits(champion_id).map(|ct| ChampProfileView {
+        physical: f32::from(ct.physical) / 100.0,
+        magic: f32::from(ct.magic) / 100.0,
+        true_damage: f32::from(ct.true_damage) / 100.0,
+        traits: ct
+            .traits()
+            .into_iter()
+            .map(|t| comp_trait_label(t, lang).to_string())
+            .collect(),
+        local_origin: local_champ.map(|(o, _)| o),
+        gpm: local_champ.map(|(_, c)| c.gold_per_min),
+        vision_per_min: local_champ.map(|(_, c)| c.vision_per_min),
+    });
 
     BuildView {
         champion: Some(namer.champion(champion_id)),
         position,
+        queue,
+        bracket,
         picks,
         dpm_url: links::dpm_build(champion_id),
         build: build_block,
         client: client_block,
         rates: build.and_then(|b| some_rates(&b.rates)),
+        role_distribution: build
+            .map(|b| b.role_distribution.clone())
+            .unwrap_or_default(),
+        tier_rank: build.and_then(|b| b.tier_rank),
+        local_build,
+        champ_profile,
         rune_pages,
         spells,
         items,
+        items_origin,
         skills,
+        alt_skills,
     }
 }
 
@@ -567,32 +887,85 @@ pub fn tiers_view(app: &AppState, params: &StatsParams) -> TierView {
         Some("arena") => StatsQueue::Arena,
         _ => StatsQueue::RankedSolo,
     };
+    let bracket = parse_bracket(params.bracket.as_deref());
     let lanes = queue == StatsQueue::RankedSolo;
     let role = if lanes {
         parse_position(params.role.as_deref())
     } else {
         None
     };
-    let state = app.stats.tier_list(queue, RankBracket::default());
+    let search_key = params
+        .search
+        .as_deref()
+        .map(normalize_champion_key)
+        .unwrap_or_default();
+    let include_off_meta = params.off_meta.unwrap_or(false);
+    let sort_col = params.sort.as_deref().unwrap_or("tier");
+    let sort_desc = match params.dir.as_deref() {
+        Some("asc") => false,
+        Some("desc") => true,
+        _ => sort_col != "tier",
+    };
+
+    let state = app.stats.tier_list(queue, bracket);
     let block = block(&state, |t| (t.origin, t.attribution.clone()));
-    let (patch, entries) = match state.ready() {
+    let (patch, mut entries) = match state.ready() {
         Some(list) => (
             list.patch.clone(),
             list.entries
                 .iter()
                 .filter(|e| role.is_none_or(|r| e.position == r))
-                .map(|e| TierRow {
-                    champion: namer.champion(e.champion_id),
-                    position: lanes.then_some(e.position),
-                    tier: e.tier,
-                    rates: e.rates,
+                .filter(|e| {
+                    include_off_meta || e.rates.pick_rate == 0.0 || e.rates.pick_rate >= 0.005
+                })
+                .filter_map(|e| {
+                    let champion = namer.champion(e.champion_id);
+                    if !search_key.is_empty()
+                        && !normalize_champion_key(&champion.name).contains(&search_key)
+                    {
+                        return None;
+                    }
+                    Some(TierRow {
+                        champion,
+                        position: lanes.then_some(e.position),
+                        tier: e.tier,
+                        rates: e.rates,
+                        win_rate_delta: e.win_rate_delta,
+                        lane_presence: e.lane_presence,
+                    })
                 })
                 .collect(),
         ),
         None => (String::new(), Vec::new()),
     };
+
+    entries.sort_by(|a, b| {
+        let ord = match sort_col {
+            "win" => a.rates.win_rate.total_cmp(&b.rates.win_rate),
+            "pick" => a.rates.pick_rate.total_cmp(&b.rates.pick_rate),
+            "ban" => a.rates.ban_rate.total_cmp(&b.rates.ban_rate),
+            "games" => a.rates.games.cmp(&b.rates.games),
+            _ => a
+                .tier
+                .cmp(&b.tier)
+                .then_with(|| b.rates.win_rate.total_cmp(&a.rates.win_rate)),
+        };
+        if sort_col == "tier" {
+            if sort_desc {
+                ord.reverse()
+            } else {
+                ord
+            }
+        } else if sort_desc {
+            ord.reverse()
+        } else {
+            ord
+        }
+    });
+
     TierView {
         queue,
+        bracket,
         role,
         patch,
         dpm_url: DPM_TIER_LIST.to_string(),
@@ -618,31 +991,89 @@ pub fn matchups_view(app: &AppState, params: &StatsParams) -> MatchupView {
             ),
             hardest: Vec::new(),
             easiest: Vec::new(),
+            total_entries: 0,
+            local_origin: None,
+            local_matchups: Vec::new(),
         };
     }
-    let state = app.stats.matchups(&query(champion_id, position));
+    let profile_state = app.stats.player_profile();
+    let local_origin = profile_state.ready().map(|p| p.origin);
+    let local_list = profile_state
+        .ready()
+        .map(|p| aggregate_local_matchups(&p.games, champion_id))
+        .unwrap_or_default();
+    let local_by_opp: HashMap<i64, LocalMatchup> = local_list
+        .iter()
+        .cloned()
+        .map(|m| (m.opponent_id, m))
+        .collect();
+
+    let search_key = params
+        .search
+        .as_deref()
+        .map(normalize_champion_key)
+        .unwrap_or_default();
+    let show_all = params.all.unwrap_or(false) || !search_key.is_empty();
+
+    let local_matchups: Vec<LocalMatchupView> = local_list
+        .into_iter()
+        .filter_map(|m| {
+            let opponent = namer.champion(m.opponent_id);
+            if !search_key.is_empty()
+                && !normalize_champion_key(&opponent.name).contains(&search_key)
+            {
+                return None;
+            }
+            Some(LocalMatchupView {
+                opponent,
+                games: m.games,
+                wins: m.wins,
+                kda: m.kda,
+            })
+        })
+        .collect();
+
+    let state = app.stats.matchups(&query(
+        champion_id,
+        position,
+        StatsQueue::RankedSolo,
+        RankBracket::default(),
+    ));
     let block = block(&state, |m| (m.origin, m.attribution.clone()));
     let entries = state
         .ready()
         .map(|m| m.entries.as_slice())
         .unwrap_or_default();
-    let row = |m: &hypatia_shared::Matchup| MatchupRow {
-        opponent: namer.champion(m.opponent_id),
-        rates: m.rates,
-        gold_diff_15: m.gold_diff_15,
+    let total_entries = entries.len();
+    let row = |m: &hypatia_shared::Matchup| {
+        let opponent = namer.champion(m.opponent_id);
+        if !search_key.is_empty() && !normalize_champion_key(&opponent.name).contains(&search_key) {
+            return None;
+        }
+        Some(MatchupRow {
+            opponent,
+            rates: m.rates,
+            gold_diff_15: m.gold_diff_15,
+            verdict: LaneVerdict::from_matchup(m.rates.win_rate, m.gold_diff_15),
+            local: local_by_opp.get(&m.opponent_id).cloned(),
+        })
     };
     let mut hardest: Vec<_> = entries.iter().filter(|m| m.rates.win_rate < 0.5).collect();
     hardest.sort_by(|a, b| a.rates.win_rate.total_cmp(&b.rates.win_rate));
     let mut easiest: Vec<_> = entries.iter().filter(|m| m.rates.win_rate >= 0.5).collect();
     easiest.sort_by(|a, b| b.rates.win_rate.total_cmp(&a.rates.win_rate));
+    let limit = if show_all { usize::MAX } else { MATCHUPS };
     MatchupView {
         champion: Some(namer.champion(champion_id)),
         position,
         picks,
         dpm_url: links::dpm_matchups(champion_id),
         block,
-        hardest: hardest.into_iter().take(MATCHUPS).map(row).collect(),
-        easiest: easiest.into_iter().take(MATCHUPS).map(row).collect(),
+        hardest: hardest.into_iter().filter_map(row).take(limit).collect(),
+        easiest: easiest.into_iter().filter_map(row).take(limit).collect(),
+        total_entries,
+        local_origin,
+        local_matchups,
     }
 }
 
@@ -651,9 +1082,25 @@ pub fn profile_view(app: &AppState, params: &StatsParams) -> ProfileView {
     let namer = Namer::new(app, lang, true);
     let state = app.stats.player_profile();
     let block = block(&state, |p| (p.origin, None));
+    let rank = app.get_summary().summoner.as_ref().and_then(|s| {
+        let tier = s
+            .rank_tier
+            .as_deref()
+            .filter(|t| !t.is_empty())?
+            .to_string();
+        Some(RankedStanding {
+            tier,
+            division: s.rank_division.clone().unwrap_or_default(),
+            lp: s.rank_lp.unwrap_or(0),
+            wins: s.rank_wins.unwrap_or(0),
+            losses: s.rank_losses.unwrap_or(0),
+        })
+    });
     let Some(profile) = state.ready() else {
         return ProfileView {
             block,
+            rank,
+            roles: Vec::new(),
             games: Vec::new(),
             champions: Vec::new(),
         };
@@ -669,12 +1116,29 @@ pub fn profile_view(app: &AppState, params: &StatsParams) -> ProfileView {
         .iter()
         .map(|g| g.game_id)
         .collect();
+    let queue_filter = match params
+        .queue
+        .as_deref()
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("ranked_solo") => Some(StatsQueue::RankedSolo),
+        Some("ranked_flex") => Some(StatsQueue::RankedFlex),
+        Some("normal") => Some(StatsQueue::Normal),
+        Some("aram") => Some(StatsQueue::Aram),
+        Some("arena") => Some(StatsQueue::Arena),
+        _ => None,
+    };
+    let role_filter = parse_position(params.role.as_deref());
     let games = profile
         .games
         .iter()
+        .filter(|g| queue_filter.is_none_or(|q| g.queue == Some(q)))
+        .filter(|g| role_filter.is_none_or(|r| g.position == Some(r)))
         .map(|g| GameRow {
             champion: champ(g.champion_id),
             win: g.win,
+            remake: g.is_remake(),
             position: g.position,
             queue: g.queue,
             kills: g.kills,
@@ -682,9 +1146,33 @@ pub fn profile_view(app: &AppState, params: &StatsParams) -> ProfileView {
             assists: g.assists,
             cs: g.cs,
             damage_to_champions: g.damage_to_champions,
+            vision_score: g.vision_score,
             duration_secs: g.duration_secs,
             started_at_ms: g.started_at_ms,
             summarised: counted.contains(&g.game_id),
+            opponent: g.opponent_champion_id.map(&mut champ),
+            keystone: g
+                .runes
+                .as_ref()
+                .and_then(|r| r.perk_ids.first())
+                .map(|&id| namer.named("perk", id)),
+            spells: (g.spells.first > 0 && g.spells.second > 0).then(|| {
+                [
+                    namer.named("spell", g.spells.first),
+                    namer.named("spell", g.spells.second),
+                ]
+            }),
+            items: g
+                .items
+                .iter()
+                .take(6)
+                .map(|&id| namer.named("item", id))
+                .collect(),
+            kill_participation: g.kill_participation,
+            damage_share: g.damage_share,
+            performance_score: g.performance_score,
+            placement: g.placement,
+            badge: g.badge,
         })
         .collect();
     let champions = profile
@@ -714,6 +1202,8 @@ pub fn profile_view(app: &AppState, params: &StatsParams) -> ProfileView {
         .collect();
     ProfileView {
         block,
+        rank,
+        roles: profile.roles.clone(),
         games,
         champions,
     }

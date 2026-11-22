@@ -136,6 +136,18 @@ pub mod rift_schedule {
     pub const HERALD_LEAVE: f64 = 1185.0;
     pub const BARON_FIRST: f64 = 1200.0;
     pub const BARON_RESPAWN: f64 = 360.0;
+    pub const BARON_BUFF_SEC: f64 = 180.0;
+    pub const ELDER_BUFF_SEC: f64 = 150.0;
+}
+
+/// Active Baron Nashor (180s) or Elder Dragon (150s) buff timer with surviving holders count.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActiveBuff {
+    pub kind: ObjectiveKind,
+    pub by_order: bool,
+    pub expires_at_sec: f64,
+    pub remaining_sec: f64,
+    pub holders_alive: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -151,6 +163,9 @@ pub struct LiveBoard {
     pub sightings: Vec<Sighting>,
     /// The next monster of each pit; empty outside Summoner's Rift.
     pub pits: Vec<PitTimer>,
+    /// Active Baron / Elder buffs currently ticking on Summoner's Rift.
+    #[serde(default)]
+    pub active_buffs: Vec<ActiveBuff>,
 }
 
 impl LiveBoard {
@@ -733,6 +748,12 @@ pub fn extract_live_board_localized(
         Vec::new()
     };
 
+    let active_buffs = if on_rift {
+        compute_active_buffs(&objectives, &events, live)
+    } else {
+        Vec::new()
+    };
+
     LiveBoard {
         my_team_is_order,
         order_kills,
@@ -742,7 +763,97 @@ pub fn extract_live_board_localized(
         feed,
         sightings,
         pits,
+        active_buffs,
     }
+}
+
+/// Computes active Baron (180s) and Elder (150s) buffs on Summoner's Rift, excluding holders
+/// who were dead when the objective fell or died afterward.
+fn compute_active_buffs(
+    objectives: &[ObjectiveTaken],
+    events: &[Value],
+    live: &LiveGameSummary,
+) -> Vec<ActiveBuff> {
+    let now = live.game_time_sec;
+    let mut out = Vec::new();
+    for kind in [ObjectiveKind::Baron, ObjectiveKind::Elder] {
+        let duration = match kind {
+            ObjectiveKind::Baron => rift_schedule::BARON_BUFF_SEC,
+            ObjectiveKind::Elder => rift_schedule::ELDER_BUFF_SEC,
+            _ => continue,
+        };
+        let Some(latest) = objectives
+            .iter()
+            .filter(|o| o.kind == kind && o.time_sec <= now && now < o.time_sec + duration)
+            .max_by(|a, b| {
+                a.time_sec
+                    .partial_cmp(&b.time_sec)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        else {
+            continue;
+        };
+        let taken_at = latest.time_sec;
+        let expires_at_sec = taken_at + duration;
+        let remaining_sec = (expires_at_sec - now).max(0.0);
+
+        let team_players: Vec<&crate::summary::LiveGamePlayerSummary> = live
+            .players
+            .iter()
+            .filter(|p| (p.team == "ORDER") == latest.by_order)
+            .collect();
+        let holders_alive = if team_players.is_empty() {
+            5u8
+        } else {
+            let mut alive = 0u8;
+            for p in team_players {
+                let matches_victim = |victim: &str| {
+                    p.riot_id == victim
+                        || p.riot_id.split('#').next() == Some(victim)
+                        || p.champion_name == victim
+                };
+                // Died after the objective was taken -> lost the buff.
+                let died_after = events.iter().any(|ev| {
+                    ev.get("EventName").and_then(|v| v.as_str()) == Some("ChampionKill")
+                        && ev
+                            .get("EventTime")
+                            .and_then(|v| v.as_f64())
+                            .is_some_and(|t| t >= taken_at && t <= now)
+                        && ev
+                            .get("VictimName")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(matches_victim)
+                });
+                // Died shortly before the objective was taken (~25s respawn window) -> never got it.
+                let dead_at_kill = events.iter().any(|ev| {
+                    ev.get("EventName").and_then(|v| v.as_str()) == Some("ChampionKill")
+                        && ev
+                            .get("EventTime")
+                            .and_then(|v| v.as_f64())
+                            .is_some_and(|t| t < taken_at && taken_at - t <= 25.0)
+                        && ev
+                            .get("VictimName")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(matches_victim)
+                });
+                if !died_after && !dead_at_kill {
+                    alive = alive.saturating_add(1);
+                }
+            }
+            alive
+        };
+
+        if holders_alive > 0 {
+            out.push(ActiveBuff {
+                kind,
+                by_order: latest.by_order,
+                expires_at_sec,
+                remaining_sec,
+                holders_alive,
+            });
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -772,6 +883,8 @@ mod tests {
             deaths: 0,
             assists: 0,
             creep_score: 0,
+            cs_per_min: 0.0,
+            cs_diff_vs_lane: None,
             is_self,
             is_dead: false,
             respawn_timer_sec: 0.0,
@@ -792,6 +905,9 @@ mod tests {
             deaths: 0,
             assists: 0,
             creep_score: 0,
+            self_cs_per_min: 0.0,
+            lane_cs_diff: None,
+            personal_avg_cs_per_min: None,
             recent_events: vec![],
             players,
         }
@@ -1017,5 +1133,45 @@ mod tests {
         let mut elder = soul.to_vec();
         elder.push(taken(Elder, false, 1900.0));
         assert_eq!(at(&elder, true, 1910.0)[0], (Elder, 2260.0));
+    }
+
+    #[test]
+    fn active_buffs_track_baron_elder_and_post_kill_deaths() {
+        let mut live = live(vec![
+            player("Me#EUW", "Ahri", "ORDER", "MIDDLE", 4, true),
+            player("AllyTop#EUW", "Aatrox", "ORDER", "TOP", 2, false),
+            player("EnemyMid#EUW", "Syndra", "CHAOS", "MIDDLE", 3, false),
+            player("EnemyTop#EUW", "Darius", "CHAOS", "TOP", 1, false),
+        ]);
+        live.game_time_sec = 1400.0;
+        let events = json!({
+            "Events": [
+                { "EventName": "BaronKill", "EventTime": 1300.0, "KillerName": "Me#EUW" },
+                { "EventName": "ChampionKill", "EventTime": 1350.0, "KillerName": "EnemyMid#EUW", "VictimName": "Me#EUW" },
+                { "EventName": "DragonKill", "EventTime": 1310.0, "DragonType": "Elder", "KillerName": "EnemyMid#EUW" }
+            ]
+        });
+        let board = extract_live_board_localized(None, Some(&events), &live, Lang::En);
+        assert_eq!(board.active_buffs.len(), 2);
+        let baron = board
+            .active_buffs
+            .iter()
+            .find(|b| b.kind == ObjectiveKind::Baron)
+            .expect("baron buff active");
+        assert!(baron.by_order);
+        assert!((baron.remaining_sec - 80.0).abs() < 1e-3);
+        let order_count = live.players.iter().filter(|p| p.team == "ORDER").count() as u8;
+        assert_eq!(
+            baron.holders_alive,
+            order_count.saturating_sub(1),
+            "post-baron death removes holder"
+        );
+        let elder = board
+            .active_buffs
+            .iter()
+            .find(|b| b.kind == ObjectiveKind::Elder)
+            .expect("elder buff active");
+        assert!(!elder.by_order);
+        assert!((elder.remaining_sec - 60.0).abs() < 1e-3);
     }
 }

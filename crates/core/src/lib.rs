@@ -36,7 +36,7 @@ use crate::discovery::DiscoveryManager;
 use crate::fixtures::spawn_demo_generator;
 pub use crate::fixtures::DemoRemoteState;
 use crate::lcu_actions::{
-    affected_lcu_uris, resolve_lcu_command_localized, LcuActionClient, RemoteActionError,
+    affected_lcu_uris, resolve_lcu_command_with_champion, LcuActionClient, RemoteActionError,
 };
 use crate::redaction::SecretVault;
 use crate::riot_http::ReadOnlyRiotClient;
@@ -306,8 +306,13 @@ impl AppState {
         let editable_page_id = matches!(cmd, RemoteCommand::SaveRunePage { .. })
             .then(|| self.get_summary().editable_rune_page_id)
             .flatten();
-        let calls = resolve_lcu_command_localized(cmd, editable_page_id, lang)
-            .map_err(|e| RemoteActionError::BadRequest(e.to_string()))?;
+        let lock_champion_id = match cmd {
+            RemoteCommand::LockAction { action_id } => self.lock_action_champion_id(*action_id),
+            _ => None,
+        };
+        let calls =
+            resolve_lcu_command_with_champion(cmd, editable_page_id, lock_champion_id, lang)
+                .map_err(|e| RemoteActionError::BadRequest(e.to_string()))?;
 
         let lcu = self.discovery.lcu_args().ok_or_else(|| {
             RemoteActionError::ClientUnavailable(
@@ -342,6 +347,60 @@ impl AppState {
             }
         }
         Ok(())
+    }
+
+    /// Finds the currently hovered `championId` for `action_id` in `/lol-champ-select/v1/session`
+    /// so `LockAction` can include `"championId"` alongside `"completed": true` in its `PATCH`.
+    fn lock_action_champion_id(&self, action_id: i64) -> Option<i64> {
+        let cs = {
+            let guard = self.store.read().unwrap();
+            guard
+                .get_state(SourceId::LeagueClient, "/lol-champ-select/v1/session")
+                .map(|s| s.current.clone())
+        };
+        if let Some(cs) = cs {
+            if let Some(turns) = cs.get("actions").and_then(|v| v.as_array()) {
+                for act in turns.iter().filter_map(|t| t.as_array()).flatten() {
+                    if act.get("id").and_then(|v| v.as_i64()) == Some(action_id) {
+                        if let Some(cid) = act
+                            .get("championId")
+                            .and_then(|v| v.as_i64())
+                            .filter(|&id| id > 0)
+                        {
+                            return Some(cid);
+                        }
+                    }
+                }
+            }
+            let local_cell = cs
+                .get("localPlayerCellId")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(-1);
+            if let Some(arr) = cs.get("myTeam").and_then(|v| v.as_array()) {
+                for m in arr {
+                    if m.get("cellId").and_then(|v| v.as_i64()) == Some(local_cell) {
+                        if let Some(cid) = m
+                            .get("championId")
+                            .and_then(|v| v.as_i64())
+                            .filter(|&id| id > 0)
+                            .or_else(|| {
+                                m.get("championPickIntent")
+                                    .and_then(|v| v.as_i64())
+                                    .filter(|&id| id > 0)
+                            })
+                        {
+                            return Some(cid);
+                        }
+                    }
+                }
+            }
+        }
+        self.get_summary()
+            .champ_select
+            .as_ref()
+            .and_then(|cs| cs.local_action.as_ref())
+            .map(|a| a.champion_id)
+            .filter(|&id| id > 0)
     }
 
     /// Applies user settings to every running background task and memory cache budget.

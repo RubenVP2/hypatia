@@ -32,6 +32,18 @@ pub fn resolve_lcu_command_localized(
     editable_page_id: Option<i64>,
     lang: Lang,
 ) -> Result<Vec<ResolvedLcuCall>> {
+    resolve_lcu_command_with_champion(cmd, editable_page_id, None, lang)
+}
+
+/// Validates a `RemoteCommand` and maps it to its allowlisted LCU endpoint(s), including the
+/// currently hovered `lock_champion_id` when completing a champ-select action so the LCU receives
+/// both `PATCH .../actions/{id} {"championId", "completed": true}` and `POST .../actions/{id}/complete`.
+pub fn resolve_lcu_command_with_champion(
+    cmd: &RemoteCommand,
+    editable_page_id: Option<i64>,
+    lock_champion_id: Option<i64>,
+    lang: Lang,
+) -> Result<Vec<ResolvedLcuCall>> {
     match cmd {
         RemoteCommand::SetLobbyPositions { first, second } => {
             let f = first.trim().to_ascii_uppercase();
@@ -120,11 +132,23 @@ pub fn resolve_lcu_command_localized(
                     action_id
                 );
             }
-            Ok(vec![ResolvedLcuCall {
+            let mut calls = Vec::new();
+            if let Some(cid) = lock_champion_id.filter(|&id| id > 0) {
+                calls.push(ResolvedLcuCall {
+                    method: Method::PATCH,
+                    path: format!("/lol-champ-select/v1/session/actions/{action_id}"),
+                    body: Some(json!({
+                        "championId": cid,
+                        "completed": true,
+                    })),
+                });
+            }
+            calls.push(ResolvedLcuCall {
                 method: Method::POST,
                 path: format!("/lol-champ-select/v1/session/actions/{action_id}/complete"),
                 body: None,
-            }])
+            });
+            Ok(calls)
         }
         RemoteCommand::SwapBenchChampion { champion_id } => {
             if *champion_id <= 0 {
@@ -434,6 +458,15 @@ impl LcuActionClient {
         lang: Lang,
     ) -> Result<Value> {
         let mut last_body = Value::Null;
+        let is_lock_pair = calls.len() == 2
+            && calls[0].method == Method::PATCH
+            && calls[0]
+                .path
+                .starts_with("/lol-champ-select/v1/session/actions/")
+            && calls[1].method == Method::POST
+            && calls[1].path.ends_with("/complete");
+        let mut any_lock_succeeded = false;
+        let mut last_lock_err: Option<String> = None;
 
         for call in calls {
             let url = format!("https://127.0.0.1:{}{}", port, call.path);
@@ -473,7 +506,19 @@ impl LcuActionClient {
                         "League client rejected the action",
                         "Le client League a refusé l'action",
                     ));
-                bail!("LCU {} {}: {}", status.as_u16(), call.path, msg);
+                let err_str = format!("LCU {} {}: {}", status.as_u16(), call.path, msg);
+                if is_lock_pair {
+                    last_lock_err = Some(err_str);
+                    continue;
+                }
+                bail!("{err_str}");
+            }
+            any_lock_succeeded = true;
+        }
+
+        if is_lock_pair && !any_lock_succeeded {
+            if let Some(err_str) = last_lock_err {
+                bail!("{err_str}");
             }
         }
 
@@ -602,6 +647,26 @@ mod tests {
         assert_eq!(bench[0].method, Method::POST);
         assert_eq!(bench[0].path, "/lol-champ-select/v1/session/bench/swap/222");
         assert_eq!(bench[0].body, None);
+
+        let lock = resolve_lcu_command_with_champion(
+            &RemoteCommand::LockAction { action_id: 0 },
+            None,
+            Some(799),
+            Lang::En,
+        )
+        .unwrap();
+        assert_eq!(lock.len(), 2);
+        assert_eq!(lock[0].method, Method::PATCH);
+        assert_eq!(lock[0].path, "/lol-champ-select/v1/session/actions/0");
+        assert_eq!(
+            lock[0].body,
+            Some(json!({"championId": 799, "completed": true}))
+        );
+        assert_eq!(lock[1].method, Method::POST);
+        assert_eq!(
+            lock[1].path,
+            "/lol-champ-select/v1/session/actions/0/complete"
+        );
     }
 
     #[test]

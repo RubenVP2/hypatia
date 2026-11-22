@@ -1846,6 +1846,7 @@ button:disabled { cursor: default; }
     toastTimer: null,
     turnFlashUntil: 0,
     wasTurn: false,
+    clockSig: "",
     viewKey: "",
     skinScrollKey: "",
     sceneKey: "",
@@ -3874,6 +3875,25 @@ button:disabled { cursor: default; }
   }
 
   // ---- Render loop ----------------------------------------------------------------------------
+  function clockSignature(s) {
+    if (!s) return "";
+    if (s.phase === "ChampSelect" && s.champ_select) {
+      const cs = s.champ_select;
+      const act = cs.active_action;
+      return `cs:${cs.sub_phase}:${act ? `${act.action_id}:${act.action_type}:${act.is_my_turn}` : ""}:${cs.time_left_sec}:${cs.total_time_sec}`;
+    }
+    if (s.phase === "ReadyCheck" && s.matchmaking) {
+      return `rc:${s.matchmaking.ready_check_timer_sec}`;
+    }
+    if (s.phase === "Matchmaking" && s.matchmaking) {
+      return `mm:${s.matchmaking.time_in_queue_sec}`;
+    }
+    if (s.phase === "InProgress" && s.live_game) {
+      return `lg:${s.live_game.clock}`;
+    }
+    return s.phase || "";
+  }
+
   function renderState(s) {
     if (!s) return;
     if (s.lang === "fr" || s.lang === "en") {
@@ -3885,8 +3905,14 @@ button:disabled { cursor: default; }
       ui.lastServerLang = s.lang;
       store.set("hypatia_last_server_lang", s.lang);
     }
-    ui.state = s;
-    ui.stateAt = performance.now();
+    if (s !== ui.state) {
+      const nextClockSig = clockSignature(s);
+      if (nextClockSig !== ui.clockSig) {
+        ui.clockSig = nextClockSig;
+        ui.stateAt = performance.now();
+      }
+      ui.state = s;
+    }
     const turnNow = s.phase === "ReadyCheck"
       || Boolean(s.champ_select && s.champ_select.active_action
         && s.champ_select.active_action.is_my_turn && !s.champ_select.active_action.completed);

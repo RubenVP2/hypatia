@@ -64,7 +64,7 @@ The single process-wide notification bumped whenever something a view could disp
 ### Update Check
 Learning that a newer Hypatia release is published, and installing it on the player's click (`crates/core/src/update.rs`, desktop side `crates/desktop/src/updates.rs`).
 - **Invariant**: Asked once on first launch (`Settings::update_check`: `Ask`, `On`, `Off`); anything but `On` performs no network I/O. Profiles keep the answer as the player set it.
-- **Invariant**: The check is one `GET` to GitHub's `releases/latest` with a generic User-Agent; it carries nothing about the player, their account or their games. Drafts, pre-releases and versions not newer than the running build are never offered.
+- **Invariant**: The check is one `GET` to GitHub's `releases/latest` with a generic User-Agent, at launch, every 12 h, and 10 min after one that could not reach GitHub; it carries nothing about the player, their account or their games. Drafts, pre-releases and versions not newer than the running build are never offered.
 - **Invariant**: Nothing downloads before the player clicks Install. The archive installs only if it carries a minisign signature by `RELEASE_PUBLIC_KEY` whose trusted comment is `hypatia <tag> hypatia-windows-x86_64.zip`; `release.yml` signs it and refuses to publish without the key. The asset names are a contract with every installed copy.
 
 ### Settings

@@ -330,6 +330,7 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         let mut aux_sync = tokio::time::interval(Duration::from_millis(1000));
         aux_sync.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut last_sent = String::new();
+        let mut last_summary = String::new();
         loop {
             let has_clients = bg_state.active_clients.load(Ordering::Relaxed) > 0;
             tokio::select! {
@@ -344,8 +345,13 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
                         break;
                     }
                     if has_clients {
-                        let payload = current_snapshot_json(&bg_state);
+                        let (snap, payload) = current_snapshot_and_json(&bg_state);
                         if payload != last_sent {
+                            let summary = format_snapshot_summary(&snap);
+                            if summary != last_summary {
+                                info!("[remote:state] {}", summary);
+                                last_summary = summary;
+                            }
                             let _ = bg_state.state_tx.send(payload.clone());
                             last_sent = payload;
                         }
@@ -440,18 +446,77 @@ async fn sync_live_lcu_aux(st: &RemoteRouterState) {
     }
 
     for uri in uris {
-        if let Ok((status, _, body)) = st.app.riot_client.get(port, token_ref, uri).await {
-            if status.is_success() {
-                st.app.insert_lcu_update(uri, body);
+        match st.app.riot_client.get(port, token_ref, uri).await {
+            Ok((status, _, body)) => {
+                if status.is_success() {
+                    info!("[remote:aux] GET {} -> {}", uri, status.as_u16());
+                    st.app.insert_lcu_update(uri, body);
+                } else {
+                    warn!("[remote:aux] GET {} -> {}", uri, status.as_u16());
+                }
+            }
+            Err(err) => {
+                warn!("[remote:aux] GET {} failed: {:#}", uri, err);
             }
         }
     }
 }
 
-fn current_snapshot_json(st: &RemoteRouterState) -> String {
+fn current_snapshot_and_json(
+    st: &RemoteRouterState,
+) -> (hypatia_shared::RemoteStateSnapshot, String) {
     let mut alert_guard = st.alerts.write().unwrap();
     let snap = extract_remote_state(&st.app, &mut alert_guard);
-    serde_json::to_string(&snap).unwrap_or_else(|_| "{}".to_string())
+    let json = serde_json::to_string(&snap).unwrap_or_else(|_| "{}".to_string());
+    (snap, json)
+}
+
+fn current_snapshot_json(st: &RemoteRouterState) -> String {
+    current_snapshot_and_json(st).1
+}
+
+fn format_snapshot_summary(snap: &hypatia_shared::RemoteStateSnapshot) -> String {
+    if let Some(cs) = &snap.champ_select {
+        let act = cs
+            .active_action
+            .as_ref()
+            .map(|a| {
+                format!(
+                    "id={} type={} champ={} turn={} done={}",
+                    a.action_id, a.action_type, a.champion_id, a.is_my_turn, a.completed
+                )
+            })
+            .unwrap_or_else(|| "none".to_string());
+        format!(
+            "phase={} sub_phase={} action=[{}] spells=({},{}) skins={} pages={} champs={} swaps_in={}",
+            snap.phase,
+            cs.sub_phase,
+            act,
+            cs.spell1_id,
+            cs.spell2_id,
+            cs.available_skins.len(),
+            cs.rune_pages.len(),
+            cs.champions.len(),
+            cs.incoming_swaps.len()
+        )
+    } else if let Some(mm) = &snap.matchmaking {
+        format!(
+            "phase={} in_queue={} ready_check={} resp={}",
+            snap.phase, mm.in_queue, mm.ready_check_active, mm.player_response
+        )
+    } else if let Some(lb) = &snap.lobby {
+        format!(
+            "phase={} queue={} roles={}/{} leader={} members={}",
+            snap.phase,
+            lb.queue_id,
+            lb.first_position,
+            lb.second_position,
+            lb.is_leader,
+            lb.member_count
+        )
+    } else {
+        format!("phase={} live={}", snap.phase, snap.live_game.is_some())
+    }
 }
 
 fn request_lang(headers: &HeaderMap, app: &AppState) -> hypatia_shared::Lang {
@@ -651,17 +716,23 @@ async fn handle_get_stats(
         _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))).into_response(),
     };
     match body {
-        Ok(body) => (
-            StatusCode::OK,
-            [(header::CACHE_CONTROL, "no-store")],
-            Json(body),
-        )
-            .into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Serialization"})),
-        )
-            .into_response(),
+        Ok(body) => {
+            info!("[remote:stats] GET /api/stats/{} -> 200", view);
+            (
+                StatusCode::OK,
+                [(header::CACHE_CONTROL, "no-store")],
+                Json(body),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            warn!("[remote:stats] GET /api/stats/{} -> 500 ({})", view, err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Serialization"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -672,11 +743,13 @@ async fn handle_post_action(
     Json(cmd): Json<RemoteCommand>,
 ) -> Response {
     if !check_host_and_origin(&headers, &st.allowed_hosts, st.port) {
+        warn!("[remote:http] POST /api/action rejected (host/origin)");
         return (StatusCode::FORBIDDEN, Json(json!({"error": "Forbidden"}))).into_response();
     }
     let lang = st.app.lang();
     let expected = st.token.read().unwrap().clone();
     if !check_token(&headers, q.token.as_deref(), &expected) {
+        warn!("[remote:http] POST /api/action rejected (unauthorized token)");
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({"error": lang.pick(
@@ -693,12 +766,24 @@ async fn handle_post_action(
             RemoteActionError::ClientUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             RemoteActionError::GatewayError(_) => StatusCode::BAD_GATEWAY,
         };
+        warn!(
+            "[remote:http] POST /api/action {:?} -> {} ({})",
+            cmd,
+            status.as_u16(),
+            err
+        );
         return (status, Json(json!({ "error": err.to_string() }))).into_response();
     }
 
     let mut alert_guard = st.alerts.write().unwrap();
     let snap = extract_remote_state(&st.app, &mut alert_guard);
     drop(alert_guard);
+
+    info!(
+        "[remote:http] POST /api/action {:?} -> 200 ({})",
+        cmd,
+        format_snapshot_summary(&snap)
+    );
 
     if let Ok(serialized) = serde_json::to_string(&snap) {
         let _ = st.state_tx.send(serialized);
@@ -732,7 +817,8 @@ struct ClientGuard {
 
 impl ClientGuard {
     fn new(st: &RemoteRouterState) -> Self {
-        st.active_clients.fetch_add(1, Ordering::Relaxed);
+        let n = st.active_clients.fetch_add(1, Ordering::Relaxed) + 1;
+        info!("[remote:ws] phone connected (active_clients={})", n);
         st.app.signal.bump();
         Self {
             count: st.active_clients.clone(),
@@ -743,7 +829,8 @@ impl ClientGuard {
 
 impl Drop for ClientGuard {
     fn drop(&mut self) {
-        self.count.fetch_sub(1, Ordering::Relaxed);
+        let n = self.count.fetch_sub(1, Ordering::Relaxed).saturating_sub(1);
+        info!("[remote:ws] phone disconnected (active_clients={})", n);
         self.signal.bump();
     }
 }

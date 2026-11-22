@@ -24,7 +24,7 @@ use hypatia_shared::{
     SummarySnapshot,
 };
 use serde_json::Value;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::assets::GameAssetCache;
 use crate::catalog::CatalogStore;
@@ -293,7 +293,9 @@ impl AppState {
         action_client: &LcuActionClient,
         cmd: &RemoteCommand,
     ) -> Result<(), RemoteActionError> {
-        if self.is_demo_active() {
+        let is_demo = self.is_demo_active();
+        info!("[remote:cmd] received {:?} (demo={})", cmd, is_demo);
+        if is_demo {
             return self
                 .demo_remote
                 .write()
@@ -302,14 +304,36 @@ impl AppState {
                 .map_err(|e| RemoteActionError::BadRequest(e.to_string()));
         }
 
+        if matches!(
+            cmd,
+            RemoteCommand::HoverChampion { .. }
+                | RemoteCommand::LockAction { .. }
+                | RemoteCommand::SetSummonerSpells { .. }
+                | RemoteCommand::SetSkin { .. }
+                | RemoteCommand::RequestPositionSwap { .. }
+                | RemoteCommand::RespondPositionSwap { .. }
+                | RemoteCommand::CancelPositionSwap { .. }
+                | RemoteCommand::RequestPickOrderSwap { .. }
+                | RemoteCommand::RespondPickOrderSwap { .. }
+                | RemoteCommand::CancelPickOrderSwap { .. }
+                | RemoteCommand::RequestChampionTrade { .. }
+                | RemoteCommand::RespondChampionTrade { .. }
+                | RemoteCommand::CancelChampionTrade { .. }
+        ) {
+            self.log_champ_select_actions_snapshot();
+        }
+
         let lang = self.lang();
         let editable_page_id = matches!(cmd, RemoteCommand::SaveRunePage { .. })
             .then(|| self.get_summary().editable_rune_page_id)
             .flatten();
-        let calls = resolve_lcu_command_localized(cmd, editable_page_id, lang)
-            .map_err(|e| RemoteActionError::BadRequest(e.to_string()))?;
+        let calls = resolve_lcu_command_localized(cmd, editable_page_id, lang).map_err(|e| {
+            warn!("[remote:cmd] validation rejected {:?}: {}", cmd, e);
+            RemoteActionError::BadRequest(e.to_string())
+        })?;
 
         let lcu = self.discovery.lcu_args().ok_or_else(|| {
+            warn!("[remote:cmd] LCU not running for {:?}", cmd);
             RemoteActionError::ClientUnavailable(
                 lang.pick(
                     "League of Legends client is not running",
@@ -319,6 +343,7 @@ impl AppState {
             )
         })?;
         let port = lcu.app_port.ok_or_else(|| {
+            warn!("[remote:cmd] LCU port missing for {:?}", cmd);
             RemoteActionError::ClientUnavailable(
                 lang.pick(
                     "League client port not detected yet",
@@ -335,13 +360,80 @@ impl AppState {
             .map_err(|e| RemoteActionError::GatewayError(e.to_string()))?;
 
         for uri in affected_lcu_uris(cmd) {
-            if let Ok((status, _, body)) = self.riot_client.get(port, token_ref, uri).await {
-                if status.is_success() {
-                    self.insert_lcu_update(uri, body);
+            match self.riot_client.get(port, token_ref, uri).await {
+                Ok((status, _, body)) => {
+                    if status.is_success() {
+                        info!("[remote:refresh] GET {} -> {}", uri, status.as_u16());
+                        self.insert_lcu_update(uri, body);
+                    } else {
+                        warn!("[remote:refresh] GET {} -> {}", uri, status.as_u16());
+                    }
+                }
+                Err(err) => {
+                    warn!("[remote:refresh] GET {} failed: {:#}", uri, err);
                 }
             }
         }
         Ok(())
+    }
+
+    /// Logs a compact, identity-free snapshot of `/lol-champ-select/v1/session` actions for
+    /// diagnosing hover/lock/swap issues against live LCU payloads.
+    fn log_champ_select_actions_snapshot(&self) {
+        let cs = {
+            let guard = self.store.read().unwrap();
+            guard
+                .get_state(SourceId::LeagueClient, "/lol-champ-select/v1/session")
+                .map(|s| s.current.clone())
+        };
+        let Some(cs) = cs else {
+            warn!("[remote:cs-raw] /lol-champ-select/v1/session is missing from store");
+            return;
+        };
+        let local_cell = cs
+            .get("localPlayerCellId")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(-1);
+        let timer_phase = cs
+            .pointer("/timer/phase")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let mut acts = Vec::new();
+        if let Some(turns) = cs.get("actions").and_then(|v| v.as_array()) {
+            for (turn_idx, turn) in turns.iter().enumerate() {
+                if let Some(list) = turn.as_array() {
+                    for a in list {
+                        let id = a.get("id").and_then(|v| v.as_i64()).unwrap_or(-1);
+                        let actor = a.get("actorCellId").and_then(|v| v.as_i64()).unwrap_or(-1);
+                        let kind = a.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+                        let champ = a.get("championId").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let in_prog = a
+                            .get("isInProgress")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let done = a
+                            .get("completed")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let ally = a
+                            .get("isAllyAction")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if actor == local_cell || in_prog {
+                            acts.push(format!(
+                                "t{turn_idx}(id={id},cell={actor},type={kind},champ={champ},in_prog={in_prog},done={done},ally={ally})"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        info!(
+            "[remote:cs-raw] localCell={} timerPhase={} relevantActions=[{}]",
+            local_cell,
+            timer_phase,
+            acts.join(", ")
+        );
     }
 
     /// Applies user settings to every running background task and memory cache budget.

@@ -12,6 +12,7 @@ pub use hypatia_shared::AlertTracker;
 use hypatia_shared::{project_remote_state, Lang, Position, RemoteCommand, RemoteStateSnapshot};
 use reqwest::Method;
 use serde_json::{json, Value};
+use tracing::{info, warn};
 
 use crate::riot_http::{build_loopback_client, format_riot_auth_header};
 use crate::AppState;
@@ -423,6 +424,15 @@ impl LcuActionClient {
 
         for call in calls {
             let url = format!("https://127.0.0.1:{}{}", port, call.path);
+            let body_preview = call
+                .body
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "<none>".to_string());
+            info!(
+                "[remote:lcu] -> {} {} body={}",
+                call.method, call.path, body_preview
+            );
             let mut req = self.inner.request(call.method.clone(), &url);
             if let Some(token) = auth_token {
                 req = req.header("Authorization", format_riot_auth_header(token));
@@ -430,14 +440,23 @@ impl LcuActionClient {
             if let Some(body) = &call.body {
                 req = req.json(body);
             }
-            let resp = req.send().await.with_context(|| {
-                format!(
-                    "{} {} {}",
-                    lang.pick("LCU request failed for", "La requête LCU a échoué pour"),
-                    call.method,
-                    call.path
-                )
-            })?;
+            let resp = match req.send().await {
+                Ok(r) => r,
+                Err(err) => {
+                    warn!(
+                        "[remote:lcu] <- {} {} TRANSPORT_ERR: {:#}",
+                        call.method, call.path, err
+                    );
+                    return Err(err).with_context(|| {
+                        format!(
+                            "{} {} {}",
+                            lang.pick("LCU request failed for", "La requête LCU a échoué pour"),
+                            call.method,
+                            call.path
+                        )
+                    });
+                }
+            };
             let status = resp.status();
             let bytes = resp.bytes().await.unwrap_or_default();
             last_body = if bytes.is_empty() {
@@ -451,7 +470,16 @@ impl LcuActionClient {
                     })
                 })
             };
+            let resp_text = last_body.to_string();
+            let resp_preview: String = resp_text.chars().take(512).collect();
             if !status.is_success() {
+                warn!(
+                    "[remote:lcu] <- {} {} FAILED status={} body={}",
+                    call.method,
+                    call.path,
+                    status.as_u16(),
+                    resp_preview
+                );
                 let msg = last_body
                     .get("message")
                     .and_then(|v| v.as_str())
@@ -461,6 +489,13 @@ impl LcuActionClient {
                     ));
                 bail!("LCU {} {}: {}", status.as_u16(), call.path, msg);
             }
+            info!(
+                "[remote:lcu] <- {} {} status={} body={}",
+                call.method,
+                call.path,
+                status.as_u16(),
+                resp_preview
+            );
         }
 
         Ok(last_body)

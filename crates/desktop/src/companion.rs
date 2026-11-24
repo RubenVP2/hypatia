@@ -20,9 +20,10 @@ use crate::labels::{
     champ_initials, format_mm_ss, queue_type_label, rank_tier_label, sub_phase_label,
 };
 use crate::{
-    AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick, EnemySighting, FeedLine,
-    HelperChip, HelperIcon, HelperSuggestion, HelperTeam, HelperView, LiveView, MainWindow,
-    MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine, TowerDot, WaitView,
+    ActiveLoadoutView, AllyRow, BanEntry, ChampSelectView, ClientArt, EndView, EnemyPick,
+    EnemySighting, FeedLine, HelperChip, HelperIcon, HelperSuggestion, HelperTeam, HelperView,
+    LiveView, MainWindow, MapAlly, ObjectiveChip, PartyRow, PitClock, PlayerLine, Screen, StatLine,
+    TowerDot, WaitView,
 };
 
 fn objective_kind_index(kind: ObjectiveKind) -> i32 {
@@ -607,7 +608,102 @@ pub fn build_champ_select_view(
         their_ban_list: sync_rows(&models.their_bans, their_ban_list),
         anonymized: cs.is_ranked_solo_anonymized,
         splash_icon: icons.resolve_skin_art("splash", splash_skin, splash_champ),
+        loadout: build_active_loadout_view(cs, icons, lang),
         helper: build_helper_view(&cs.helper, icons, lang),
+    }
+}
+
+fn build_active_loadout_view(
+    cs: &ChampSelectSummary,
+    icons: &mut impl IconLookup,
+    lang: Lang,
+) -> ActiveLoadoutView {
+    let self_ally = cs.my_team.iter().find(|m| m.is_self);
+    let spell1_id = self_ally.map(|m| m.spell1_id).unwrap_or(0);
+    let spell2_id = self_ally.map(|m| m.spell2_id).unwrap_or(0);
+    let has_spells = spell1_id > 0 && spell2_id > 0;
+    let spell1_str = if spell1_id > 0 {
+        spell_name_from_id_localized(spell1_id, lang)
+    } else {
+        ""
+    };
+    let spell2_str = if spell2_id > 0 {
+        spell_name_from_id_localized(spell2_id, lang)
+    } else {
+        ""
+    };
+
+    let is_jungle = self_ally
+        .and_then(|m| Position::parse(&m.assigned_position))
+        .is_some_and(|p| p == Position::Jungle)
+        && !cs.bench_enabled;
+    let smite_warning = is_jungle && has_spells && spell1_id != 11 && spell2_id != 11;
+
+    let active_rune = cs
+        .rune_pages
+        .iter()
+        .find(|p| p.current)
+        .or_else(|| cs.recommended_rune_pages.iter().find(|p| p.current));
+    let (has_runes, rune_page, keystone, keystone_initials, keystone_icon, styles_line) =
+        if let Some(pg) = active_rune {
+            let kid = pg.selected_perk_ids.first().copied().unwrap_or(0);
+            let k_icon = if kid > 0 {
+                icons.resolve_icon("perk", kid)
+            } else {
+                Image::default()
+            };
+            let styles = format!("{} + {}", pg.primary_style_name, pg.sub_style_name);
+            (
+                true,
+                SharedString::from(pg.name.as_str()),
+                SharedString::from(pg.keystone_name.as_str()),
+                champ_initials(&pg.keystone_name),
+                k_icon,
+                SharedString::from(styles),
+            )
+        } else {
+            (
+                false,
+                SharedString::default(),
+                SharedString::default(),
+                SharedString::default(),
+                Image::default(),
+                SharedString::default(),
+            )
+        };
+
+    let has_champ = self_ally.is_some_and(|m| m.has_champion());
+    let skin_name = if has_champ {
+        SharedString::from(cs.selected_skin_name.as_str())
+    } else {
+        SharedString::default()
+    };
+
+    ActiveLoadoutView {
+        shown: has_runes || has_spells || !skin_name.is_empty(),
+        has_runes,
+        rune_page,
+        keystone,
+        keystone_initials,
+        keystone_icon,
+        styles_line,
+        has_spells,
+        spell1_name: SharedString::from(spell1_str),
+        spell1_initials: champ_initials(spell1_str),
+        spell1_icon: if spell1_id > 0 {
+            icons.resolve_icon("spell", spell1_id)
+        } else {
+            Image::default()
+        },
+        spell2_name: SharedString::from(spell2_str),
+        spell2_initials: champ_initials(spell2_str),
+        spell2_icon: if spell2_id > 0 {
+            icons.resolve_icon("spell", spell2_id)
+        } else {
+            Image::default()
+        },
+        smite_warning,
+        skin_name,
     }
 }
 

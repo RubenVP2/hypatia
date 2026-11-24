@@ -5,18 +5,21 @@ use serde_json::Value;
 
 use crate::board::{extract_live_board_localized, LiveBoard};
 use crate::champions::{
-    builtin_skins_for_localized, extract_raw_champion_alias, is_champion_placeholder,
-    keystone_name_from_id_localized, recommended_pages_for_localized, rune_style_name_localized,
-    ChampionLookup, Position,
+    builtin_skins_for_localized, builtin_ward_skins_localized, extract_raw_champion_alias,
+    is_champion_placeholder, is_swiftplay_queue, keystone_name_from_id_localized,
+    recommended_pages_for_localized, rune_style_name_localized, ChampionLookup, Position,
 };
 use crate::draft_helper::{project_champ_select_helper, ChampSelectHelper, HelperStats};
 use crate::event::GamePhase;
-use crate::game_text::{game_name_or, GameTextKind};
+use crate::game_text::{game_name, game_name_or, GameTextKind};
 use crate::i18n::Lang;
 use crate::remote::{
-    RemoteActiveAction, RemoteChampionOption, RemoteIncomingSwap, RemoteRunePage, RemoteSkinOption,
+    RemoteActiveAction, RemoteChampionOption, RemoteChromaOption, RemoteIncomingSwap,
+    RemoteQueueOption, RemoteRecommendedCard, RemoteRunePage, RemoteSkinOption,
+    RemoteWardSkinOption, SwiftplaySlotSelection,
 };
 use crate::source::{SourceId, SourceState};
+use crate::stats::StatsQuery;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SummonerSummary {
@@ -71,6 +74,14 @@ pub struct LobbySummary {
     pub local_second_position: Option<String>,
     #[serde(default)]
     pub local_is_leader: bool,
+    #[serde(default)]
+    pub swiftplay_slots: Vec<SwiftplaySlotSelection>,
+    #[serde(default)]
+    pub swiftplay_slot_skins: Vec<Vec<RemoteSkinOption>>,
+    #[serde(default)]
+    pub swiftplay_champions: Vec<RemoteChampionOption>,
+    #[serde(default)]
+    pub swiftplay_rune_pages: Vec<RemoteRunePage>,
 }
 
 impl LobbySummary {
@@ -177,15 +188,27 @@ pub struct ChampSelectSummary {
     #[serde(default)]
     pub local_action: Option<RemoteActiveAction>,
     #[serde(default)]
+    pub intent_action: Option<RemoteActiveAction>,
+    #[serde(default)]
     pub incoming_swaps: Vec<RemoteIncomingSwap>,
     #[serde(default)]
     pub champions: Vec<RemoteChampionOption>,
     #[serde(default)]
+    pub comfort_champion_ids: Vec<i64>,
+    #[serde(default)]
     pub available_skins: Vec<RemoteSkinOption>,
+    #[serde(default)]
+    pub selected_skin_name: String,
+    #[serde(default)]
+    pub ward_skin_id: i64,
+    #[serde(default)]
+    pub available_wards: Vec<RemoteWardSkinOption>,
     #[serde(default)]
     pub rune_pages: Vec<RemoteRunePage>,
     #[serde(default)]
     pub recommended_rune_pages: Vec<RemoteRunePage>,
+    #[serde(default)]
+    pub recommended_cards: Vec<RemoteRecommendedCard>,
     #[serde(default)]
     pub editable_rune_page_id: Option<i64>,
     /// True in ARAM / ARAM: Mayhem when the bench swap pool is active.
@@ -194,6 +217,8 @@ pub struct ChampSelectSummary {
     /// Champions currently available on the ARAM bench.
     #[serde(default)]
     pub bench_champions: Vec<ChampSelectBenchChampion>,
+    #[serde(default)]
+    pub rerolls_remaining: u32,
     /// Build, lane matchup and team comps for the player's own pick (champ-select helper).
     #[serde(default)]
     pub helper: ChampSelectHelper,
@@ -414,6 +439,7 @@ pub struct MatchInputs<'a> {
     pub pickable_champion_ids: Option<&'a Value>,
     pub bannable_champion_ids: Option<&'a Value>,
     pub skin_carousel: Option<&'a Value>,
+    pub ward_skins: Option<&'a Value>,
     pub rune_pages: Option<&'a Value>,
     pub live_allgame: Option<&'a Value>,
     pub live_active: Option<&'a Value>,
@@ -437,10 +463,11 @@ pub fn queue_type_label(queue_type: &str, lang: Lang) -> String {
         "NORMAL" | "NORMAL_DRAFT" | "DRAFT_PICK" => {
             lang.pick("Normal Draft", "Faille · Draft").to_string()
         }
-        "QUICKPLAY" | "SWIFTPLAY" => lang.pick("Quickplay", "Partie rapide").to_string(),
+        "SWIFTPLAY" => lang.pick("Swiftplay", "Partie accélérée").to_string(),
+        "QUICKPLAY" => lang.pick("Quickplay", "Partie rapide").to_string(),
         "ARAM" => "ARAM".to_string(),
         "URF" | "ARURF" => "URF".to_string(),
-        "ARENA" | "CHERRY" => "Arena".to_string(),
+        "ARENA" | "CHERRY" => lang.pick("Arena", "Arène").to_string(),
         "PRACTICETOOL" | "PRACTICE_TOOL" => lang
             .pick("Practice Tool", "Outil d'entraînement")
             .to_string(),
@@ -551,6 +578,29 @@ pub fn source_short_label(src: SourceId, lang: Lang) -> (&'static str, i32) {
     }
 }
 
+/// Allowlisted League queue IDs that Mobile Remote may create via `POST /lol-lobby/v2/lobby`.
+pub const ALLOWED_LOBBY_QUEUE_IDS: &[i64] =
+    &[400, 420, 440, 450, 480, 490, 870, 880, 890, 900, 1700, 1900];
+
+/// Primary modern League queues offered on Mobile Remote for 1-tap Lobby creation/switching.
+pub fn default_lobby_queues_localized(lang: Lang) -> Vec<RemoteQueueOption> {
+    [
+        (420, "ranked"),
+        (440, "ranked"),
+        (400, "rift"),
+        (480, "rift"),
+        (450, "modes"),
+        (1700, "modes"),
+    ]
+    .into_iter()
+    .map(|(queue_id, category)| RemoteQueueOption {
+        queue_id,
+        name: queue_name_from_id_localized(queue_id, lang),
+        category: category.to_string(),
+    })
+    .collect()
+}
+
 /// Returns the localized human-readable queue name for a Riot `queueId` (`""` when `queue_id <= 0`).
 pub fn queue_name_from_id_localized(queue_id: i64, lang: Lang) -> String {
     if queue_id <= 0 {
@@ -561,12 +611,22 @@ pub fn queue_name_from_id_localized(queue_id: i64, lang: Lang) -> String {
         (420, Lang::Fr) => "Classée Solo/Duo".to_string(),
         (430, Lang::Fr) => "Normale Aveugle 5v5".to_string(),
         (440, Lang::Fr) => "Classée Flexible 5v5".to_string(),
+        (480, Lang::Fr) => "Partie accélérée".to_string(),
+        (490, Lang::Fr) => "Partie rapide".to_string(),
+        (870..=890, Lang::Fr) => "Coop vs IA".to_string(),
+        (1700 | 1710, Lang::Fr) => "Arène".to_string(),
         (400, Lang::En) => "Normal Draft 5v5".to_string(),
         (420, Lang::En) => "Ranked Solo/Duo".to_string(),
         (430, Lang::En) => "Normal Blind 5v5".to_string(),
         (440, Lang::En) => "Ranked Flex 5v5".to_string(),
+        (480, Lang::En) => "Swiftplay".to_string(),
+        (490, Lang::En) => "Quickplay".to_string(),
+        (870..=890, Lang::En) => "Co-op vs. AI".to_string(),
+        (1700 | 1710, Lang::En) => "Arena".to_string(),
         (450, _) => "ARAM".to_string(),
         (700, _) => "Clash".to_string(),
+        (900, _) => "ARURF".to_string(),
+        (1900, _) => "URF".to_string(),
         (_, Lang::Fr) => format!("File #{queue_id}"),
         (_, Lang::En) => format!("Queue #{queue_id}"),
     }
@@ -594,7 +654,14 @@ pub fn project_match_with(
     lang: Lang,
 ) -> SummarySnapshot {
     let summoner = extract_summoner_summary(inputs.summoner, inputs.ranked, inputs.presences, lang);
-    let lobby = extract_lobby_summary(inputs.lobby, summoner.as_ref(), lang);
+    let lobby = extract_lobby_summary(
+        inputs.lobby,
+        inputs.rune_pages,
+        inputs.skin_carousel,
+        summoner.as_ref(),
+        champions,
+        lang,
+    );
     let matchmaking = extract_matchmaking_summary(
         inputs.matchmaking_search,
         inputs.ready_check,
@@ -611,6 +678,7 @@ pub fn project_match_with(
             .or_else(|| matchmaking.as_ref().map(|m| m.queue_id))
             .unwrap_or(0);
         cs.helper = project_champ_select_helper(cs, queue_id, champions, stats, lang);
+        populate_champ_select_stats_enrichment(cs, stats, lang);
     }
     let editable_rune_page_id = champ_select
         .as_ref()
@@ -807,7 +875,10 @@ fn extract_summoner_summary(
 
 fn extract_lobby_summary(
     lobby_val: Option<&Value>,
+    rune_pages_val: Option<&Value>,
+    skin_carousel_val: Option<&Value>,
     summoner: Option<&SummonerSummary>,
+    champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> Option<LobbySummary> {
     let lob = lobby_val.filter(|v| v.is_object())?;
@@ -845,6 +916,7 @@ fn extract_lobby_summary(
 
     let mut members = Vec::new();
     let mut matched_any_self = false;
+    let mut member_slots_raw: Option<&Vec<Value>> = None;
     if let Some(arr) = lob.get("members").and_then(|v| v.as_array()) {
         for m in arr {
             let summoner_name = m
@@ -880,6 +952,7 @@ fn extract_lobby_summary(
                 });
             if is_self {
                 matched_any_self = true;
+                member_slots_raw = m.get("playerSlots").and_then(|v| v.as_array());
             }
 
             members.push(LobbyMemberSummary {
@@ -934,6 +1007,127 @@ fn extract_lobby_summary(
         .and_then(|v| v.as_bool())
         .unwrap_or_else(|| self_member.is_some_and(|m| m.is_leader));
 
+    let is_swiftplay = is_swiftplay_queue(queue_id, &queue_name);
+    let (swiftplay_slots, swiftplay_slot_skins, swiftplay_champions, swiftplay_rune_pages) =
+        if is_swiftplay {
+            let (pages, _) = extract_rune_pages(rune_pages_val, lang);
+            let active_page_id = pages
+                .iter()
+                .find(|p| p.current)
+                .or_else(|| pages.first())
+                .map(|p| p.id)
+                .unwrap_or(0);
+            let raw_slots = local_obj
+                .and_then(|m| m.get("playerSlots"))
+                .and_then(|v| v.as_array())
+                .or(member_slots_raw);
+            let mut slots = Vec::new();
+            if let Some(arr) = raw_slots {
+                for (idx, s) in arr.iter().take(2).enumerate() {
+                    let cid = s.get("championId").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let pos = s
+                        .get("positionPreference")
+                        .or_else(|| s.get("position"))
+                        .and_then(|v| v.as_str())
+                        .and_then(Position::parse)
+                        .map(|p| p.lcu_code().to_string())
+                        .unwrap_or_else(|| {
+                            if idx == 0 {
+                                local_first_position
+                                    .clone()
+                                    .unwrap_or_else(|| "MIDDLE".to_string())
+                            } else {
+                                local_second_position
+                                    .clone()
+                                    .unwrap_or_else(|| "TOP".to_string())
+                            }
+                        });
+                    let skin_id = s
+                        .get("skinId")
+                        .and_then(|v| v.as_i64())
+                        .filter(|&id| id > 0)
+                        .unwrap_or(if cid > 0 { cid * 1000 } else { 0 });
+                    let spell1_id = s
+                        .get("spell1")
+                        .or_else(|| s.get("spell1Id"))
+                        .and_then(|v| v.as_i64())
+                        .filter(|&id| id > 0)
+                        .unwrap_or(4);
+                    let spell2_id = s
+                        .get("spell2")
+                        .or_else(|| s.get("spell2Id"))
+                        .and_then(|v| v.as_i64())
+                        .filter(|&id| id > 0)
+                        .unwrap_or(if pos == "JUNGLE" { 11 } else { 14 });
+                    let perk_page_id = s
+                        .get("perkPageId")
+                        .and_then(|v| v.as_i64())
+                        .filter(|&id| id > 0)
+                        .unwrap_or(active_page_id);
+                    slots.push(SwiftplaySlotSelection {
+                        champion_id: cid,
+                        champion_name: if cid > 0 {
+                            champions.resolve_champion_name_localized(cid, lang)
+                        } else {
+                            String::new()
+                        },
+                        position: pos,
+                        skin_id,
+                        spell1_id,
+                        spell2_id,
+                        perk_page_id,
+                    });
+                }
+            }
+            while slots.len() < 2 {
+                let idx = slots.len();
+                let pos = if idx == 0 {
+                    local_first_position
+                        .clone()
+                        .filter(|p| p != "FILL")
+                        .unwrap_or_else(|| "MIDDLE".to_string())
+                } else {
+                    let fallback = local_second_position
+                        .clone()
+                        .filter(|p| p != "FILL")
+                        .unwrap_or_else(|| "TOP".to_string());
+                    if slots.first().is_some_and(|s0| s0.position == fallback) {
+                        if fallback == "MIDDLE" {
+                            "TOP".to_string()
+                        } else {
+                            "MIDDLE".to_string()
+                        }
+                    } else {
+                        fallback
+                    }
+                };
+                slots.push(SwiftplaySlotSelection {
+                    champion_id: 0,
+                    champion_name: String::new(),
+                    spell1_id: 4,
+                    spell2_id: if pos == "JUNGLE" { 11 } else { 14 },
+                    position: pos,
+                    skin_id: 0,
+                    perk_page_id: active_page_id,
+                });
+            }
+            let slot_skins: Vec<Vec<RemoteSkinOption>> = slots
+                .iter()
+                .map(|sl| {
+                    extract_available_skins(
+                        skin_carousel_val.filter(|_| false),
+                        sl.champion_id,
+                        sl.skin_id,
+                        champions,
+                        lang,
+                    )
+                })
+                .collect();
+            (slots, slot_skins, champions.champion_catalog(lang), pages)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new())
+        };
+
     Some(LobbySummary {
         party_id,
         queue_id,
@@ -942,6 +1136,10 @@ fn extract_lobby_summary(
         local_first_position,
         local_second_position,
         local_is_leader,
+        swiftplay_slots,
+        swiftplay_slot_skins,
+        swiftplay_champions,
+        swiftplay_rune_pages,
     })
 }
 
@@ -1043,24 +1241,25 @@ fn completed_pick_cells(cs: &Value) -> Option<HashSet<i64>> {
     any_pick.then_some(locked)
 }
 
+#[derive(Default)]
+struct ParsedChampSelectActions {
+    acting_cell_id: Option<i64>,
+    acting_type: Option<String>,
+    cell_acting: HashMap<i64, String>,
+    local_action: Option<RemoteActiveAction>,
+    intent_action: Option<RemoteActiveAction>,
+}
+
 fn parse_champ_select_actions(
     cs: &Value,
     local_cell_id: i64,
     champions: &dyn ChampionLookup,
     lang: Lang,
-) -> (
-    Option<i64>,
-    Option<String>,
-    HashMap<i64, String>,
-    Option<RemoteActiveAction>,
-) {
-    let mut acting_cell_id: Option<i64> = None;
-    let mut acting_type: Option<String> = None;
-    let mut cell_acting: HashMap<i64, String> = HashMap::new();
-    let mut local_action: Option<RemoteActiveAction> = None;
+) -> ParsedChampSelectActions {
+    let mut out = ParsedChampSelectActions::default();
 
     let Some(turns) = cs.get("actions").and_then(|v| v.as_array()) else {
-        return (acting_cell_id, acting_type, cell_acting, local_action);
+        return out;
     };
 
     for act in turns.iter().filter_map(|t| t.as_array()).flatten() {
@@ -1085,18 +1284,33 @@ fn parse_champ_select_actions(
         let champ_id = act.get("championId").and_then(|v| v.as_i64()).unwrap_or(0);
 
         if in_progress && !completed {
-            if acting_cell_id.is_none() {
-                acting_cell_id = Some(actor_cell);
-                acting_type = Some(action_type.clone());
+            if out.acting_cell_id.is_none() {
+                out.acting_cell_id = Some(actor_cell);
+                out.acting_type = Some(action_type.clone());
             }
-            cell_acting.insert(actor_cell, action_type.clone());
-        } else if in_progress && acting_cell_id.is_none() {
-            acting_cell_id = Some(actor_cell);
-            acting_type = Some(action_type.clone());
+            out.cell_acting.insert(actor_cell, action_type.clone());
+        } else if in_progress && out.acting_cell_id.is_none() {
+            out.acting_cell_id = Some(actor_cell);
+            out.acting_type = Some(action_type.clone());
         }
 
         if actor_cell == local_cell_id {
-            let should_take = match &local_action {
+            let champ_name = if champ_id > 0 {
+                champions.resolve_champion_name_localized(champ_id, lang)
+            } else {
+                String::new()
+            };
+            if action_type == "pick" && !completed && out.intent_action.is_none() {
+                out.intent_action = Some(RemoteActiveAction {
+                    action_id,
+                    action_type: action_type.clone(),
+                    champion_id: champ_id,
+                    champion_name: champ_name.clone(),
+                    completed: false,
+                    is_my_turn: in_progress,
+                });
+            }
+            let should_take = match &out.local_action {
                 None => true,
                 Some(prev) => {
                     (in_progress && !completed && !prev.is_my_turn)
@@ -1104,15 +1318,11 @@ fn parse_champ_select_actions(
                 }
             };
             if should_take {
-                local_action = Some(RemoteActiveAction {
+                out.local_action = Some(RemoteActiveAction {
                     action_id,
                     action_type,
                     champion_id: champ_id,
-                    champion_name: if champ_id > 0 {
-                        champions.resolve_champion_name_localized(champ_id, lang)
-                    } else {
-                        String::new()
-                    },
+                    champion_name: champ_name,
                     completed,
                     is_my_turn: in_progress && !completed,
                 });
@@ -1120,7 +1330,7 @@ fn parse_champ_select_actions(
         }
     }
 
-    (acting_cell_id, acting_type, cell_acting, local_action)
+    out
 }
 
 fn extract_champ_select_summary(
@@ -1167,8 +1377,13 @@ fn extract_champ_select_summary(
     let pos_swaps = parse_swap_map(cs, "positionSwaps");
     let pick_swaps = parse_swap_map(cs, "swaps");
     let trades = parse_swap_map(cs, "trades");
-    let (acting_cell_id, acting_type, cell_acting, local_action) =
-        parse_champ_select_actions(cs, local_cell_id, champions, lang);
+    let ParsedChampSelectActions {
+        acting_cell_id,
+        acting_type,
+        cell_acting,
+        local_action,
+        mut intent_action,
+    } = parse_champ_select_actions(cs, local_cell_id, champions, lang);
     let locked_cells = completed_pick_cells(cs);
 
     let premade_puuids: Vec<String> = lobby
@@ -1421,10 +1636,23 @@ fn extract_champ_select_summary(
         }
     }
 
+    if let Some(ref mut ia) = intent_action {
+        if ia.champion_id <= 0 && local_champ_id > 0 {
+            ia.champion_id = local_champ_id;
+            ia.champion_name = champions.resolve_champion_name_localized(local_champ_id, lang);
+        }
+    }
+
     let champ_for_skins = if local_champ_id > 0 {
         local_champ_id
     } else {
-        local_action.as_ref().map(|a| a.champion_id).unwrap_or(0)
+        local_action
+            .as_ref()
+            .filter(|a| a.action_type == "pick")
+            .map(|a| a.champion_id)
+            .filter(|&id| id > 0)
+            .or_else(|| intent_action.as_ref().map(|a| a.champion_id))
+            .unwrap_or(0)
     };
     let available_skins = extract_available_skins(
         inputs.skin_carousel,
@@ -1433,6 +1661,20 @@ fn extract_champ_select_summary(
         champions,
         lang,
     );
+    let selected_skin_name = resolve_selected_skin_name(&available_skins, selected_skin_id, lang);
+    let ward_skin_id = cs
+        .get("myTeam")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|m| m.get("cellId").and_then(|v| v.as_i64()) == Some(local_cell_id))
+        })
+        .and_then(|m| m.get("wardSkinId"))
+        .or_else(|| cs.get("mySelection").and_then(|m| m.get("wardSkinId")))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let available_wards = extract_available_wards(inputs.ward_skins, ward_skin_id, lang);
+
     let (rune_pages, editable_rune_page_id) = extract_rune_pages(inputs.rune_pages, lang);
     let mut recommended_rune_pages =
         recommended_pages_for_localized(champ_for_skins, assigned_position, lang);
@@ -1446,11 +1688,17 @@ fn extract_champ_select_summary(
             }
         }
     }
+    let recommended_cards =
+        fallback_recommended_cards(&recommended_rune_pages, assigned_position, &rune_pages);
 
     let bench_enabled = cs
         .get("benchEnabled")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let rerolls_remaining = cs
+        .get("rerollsRemaining")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
     let bench_champions: Vec<ChampSelectBenchChampion> = if bench_enabled {
         cs.get("benchChampions")
             .and_then(|v| v.as_array())
@@ -1480,14 +1728,21 @@ fn extract_champ_select_summary(
         acting_type,
         local_cell_id,
         local_action,
+        intent_action,
         incoming_swaps,
         champions: catalog,
+        comfort_champion_ids: Vec::new(),
         available_skins,
+        selected_skin_name,
+        ward_skin_id,
+        available_wards,
         rune_pages,
         recommended_rune_pages,
+        recommended_cards,
         editable_rune_page_id,
         bench_enabled,
         bench_champions,
+        rerolls_remaining,
         helper: ChampSelectHelper::default(),
         sub_phase,
         time_left_sec,
@@ -1508,6 +1763,29 @@ fn parse_id_list(val: Option<&Value>) -> Option<Vec<i64>> {
         .map(|arr| arr.iter().filter_map(|x| x.as_i64()).collect())
 }
 
+fn resolve_selected_skin_name(
+    skins: &[RemoteSkinOption],
+    selected_skin_id: i64,
+    lang: Lang,
+) -> String {
+    for sk in skins {
+        for ch in &sk.chromas {
+            if ch.selected || ch.id == selected_skin_id {
+                return ch.name.clone();
+            }
+        }
+        if sk.selected || sk.id == selected_skin_id {
+            return sk.name.clone();
+        }
+    }
+    if selected_skin_id > 0 {
+        if let Some(n) = game_name(GameTextKind::Skin, selected_skin_id, lang) {
+            return n.to_string();
+        }
+    }
+    skins.first().map(|s| s.name.clone()).unwrap_or_default()
+}
+
 fn extract_available_skins(
     skins_val: Option<&Value>,
     champ_for_skins: i64,
@@ -1516,9 +1794,15 @@ fn extract_available_skins(
     lang: Lang,
 ) -> Vec<RemoteSkinOption> {
     if let Some(arr) = skins_val.and_then(|v| v.as_array()) {
+        let is_owned = |v: &Value| {
+            v.get("unlocked")
+                .or_else(|| v.get("ownership").and_then(|o| o.get("owned")))
+                .and_then(|u| u.as_bool())
+                .unwrap_or(true)
+        };
         return arr
             .iter()
-            .filter(|s| s.get("unlocked").and_then(|u| u.as_bool()).unwrap_or(true))
+            .filter(|s| is_owned(s))
             .filter_map(|s| {
                 let id = s.get("id")?.as_i64()?;
                 let name = game_name_or(GameTextKind::Skin, id, lang, s.get("name")?.as_str()?);
@@ -1527,11 +1811,47 @@ fn extract_available_skins(
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                let chromas: Vec<RemoteChromaOption> = s
+                    .get("childSkins")
+                    .and_then(|v| v.as_array())
+                    .map(|children| {
+                        children
+                            .iter()
+                            .filter(|c| is_owned(c))
+                            .filter_map(|c| {
+                                let cid = c.get("id")?.as_i64()?;
+                                if cid == id {
+                                    return None;
+                                }
+                                let raw_name =
+                                    c.get("name").and_then(|v| v.as_str()).unwrap_or(&name);
+                                let cname = game_name_or(GameTextKind::Skin, cid, lang, raw_name);
+                                let colors: Vec<String> = c
+                                    .get("colors")
+                                    .and_then(|v| v.as_array())
+                                    .map(|cols| {
+                                        cols.iter()
+                                            .filter_map(|col| col.as_str().map(str::to_string))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                                Some(RemoteChromaOption {
+                                    id: cid,
+                                    name: cname,
+                                    colors,
+                                    selected: cid == selected_skin_id,
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let selected = id == selected_skin_id || chromas.iter().any(|c| c.selected);
                 Some(RemoteSkinOption {
                     id,
                     name,
-                    selected: id == selected_skin_id,
+                    selected,
                     tile_path,
+                    chromas,
                 })
             })
             .collect();
@@ -1539,6 +1859,227 @@ fn extract_available_skins(
 
     let cname = champions.resolve_champion_name_localized(champ_for_skins, lang);
     builtin_skins_for_localized(champ_for_skins, &cname, selected_skin_id, lang)
+}
+
+fn extract_available_wards(
+    wards_val: Option<&Value>,
+    selected_ward_id: i64,
+    lang: Lang,
+) -> Vec<RemoteWardSkinOption> {
+    if let Some(arr) = wards_val.and_then(|v| v.as_array()) {
+        let cur = if selected_ward_id == 0 {
+            -1
+        } else {
+            selected_ward_id
+        };
+        let mut wards: Vec<RemoteWardSkinOption> = arr
+            .iter()
+            .filter(|w| {
+                w.get("ownership")
+                    .and_then(|o| o.get("owned"))
+                    .or_else(|| w.get("unlocked"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true)
+            })
+            .filter_map(|w| {
+                let id = w.get("id")?.as_i64()?;
+                if id == 0 {
+                    return None;
+                }
+                let name = w
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(lang.pick("Sight Ward", "Balise de vision"))
+                    .to_string();
+                Some(RemoteWardSkinOption {
+                    id,
+                    name,
+                    selected: id == cur,
+                })
+            })
+            .collect();
+        if !wards.is_empty() {
+            if !wards.iter().any(|w| w.id == -1) {
+                wards.insert(
+                    0,
+                    RemoteWardSkinOption {
+                        id: -1,
+                        name: lang
+                            .pick("Default Sight Ward", "Balise de vision par défaut")
+                            .to_string(),
+                        selected: cur == -1,
+                    },
+                );
+            }
+            return wards;
+        }
+    }
+    builtin_ward_skins_localized(selected_ward_id, lang)
+}
+
+fn default_spells_for_position(assigned_position: &str) -> (i64, i64) {
+    match Position::parse(assigned_position) {
+        Some(Position::Jungle) => (4, 11),
+        Some(Position::Top) => (4, 12),
+        Some(Position::Bot) => (4, 7),
+        Some(Position::Support) => (4, 3),
+        _ => (4, 14),
+    }
+}
+
+fn fallback_recommended_cards(
+    pages: &[RemoteRunePage],
+    assigned_position: &str,
+    active_pages: &[RemoteRunePage],
+) -> Vec<RemoteRecommendedCard> {
+    let (s1, s2) = default_spells_for_position(assigned_position);
+    let active = active_pages.iter().find(|p| p.current);
+    pages
+        .iter()
+        .take(3)
+        .map(|pg| {
+            let keystone_id = pg.selected_perk_ids.first().copied().unwrap_or(0);
+            let current = pg.current
+                || active.is_some_and(|a| {
+                    a.primary_style_id == pg.primary_style_id
+                        && a.sub_style_id == pg.sub_style_id
+                        && a.selected_perk_ids == pg.selected_perk_ids
+                });
+            RemoteRecommendedCard {
+                name: pg.name.clone(),
+                primary_style_id: pg.primary_style_id,
+                primary_style_name: pg.primary_style_name.clone(),
+                sub_style_id: pg.sub_style_id,
+                sub_style_name: pg.sub_style_name.clone(),
+                keystone_id,
+                keystone_name: pg.keystone_name.clone(),
+                selected_perk_ids: pg.selected_perk_ids.clone(),
+                spell1_id: s1,
+                spell2_id: s2,
+                current,
+            }
+        })
+        .collect()
+}
+
+fn populate_champ_select_stats_enrichment(
+    cs: &mut ChampSelectSummary,
+    stats: Option<&dyn HelperStats>,
+    lang: Lang,
+) {
+    let Some(stats) = stats else {
+        return;
+    };
+    let self_ally = cs.my_team.iter().find(|m| m.is_self);
+    let assigned_pos_str = self_ally
+        .map(|m| m.assigned_position.as_str())
+        .unwrap_or("FILL");
+    let pos = Position::parse(assigned_pos_str).filter(|&p| p != Position::Fill);
+
+    if let Some(profile) = stats.player_profile().ready() {
+        let mut comfort = Vec::new();
+        if let Some(role) = pos {
+            let mut by_role: HashMap<i64, u32> = HashMap::new();
+            for g in &profile.games {
+                if g.position == Some(role) && g.champion_id > 0 {
+                    *by_role.entry(g.champion_id).or_insert(0) += 1;
+                }
+            }
+            let mut role_pairs: Vec<(i64, u32)> = by_role.into_iter().collect();
+            role_pairs.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            for (cid, _) in role_pairs.into_iter().take(6) {
+                comfort.push(cid);
+            }
+        }
+        for c in &profile.champions {
+            if comfort.len() >= 8 {
+                break;
+            }
+            if c.games > 0 && c.champion_id > 0 && !comfort.contains(&c.champion_id) {
+                comfort.push(c.champion_id);
+            }
+        }
+        cs.comfort_champion_ids = comfort;
+    }
+
+    let champ_id = self_ally
+        .map(|m| m.champion_id)
+        .filter(|&id| id > 0)
+        .or_else(|| {
+            cs.local_action
+                .as_ref()
+                .filter(|a| a.action_type == "pick")
+                .map(|a| a.champion_id)
+                .filter(|&id| id > 0)
+        })
+        .or_else(|| cs.intent_action.as_ref().map(|a| a.champion_id))
+        .unwrap_or(0);
+    if champ_id <= 0 {
+        return;
+    }
+
+    let query = StatsQuery {
+        champion_id: champ_id,
+        position: pos,
+        ..StatsQuery::default()
+    };
+    if let Some(rec) = stats.recommended_build(&query).ready() {
+        let (def_s1, def_s2) = default_spells_for_position(assigned_pos_str);
+        let active = cs.rune_pages.iter().find(|p| p.current);
+        let cards: Vec<RemoteRecommendedCard> = rec
+            .runes
+            .iter()
+            .take(3)
+            .enumerate()
+            .filter_map(|(idx, (setup, _))| {
+                let mut perks = setup.perk_ids.clone();
+                if perks.len() < 6 {
+                    return None;
+                }
+                perks.truncate(6);
+                let mut shards = setup.shard_ids.clone();
+                for &fallback_shard in &[5008i64, 5008, 5001] {
+                    if shards.len() >= 3 {
+                        break;
+                    }
+                    shards.push(fallback_shard);
+                }
+                perks.extend(shards.into_iter().take(3));
+                let keystone_id = perks.first().copied().unwrap_or(0);
+                let keystone_name = keystone_name_from_id_localized(keystone_id, lang).to_string();
+                let p_name = rune_style_name_localized(setup.primary_style_id, lang).to_string();
+                let s_name = rune_style_name_localized(setup.sub_style_id, lang).to_string();
+                let (s1, s2) = rec
+                    .spells
+                    .get(idx)
+                    .or_else(|| rec.spells.first())
+                    .map(|(sp, _)| (sp.first, sp.second))
+                    .unwrap_or((def_s1, def_s2));
+                let current = active.is_some_and(|a| {
+                    a.primary_style_id == setup.primary_style_id
+                        && a.sub_style_id == setup.sub_style_id
+                        && a.selected_perk_ids == perks
+                });
+                Some(RemoteRecommendedCard {
+                    name: format!("{keystone_name} · {s_name}"),
+                    primary_style_id: setup.primary_style_id,
+                    primary_style_name: p_name,
+                    sub_style_id: setup.sub_style_id,
+                    sub_style_name: s_name,
+                    keystone_id,
+                    keystone_name,
+                    selected_perk_ids: perks,
+                    spell1_id: s1,
+                    spell2_id: s2,
+                    current,
+                })
+            })
+            .collect();
+        if !cards.is_empty() {
+            cs.recommended_cards = cards;
+        }
+    }
 }
 
 fn extract_rune_pages(pages_val: Option<&Value>, lang: Lang) -> (Vec<RemoteRunePage>, Option<i64>) {
@@ -2736,5 +3277,188 @@ mod tests {
         assert!(cleared.lobby.is_none());
         assert!(cleared.champ_select.is_none());
         assert!(cleared.end_of_game.is_none());
+    }
+
+    #[test]
+    fn projects_swiftplay_lobby_slots_chromas_wards_intent_and_aram_mode_spells() {
+        use crate::remote::{project_remote_state, AlertTracker};
+        let gp = |p: &str| GamePhase {
+            phase: p.to_string(),
+            since: 0,
+        };
+
+        // 1. Swiftplay lobby (queueId 480) extracts 2 playerSlots with champion, role, skin, spells, and perk page.
+        let swift_lobby = json!({
+            "gameConfig": { "queueId": 480, "gameMode": "SWIFTPLAY" },
+            "localMember": {
+                "isLeader": true,
+                "playerSlots": [
+                    { "championId": 103, "positionPreference": "MIDDLE", "skinId": 103004, "spell1": 4, "spell2": 14, "perkId": 501 },
+                    { "championId": 24, "positionPreference": "TOP", "skinId": 24000, "spell1": 4, "spell2": 12, "perkId": 502 }
+                ]
+            },
+            "members": [{ "summonerId": 1 }]
+        });
+        let swift_snap = project_match(
+            &MatchInputs {
+                phase: Some(gp("Lobby")),
+                lobby: Some(&swift_lobby),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let lob = swift_snap.lobby.as_ref().unwrap();
+        assert_eq!(lob.queue_id, 480);
+        assert_eq!(lob.swiftplay_slots.len(), 2);
+        assert_eq!(lob.swiftplay_slots[0].champion_id, 103);
+        assert_eq!(lob.swiftplay_slots[0].champion_name, "Ahri");
+        assert_eq!(lob.swiftplay_slots[0].position, "MIDDLE");
+        assert_eq!(lob.swiftplay_slots[1].champion_id, 24);
+        assert_eq!(lob.swiftplay_slots[1].position, "TOP");
+
+        let mut tracker = AlertTracker::default();
+        let remote_swift = project_remote_state(&swift_snap, false, Lang::En, &mut tracker);
+        assert!(!remote_swift.available_queues.is_empty());
+        let rlob = remote_swift.lobby.unwrap();
+        assert!(rlob.is_swiftplay);
+        assert_eq!(rlob.swiftplay_slots.len(), 2);
+        assert!(!rlob.champions.is_empty());
+
+        // 2. Draft ChampSelect during Ban turn preserves uncompleted local pick as `intent_action`,
+        //    marks selected childSkins chroma and parent skin, and extracts owned ward skins.
+        let cs_draft = json!({
+            "localPlayerCellId": 0,
+            "timer": { "phase": "BAN_PICK", "adjustedTimeLeftInPhase": 25_000, "totalTimeInPhase": 30_000 },
+            "actions": [
+                [{ "id": 1, "actorCellId": 0, "type": "ban", "championId": 238, "completed": false, "isInProgress": true }],
+                [{ "id": 20, "actorCellId": 0, "type": "pick", "championId": 103, "completed": false, "isInProgress": false }]
+            ],
+            "myTeam": [{
+                "cellId": 0,
+                "assignedPosition": "MIDDLE",
+                "championId": 0,
+                "championPickIntent": 103,
+                "selectedSkinId": 103901,
+                "wardSkinId": 12,
+                "spell1Id": 4,
+                "spell2Id": 14,
+                "summonerId": 1,
+                "puuid": "p-self"
+            }]
+        });
+        let skin_carousel = json!([{
+            "id": 103027,
+            "name": "Spirit Blossom Ahri",
+            "ownership": { "owned": true },
+            "tilePath": "/lol-game-data/assets/v1/champion-tiles/103/103027.jpg",
+            "childSkins": [
+                {
+                    "id": 103901,
+                    "name": "Spirit Blossom Ahri (Ruby)",
+                    "ownership": { "owned": true },
+                    "colors": ["#c0392b", "#f39c12"]
+                },
+                {
+                    "id": 103902,
+                    "name": "Locked Chroma",
+                    "ownership": { "owned": false },
+                    "colors": ["#000000"]
+                }
+            ]
+        }]);
+        let ward_skins = json!([
+            { "id": 1, "name": "Classic Ward", "ownership": { "owned": true } },
+            { "id": 12, "name": "Hextech Ward", "ownership": { "owned": true } },
+            { "id": 99, "name": "Locked Ward", "ownership": { "owned": false } }
+        ]);
+        let draft_snap = project_match(
+            &MatchInputs {
+                phase: Some(gp("ChampSelect")),
+                champ_select: Some(&cs_draft),
+                skin_carousel: Some(&skin_carousel),
+                ward_skins: Some(&ward_skins),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let cs = draft_snap.champ_select.as_ref().unwrap();
+        assert_eq!(
+            cs.local_action
+                .as_ref()
+                .map(|a| (a.action_id, a.action_type.as_str())),
+            Some((1, "ban"))
+        );
+        assert_eq!(
+            cs.intent_action
+                .as_ref()
+                .map(|a| (a.action_id, a.champion_id)),
+            Some((20, 103))
+        );
+        assert_eq!(cs.available_skins.len(), 1);
+        assert!(cs.available_skins[0].selected);
+        assert_eq!(cs.available_skins[0].chromas.len(), 1);
+        assert!(cs.available_skins[0].chromas[0].selected);
+        assert!(cs.selected_skin_name.contains("Ruby"));
+        assert_eq!(cs.ward_skin_id, 12);
+        assert_eq!(cs.available_wards.len(), 3); // Default (-1) + 2 owned wards (99 excluded)
+        assert!(cs.available_wards.iter().any(|w| w.id == 12 && w.selected));
+        assert!(!cs.available_wards.iter().any(|w| w.id == 99));
+
+        // 3. ARAM (queueId 450) exposes rerolls_remaining, Mark (32), and excludes Smite (11) & Teleport (12);
+        //    Arena (queueId 1700) marks spells_editable = false.
+        let aram_lobby =
+            json!({ "gameConfig": { "queueId": 450 }, "members": [{ "summonerId": 1 }] });
+        let aram_cs = json!({
+            "localPlayerCellId": 0,
+            "queueType": "ARAM",
+            "benchEnabled": true,
+            "rerollsRemaining": 2,
+            "myTeam": [{ "cellId": 0, "championId": 103, "spell1Id": 4, "spell2Id": 32, "summonerId": 1 }]
+        });
+        let aram_snap = project_match(
+            &MatchInputs {
+                phase: Some(gp("ChampSelect")),
+                lobby: Some(&aram_lobby),
+                champ_select: Some(&aram_cs),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        let aram_remote = project_remote_state(&aram_snap, false, Lang::Fr, &mut tracker)
+            .champ_select
+            .unwrap();
+        assert!(aram_remote.is_roleless);
+        assert!(aram_remote.spells_editable);
+        assert_eq!(aram_remote.rerolls_remaining, 2);
+        assert!(aram_remote.available_spells.iter().any(|s| s.id == 32));
+        assert!(aram_remote.available_spells.iter().any(|s| s.id == 13));
+        assert!(!aram_remote.available_spells.iter().any(|s| s.id == 11));
+        assert!(!aram_remote.available_spells.iter().any(|s| s.id == 12));
+
+        let arena_lobby =
+            json!({ "gameConfig": { "queueId": 1700 }, "members": [{ "summonerId": 1 }] });
+        let arena_cs = json!({
+            "localPlayerCellId": 0,
+            "queueType": "CHERRY",
+            "myTeam": [{ "cellId": 0, "championId": 103, "spell1Id": 4, "spell2Id": 14, "summonerId": 1 }]
+        });
+        let arena_snap = project_match(
+            &MatchInputs {
+                phase: Some(gp("ChampSelect")),
+                lobby: Some(&arena_lobby),
+                champ_select: Some(&arena_cs),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let arena_remote = project_remote_state(&arena_snap, false, Lang::En, &mut tracker)
+            .champ_select
+            .unwrap();
+        assert!(arena_remote.is_roleless);
+        assert!(!arena_remote.spells_editable);
     }
 }

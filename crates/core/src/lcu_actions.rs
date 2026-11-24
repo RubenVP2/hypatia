@@ -9,7 +9,10 @@ use std::fmt;
 
 use anyhow::{bail, Context, Result};
 pub use hypatia_shared::AlertTracker;
-use hypatia_shared::{project_remote_state, Lang, Position, RemoteCommand, RemoteStateSnapshot};
+use hypatia_shared::{
+    project_remote_state, Lang, Position, RemoteCommand, RemoteStateSnapshot,
+    ALLOWED_LOBBY_QUEUE_IDS,
+};
 use reqwest::Method;
 use serde_json::{json, Value};
 
@@ -17,6 +20,7 @@ use crate::riot_http::{build_loopback_client, format_riot_auth_header};
 use crate::AppState;
 
 const VALID_STYLES: &[i64] = &[8000, 8100, 8200, 8300, 8400];
+const VALID_SWIFTPLAY_POSITIONS: &[&str] = &["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 
 /// Describes a resolved LCU HTTP mutation produced from a `RemoteCommand`.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +49,25 @@ pub fn resolve_lcu_command_with_champion(
     lang: Lang,
 ) -> Result<Vec<ResolvedLcuCall>> {
     match cmd {
+        RemoteCommand::CreateLobby { queue_id } => {
+            if !ALLOWED_LOBBY_QUEUE_IDS.contains(queue_id) {
+                bail!(
+                    "{}: {}",
+                    lang.pick("Unsupported queue_id", "queue_id non pris en charge"),
+                    queue_id
+                );
+            }
+            Ok(vec![ResolvedLcuCall {
+                method: Method::POST,
+                path: "/lol-lobby/v2/lobby".to_string(),
+                body: Some(json!({ "queueId": queue_id })),
+            }])
+        }
+        RemoteCommand::PlayAgain => Ok(vec![ResolvedLcuCall {
+            method: Method::POST,
+            path: "/lol-lobby/v2/play-again".to_string(),
+            body: None,
+        }]),
         RemoteCommand::SetLobbyPositions { first, second } => {
             let f = first.trim().to_ascii_uppercase();
             let s = second.trim().to_ascii_uppercase();
@@ -78,6 +101,70 @@ pub fn resolve_lcu_command_with_champion(
                     "firstPreference": f,
                     "secondPreference": s,
                 })),
+            }])
+        }
+        RemoteCommand::SetSwiftplaySlots { slots } => {
+            if slots.len() != 2 {
+                bail!(
+                    "{}",
+                    lang.pick(
+                        "Swiftplay requires exactly 2 slots",
+                        "La Partie accélérée nécessite exactement 2 emplacements",
+                    )
+                );
+            }
+            let mut normalized = Vec::with_capacity(2);
+            let mut pairs = Vec::with_capacity(2);
+            for slot in slots {
+                let pos = slot.position.trim().to_ascii_uppercase();
+                if !VALID_SWIFTPLAY_POSITIONS.contains(&pos.as_str()) {
+                    bail!(
+                        "{}: '{}'",
+                        lang.pick(
+                            "Invalid Swiftplay position",
+                            "Poste Partie accélérée invalide"
+                        ),
+                        slot.position
+                    );
+                }
+                if slot.champion_id < 0 || slot.skin_id < 0 || slot.perk_page_id < 0 {
+                    bail!(
+                        "{}",
+                        lang.pick("Invalid Swiftplay slot ID", "ID d'emplacement invalide")
+                    );
+                }
+                if slot.spell1_id <= 0 || slot.spell2_id <= 0 || slot.spell1_id == slot.spell2_id {
+                    bail!(
+                        "{}",
+                        lang.pick(
+                            "Two distinct summoner spells are required",
+                            "Deux sorts d'invocateur distincts sont requis",
+                        )
+                    );
+                }
+                pairs.push((slot.champion_id, pos.clone()));
+                normalized.push(json!({
+                    "championId": slot.champion_id,
+                    "positionPreference": pos,
+                    "skinId": slot.skin_id,
+                    "spell1": slot.spell1_id,
+                    "spell2": slot.spell2_id,
+                    "perkPageId": slot.perk_page_id,
+                }));
+            }
+            if pairs[0].0 > 0 && pairs[0] == pairs[1] {
+                bail!(
+                    "{}",
+                    lang.pick(
+                        "Swiftplay slots cannot use the same champion and role",
+                        "Les deux emplacements ne peuvent pas avoir le même champion et poste",
+                    )
+                );
+            }
+            Ok(vec![ResolvedLcuCall {
+                method: Method::PUT,
+                path: "/lol-lobby/v2/lobby/members/localMember/player-slots".to_string(),
+                body: Some(Value::Array(normalized)),
             }])
         }
         RemoteCommand::StartMatchmaking => Ok(vec![ResolvedLcuCall {
@@ -150,6 +237,11 @@ pub fn resolve_lcu_command_with_champion(
             });
             Ok(calls)
         }
+        RemoteCommand::RerollChampion => Ok(vec![ResolvedLcuCall {
+            method: Method::POST,
+            path: "/lol-champ-select/v1/session/my-selection/reroll".to_string(),
+            body: None,
+        }]),
         RemoteCommand::SwapBenchChampion { champion_id } => {
             if *champion_id <= 0 {
                 bail!(
@@ -198,6 +290,20 @@ pub fn resolve_lcu_command_with_champion(
                 method: Method::PATCH,
                 path: "/lol-champ-select/v1/session/my-selection".to_string(),
                 body: Some(json!({ "selectedSkinId": skin_id })),
+            }])
+        }
+        RemoteCommand::SetWardSkin { ward_skin_id } => {
+            if *ward_skin_id == 0 || *ward_skin_id < -1 {
+                bail!(
+                    "{}: {}",
+                    lang.pick("Invalid ward_skin_id", "ward_skin_id invalide"),
+                    ward_skin_id
+                );
+            }
+            Ok(vec![ResolvedLcuCall {
+                method: Method::PATCH,
+                path: "/lol-champ-select/v1/session/my-selection".to_string(),
+                body: Some(json!({ "wardSkinId": ward_skin_id })),
             }])
         }
         RemoteCommand::SelectRunePage { page_id } => {
@@ -551,7 +657,12 @@ impl std::error::Error for RemoteActionError {}
 /// Returns only the LCU resources affected by `cmd` so post-action refresh skips unrelated URIs.
 pub fn affected_lcu_uris(cmd: &RemoteCommand) -> &'static [&'static str] {
     match cmd {
-        RemoteCommand::SetLobbyPositions { .. } => &["/lol-lobby/v2/lobby"],
+        RemoteCommand::CreateLobby { .. } | RemoteCommand::PlayAgain => {
+            &["/lol-lobby/v2/lobby", "/lol-gameflow/v1/gameflow-phase"]
+        }
+        RemoteCommand::SetLobbyPositions { .. } | RemoteCommand::SetSwiftplaySlots { .. } => {
+            &["/lol-lobby/v2/lobby"]
+        }
         RemoteCommand::StartMatchmaking | RemoteCommand::StopMatchmaking => {
             &["/lol-matchmaking/v1/search", "/lol-lobby/v2/lobby"]
         }
@@ -561,6 +672,7 @@ pub fn affected_lcu_uris(cmd: &RemoteCommand) -> &'static [&'static str] {
         ],
         RemoteCommand::HoverChampion { .. }
         | RemoteCommand::SetSummonerSpells { .. }
+        | RemoteCommand::SetWardSkin { .. }
         | RemoteCommand::RequestPositionSwap { .. }
         | RemoteCommand::RespondPositionSwap { .. }
         | RemoteCommand::CancelPositionSwap { .. }
@@ -570,6 +682,7 @@ pub fn affected_lcu_uris(cmd: &RemoteCommand) -> &'static [&'static str] {
         | RemoteCommand::RequestChampionTrade { .. }
         | RemoteCommand::CancelChampionTrade { .. } => &["/lol-champ-select/v1/session"],
         RemoteCommand::LockAction { .. }
+        | RemoteCommand::RerollChampion
         | RemoteCommand::SwapBenchChampion { .. }
         | RemoteCommand::SetSkin { .. }
         | RemoteCommand::RespondChampionTrade { .. } => &[
@@ -602,7 +715,7 @@ pub fn extract_remote_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hypatia_shared::{EventKind, SourceId};
+    use hypatia_shared::{EventKind, SourceId, SwiftplaySlotSelection};
 
     #[test]
     fn test_resolve_allowlist_valid_commands() {
@@ -611,6 +724,89 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].method, Method::POST);
         assert_eq!(calls[0].path, "/lol-matchmaking/v1/ready-check/accept");
+
+        let create_lob = resolve_lcu_command_localized(
+            &RemoteCommand::CreateLobby { queue_id: 480 },
+            None,
+            Lang::En,
+        )
+        .unwrap();
+        assert_eq!(create_lob[0].method, Method::POST);
+        assert_eq!(create_lob[0].path, "/lol-lobby/v2/lobby");
+        assert_eq!(create_lob[0].body, Some(json!({"queueId": 480})));
+
+        let play_again =
+            resolve_lcu_command_localized(&RemoteCommand::PlayAgain, None, Lang::En).unwrap();
+        assert_eq!(play_again[0].method, Method::POST);
+        assert_eq!(play_again[0].path, "/lol-lobby/v2/play-again");
+        assert_eq!(play_again[0].body, None);
+
+        let swift = resolve_lcu_command_localized(
+            &RemoteCommand::SetSwiftplaySlots {
+                slots: vec![
+                    SwiftplaySlotSelection {
+                        champion_id: 103,
+                        champion_name: String::new(),
+                        position: "middle".into(),
+                        skin_id: 103027,
+                        spell1_id: 4,
+                        spell2_id: 14,
+                        perk_page_id: 101,
+                    },
+                    SwiftplaySlotSelection {
+                        champion_id: 64,
+                        champion_name: String::new(),
+                        position: "jungle".into(),
+                        skin_id: 64004,
+                        spell1_id: 4,
+                        spell2_id: 11,
+                        perk_page_id: 102,
+                    },
+                ],
+            },
+            None,
+            Lang::En,
+        )
+        .unwrap();
+        assert_eq!(swift[0].method, Method::PUT);
+        assert_eq!(
+            swift[0].path,
+            "/lol-lobby/v2/lobby/members/localMember/player-slots"
+        );
+        assert_eq!(
+            swift[0].body,
+            Some(json!([
+                {"championId": 103, "positionPreference": "MIDDLE", "skinId": 103027, "spell1": 4, "spell2": 14, "perkPageId": 101},
+                {"championId": 64, "positionPreference": "JUNGLE", "skinId": 64004, "spell1": 4, "spell2": 11, "perkPageId": 102}
+            ]))
+        );
+
+        let reroll =
+            resolve_lcu_command_localized(&RemoteCommand::RerollChampion, None, Lang::En).unwrap();
+        assert_eq!(reroll[0].method, Method::POST);
+        assert_eq!(
+            reroll[0].path,
+            "/lol-champ-select/v1/session/my-selection/reroll"
+        );
+        assert_eq!(reroll[0].body, None);
+
+        let ward = resolve_lcu_command_localized(
+            &RemoteCommand::SetWardSkin { ward_skin_id: 64 },
+            None,
+            Lang::En,
+        )
+        .unwrap();
+        assert_eq!(ward[0].method, Method::PATCH);
+        assert_eq!(ward[0].path, "/lol-champ-select/v1/session/my-selection");
+        assert_eq!(ward[0].body, Some(json!({"wardSkinId": 64})));
+
+        let default_ward = resolve_lcu_command_localized(
+            &RemoteCommand::SetWardSkin { ward_skin_id: -1 },
+            None,
+            Lang::En,
+        )
+        .unwrap();
+        assert_eq!(default_ward[0].body, Some(json!({"wardSkinId": -1})));
 
         let hover = resolve_lcu_command_localized(
             &RemoteCommand::HoverChampion {
@@ -671,6 +867,95 @@ mod tests {
 
     #[test]
     fn test_resolve_rejects_invalid_inputs() {
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::CreateLobby { queue_id: 99999 },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::CreateLobby { queue_id: 0 },
+            None,
+            Lang::Fr,
+        )
+        .is_err());
+
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetWardSkin { ward_skin_id: 0 },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetWardSkin { ward_skin_id: -5 },
+            None,
+            Lang::Fr,
+        )
+        .is_err());
+
+        // Swiftplay validation: wrong slot count, FILL position, negative IDs, duplicate spells, duplicate champ+pos
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetSwiftplaySlots { slots: vec![] },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        let base_slot = SwiftplaySlotSelection {
+            champion_id: 103,
+            champion_name: String::new(),
+            position: "MIDDLE".into(),
+            skin_id: 103000,
+            spell1_id: 4,
+            spell2_id: 14,
+            perk_page_id: 101,
+        };
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetSwiftplaySlots {
+                slots: vec![base_slot.clone(), base_slot.clone()]
+            },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        let mut bad_pos = base_slot.clone();
+        bad_pos.position = "FILL".into();
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetSwiftplaySlots {
+                slots: vec![base_slot.clone(), bad_pos]
+            },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        let mut neg_id = base_slot.clone();
+        neg_id.position = "TOP".into();
+        neg_id.skin_id = -1;
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetSwiftplaySlots {
+                slots: vec![base_slot.clone(), neg_id]
+            },
+            None,
+            Lang::En,
+        )
+        .is_err());
+
+        let mut same_spells = base_slot.clone();
+        same_spells.position = "TOP".into();
+        same_spells.spell2_id = 4;
+        assert!(resolve_lcu_command_localized(
+            &RemoteCommand::SetSwiftplaySlots {
+                slots: vec![base_slot, same_spells]
+            },
+            None,
+            Lang::Fr,
+        )
+        .is_err());
+
         assert!(resolve_lcu_command_localized(
             &RemoteCommand::SetLobbyPositions {
                 first: "MIDDLE".into(),

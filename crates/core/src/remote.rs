@@ -404,7 +404,7 @@ async fn sync_live_lcu_aux(st: &RemoteRouterState) {
     };
     let token_ref = lcu.remoting_auth_token.as_deref();
 
-    let (phase, need_perks, need_pickable, need_skins) = {
+    let (phase, need_perks, need_pickable, need_skins, need_wards) = {
         let guard = st.app.store.read().unwrap();
         let p = guard.phase().map(|gp| gp.phase).unwrap_or_default();
         let np = guard
@@ -422,7 +422,10 @@ async fn sync_live_lcu_aux(st: &RemoteRouterState) {
                 "/lol-champ-select/v1/skin-carousel-skins",
             )
             .is_none_or(|s| s.current.is_null());
-        (p, np, npick, nskins)
+        let nwards = guard
+            .get_state(SourceId::LeagueClient, "/lol-ward-skins/v1/ward-skins")
+            .is_none_or(|s| s.current.is_null());
+        (p, np, npick, nskins, nwards)
     };
 
     let mut uris = Vec::new();
@@ -436,6 +439,9 @@ async fn sync_live_lcu_aux(st: &RemoteRouterState) {
         }
         if need_skins {
             uris.push("/lol-champ-select/v1/skin-carousel-skins");
+        }
+        if need_wards {
+            uris.push("/lol-ward-skins/v1/ward-skins");
         }
     }
 
@@ -1182,6 +1188,155 @@ mod tests {
         // The pushed state carries the stats revision the phone watches.
         let state: serde_json::Value = get("/api/state").await.unwrap().json().await.unwrap();
         assert!(state["stats_revision"].is_u64());
+    }
+
+    #[tokio::test]
+    async fn test_demo_remote_actions_cover_modern_lobbies_swiftplay_aram_chromas_wards_and_intent()
+    {
+        let app = AppState::start_with_lang(true, 60.0, hypatia_shared::Lang::En);
+        let handle = start_remote_server(app, 0).await.unwrap();
+        let token = handle.qr_visual().unwrap().token;
+        let base = format!("http://127.0.0.1:{}", handle.port);
+        let client = reqwest::Client::new();
+        let post = |payload: serde_json::Value| {
+            client
+                .post(format!("{base}/api/action"))
+                .header("X-Hypatia-Token", &token)
+                .json(&payload)
+                .send()
+        };
+
+        // 1. Swiftplay lobby: configure 2 slots and jump straight to InProgress on StartMatchmaking.
+        let swift: serde_json::Value = post(json!({ "cmd": "create_lobby", "queue_id": 480 }))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(swift["state"]["phase"], "Lobby");
+        assert_eq!(swift["state"]["lobby"]["is_swiftplay"], true);
+
+        let saved_slots: serde_json::Value = post(json!({
+            "cmd": "set_swiftplay_slots",
+            "slots": [
+                { "champion_id": 103, "position": "MIDDLE", "skin_id": 103004, "spell1_id": 4, "spell2_id": 14, "perk_page_id": 501 },
+                { "champion_id": 24, "position": "TOP", "skin_id": 24000, "spell1_id": 4, "spell2_id": 12, "perk_page_id": 501 }
+            ]
+        }))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+        assert_eq!(
+            saved_slots["state"]["lobby"]["swiftplay_slots"][0]["champion_id"],
+            103
+        );
+        let queue_after_swift: serde_json::Value = post(json!({ "cmd": "start_matchmaking" }))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(queue_after_swift["state"]["phase"], "Matchmaking");
+        let _ = post(json!({ "cmd": "demo_set_phase", "phase": "ReadyCheck" }))
+            .await
+            .unwrap();
+        let live_after_swift: serde_json::Value = post(json!({ "cmd": "accept_ready_check" }))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(live_after_swift["state"]["phase"], "InProgress");
+
+        // 2. ARAM lobby -> ChampSelect -> RerollChampion decrements rerolls and adds old champ to bench.
+        let _ = post(json!({ "cmd": "create_lobby", "queue_id": 450 }))
+            .await
+            .unwrap();
+        let aram_cs: serde_json::Value =
+            post(json!({ "cmd": "demo_set_phase", "phase": "ChampSelect" }))
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+        assert_eq!(aram_cs["state"]["champ_select"]["is_roleless"], true);
+        let before_rerolls = aram_cs["state"]["champ_select"]["rerolls_remaining"]
+            .as_u64()
+            .unwrap();
+        assert!(before_rerolls > 0);
+        let after_reroll: serde_json::Value = post(json!({ "cmd": "reroll_champion" }))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(
+            after_reroll["state"]["champ_select"]["rerolls_remaining"]
+                .as_u64()
+                .unwrap(),
+            before_rerolls - 1
+        );
+        assert!(!after_reroll["state"]["champ_select"]["bench_champions"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+
+        // 3. Ranked Solo/Duo ChampSelect: pre-pick HoverChampion on intent_action works during Ban,
+        //    plus chroma SetSkin and SetWardSkin.
+        let _ = post(json!({ "cmd": "create_lobby", "queue_id": 420 }))
+            .await
+            .unwrap();
+        let draft_cs: serde_json::Value =
+            post(json!({ "cmd": "demo_set_phase", "phase": "ChampSelect" }))
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+        assert_eq!(
+            draft_cs["state"]["champ_select"]["active_action"]["action_type"],
+            "ban"
+        );
+        let intent_id = draft_cs["state"]["champ_select"]["intent_action"]["action_id"]
+            .as_i64()
+            .unwrap();
+        let hovered: serde_json::Value = post(json!({
+            "cmd": "hover_champion",
+            "action_id": intent_id,
+            "champion_id": 777
+        }))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+        assert_eq!(
+            hovered["state"]["champ_select"]["intent_action"]["champion_id"],
+            777
+        );
+
+        let ward_set: serde_json::Value =
+            post(json!({ "cmd": "set_ward_skin", "ward_skin_id": 3 }))
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+        assert_eq!(ward_set["state"]["champ_select"]["ward_skin_id"], 3);
+
+        // 4. EndOfGame -> PlayAgain returns to Lobby.
+        let _ = post(json!({ "cmd": "demo_set_phase", "phase": "EndOfGame" }))
+            .await
+            .unwrap();
+        let back: serde_json::Value = post(json!({ "cmd": "play_again" }))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(back["state"]["phase"], "Lobby");
     }
 
     #[test]

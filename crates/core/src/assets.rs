@@ -143,18 +143,49 @@ impl GameAssetCache {
         }
     }
 
-    /// Registers all `tilePath` entries from a `/lol-champ-select/v1/skin-carousel-skins` payload.
+    /// Registers all `tilePath` and `splashPath` entries (including `childSkins` chromas)
+    /// from a `/lol-champ-select/v1/skin-carousel-skins` payload.
     pub fn register_skin_paths_from_json(&self, payload: &Value) {
         let Some(arr) = payload.as_array() else {
             return;
         };
+        let mut splashes = self.splash_paths.write().unwrap();
         for s in arr {
-            if let (Some(id), Some(tile_path)) = (
-                s.get("id").and_then(|v| v.as_i64()),
-                s.get("tilePath").and_then(|v| v.as_str()),
-            ) {
+            let parent_id = s.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+            if let Some(tile_path) = s.get("tilePath").and_then(|v| v.as_str()) {
                 if !tile_path.is_empty() {
-                    self.register_skin_path(id, tile_path);
+                    self.register_skin_path(parent_id, tile_path);
+                }
+            }
+            let parent_splash = s
+                .get("splashPath")
+                .or_else(|| s.get("uncenteredSplashPath"))
+                .and_then(|v| v.as_str())
+                .and_then(sanitize_lcu_asset_path);
+            if let Some(ref clean_splash) = parent_splash {
+                if parent_id > 0 {
+                    splashes.insert(parent_id, clean_splash.clone());
+                }
+            }
+            if let Some(children) = s.get("childSkins").and_then(|v| v.as_array()) {
+                for child in children {
+                    let Some(cid) = child.get("id").and_then(|v| v.as_i64()).filter(|&x| x > 0)
+                    else {
+                        continue;
+                    };
+                    if let Some(ctile) = child.get("tilePath").and_then(|v| v.as_str()) {
+                        if !ctile.is_empty() {
+                            self.register_skin_path(cid, ctile);
+                        }
+                    }
+                    let csplash = child
+                        .get("splashPath")
+                        .and_then(|v| v.as_str())
+                        .and_then(sanitize_lcu_asset_path)
+                        .or_else(|| parent_splash.clone());
+                    if let Some(clean) = csplash {
+                        splashes.insert(cid, clean);
+                    }
                 }
             }
         }

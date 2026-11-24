@@ -99,6 +99,25 @@ export struct WaitView {
     ready-state: int,
 }
 
+export struct ActiveLoadoutView {
+    shown: bool,
+    has-runes: bool,
+    rune-page: string,
+    keystone: string,
+    keystone-initials: string,
+    keystone-icon: image,
+    styles-line: string,
+    has-spells: bool,
+    spell1-name: string,
+    spell1-initials: string,
+    spell1-icon: image,
+    spell2-name: string,
+    spell2-initials: string,
+    spell2-icon: image,
+    smite-warning: bool,
+    skin-name: string,
+}
+
 export struct ChampSelectView {
     title: string,
     detail: string,
@@ -115,6 +134,8 @@ export struct ChampSelectView {
     their-ban-list: [BanEntry],
     anonymized: bool,
     splash-icon: image,
+    // Read-only summary of the local player's currently equipped runes, spells, and skin.
+    loadout: ActiveLoadoutView,
     // Champ-select helper (helper.slint): build, lane matchup, comps, tips.
     helper: HelperView,
 }
@@ -470,11 +491,187 @@ component RosterRow inherits Rectangle {
     }
 }
 
+component ActiveLoadoutCard inherits Card {
+    in property <ActiveLoadoutView> loadout;
+    in property <bool> narrow: false;
+
+    VerticalLayout {
+        padding: Space.md;
+        spacing: Space.md;
+
+        HorizontalLayout {
+            spacing: Space.sm;
+            height: 22px;
+            SectionLabel { text: @tr("ACTIVE LOADOUT"); vertical-alignment: center; }
+            if root.loadout.smite-warning: Rectangle {
+                y: (parent.height - self.height) / 2;
+                height: 20px;
+                width: smite-lbl.preferred-width + 12px;
+                border-radius: Theme.radius-sm;
+                background: Theme.danger-soft;
+                border-width: 1px;
+                border-color: Theme.danger;
+                smite-lbl := Text {
+                    text: @tr("Missing Smite");
+                    color: Theme.danger;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.loadout.skin-name != "": Text {
+                text: root.loadout.skin-name;
+                color: Theme.gold-bright;
+                font-size: Type.small;
+                font-weight: 600;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        if !root.narrow: HorizontalLayout {
+            spacing: Space.lg;
+            alignment: stretch;
+
+            HorizontalLayout {
+                horizontal-stretch: 3;
+                spacing: Space.sm;
+                alignment: start;
+                if root.loadout.has-runes: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 34px;
+                    icon: root.loadout.keystone-icon;
+                    fallback-text: root.loadout.keystone-initials;
+                    border: Theme.gold;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Space.xxs;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: root.loadout.has-runes ? root.loadout.keystone : @tr("No rune page active");
+                        color: root.loadout.has-runes ? Theme.text : Theme.muted;
+                        font-size: Type.body;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
+                    if root.loadout.has-runes: Text {
+                        text: root.loadout.styles-line != ""
+                            ? @tr("{0} · {1}", root.loadout.rune-page, root.loadout.styles-line)
+                            : root.loadout.rune-page;
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            Rectangle { width: 1px; background: Theme.rule; }
+
+            HorizontalLayout {
+                horizontal-stretch: 2;
+                spacing: Space.sm;
+                alignment: start;
+                if root.loadout.has-spells: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 30px;
+                    icon: root.loadout.spell1-icon;
+                    fallback-text: root.loadout.spell1-initials;
+                    border: Theme.gold;
+                }
+                if root.loadout.has-spells: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 30px;
+                    icon: root.loadout.spell2-icon;
+                    fallback-text: root.loadout.spell2-initials;
+                    border: Theme.gold;
+                }
+                Text {
+                    text: root.loadout.has-spells
+                        ? @tr("{0} + {1}", root.loadout.spell1-name, root.loadout.spell2-name)
+                        : @tr("No spells selected");
+                    color: root.loadout.has-spells ? Theme.text : Theme.muted;
+                    font-size: Type.body;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        if root.narrow: VerticalLayout {
+            spacing: Space.sm;
+            HorizontalLayout {
+                spacing: Space.sm;
+                if root.loadout.has-runes: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 32px;
+                    icon: root.loadout.keystone-icon;
+                    fallback-text: root.loadout.keystone-initials;
+                    border: Theme.gold;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Space.xxs;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: root.loadout.has-runes ? root.loadout.keystone : @tr("No rune page active");
+                        color: root.loadout.has-runes ? Theme.text : Theme.muted;
+                        font-size: Type.body;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
+                    if root.loadout.has-runes: Text {
+                        text: root.loadout.styles-line != ""
+                            ? @tr("{0} · {1}", root.loadout.rune-page, root.loadout.styles-line)
+                            : root.loadout.rune-page;
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        overflow: elide;
+                    }
+                }
+            }
+            Divider {}
+            HorizontalLayout {
+                spacing: Space.sm;
+                if root.loadout.has-spells: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 28px;
+                    icon: root.loadout.spell1-icon;
+                    fallback-text: root.loadout.spell1-initials;
+                    border: Theme.gold;
+                }
+                if root.loadout.has-spells: GameIconBadge {
+                    y: (parent.height - self.height) / 2;
+                    size: 28px;
+                    icon: root.loadout.spell2-icon;
+                    fallback-text: root.loadout.spell2-initials;
+                    border: Theme.gold;
+                }
+                Text {
+                    text: root.loadout.has-spells
+                        ? @tr("{0} + {1}", root.loadout.spell1-name, root.loadout.spell2-name)
+                        : @tr("No spells selected");
+                    color: root.loadout.has-spells ? Theme.text : Theme.muted;
+                    font-size: Type.body;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}
+
 component ChampSelectScreen inherits Flickable {
     in property <ChampSelectView> cs;
     in property <int> clock-seconds: -1;
     in property <int> clock-total: 0;
     in property <bool> compact: false;
+    property <bool> guide-expanded: false;
     callback open-link(string);
     content-height: body.preferred-height;
 
@@ -506,7 +703,7 @@ component ChampSelectScreen inherits Flickable {
             spacing: Space.xl;
             alignment: stretch;
 
-            // Left: 5 allied draft rows, packed at the top rather than spread to the map's height.
+            // Left: 5 allied draft rows, active loadout, and collapsible draft guide.
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: start;
@@ -533,10 +730,15 @@ component ChampSelectScreen inherits Flickable {
                     }
                 }
                 for ally in root.cs.allies: RosterRow { ally: ally; }
+                if root.cs.loadout.shown: ActiveLoadoutCard {
+                    loadout: root.cs.loadout;
+                    narrow: root.width < 1000px;
+                }
                 if root.cs.helper.shown: DraftHelperPanel {
                     h: root.cs.helper;
                     // Side by side needs ~600px beside the 340px map column; stack below that.
                     narrow: root.width < 1000px;
+                    expanded <=> root.guide-expanded;
                     open-link(url) => { root.open-link(url); }
                 }
             }
@@ -647,9 +849,14 @@ component ChampSelectScreen inherits Flickable {
             spacing: Space.md;
             SectionLabel { text: @tr("ALLIES DRAFT"); }
             for ally in root.cs.allies: RosterRow { ally: ally; }
+            if root.cs.loadout.shown: ActiveLoadoutCard {
+                loadout: root.cs.loadout;
+                narrow: true;
+            }
             if root.cs.helper.shown: DraftHelperPanel {
                 h: root.cs.helper;
                 narrow: true;
+                expanded <=> root.guide-expanded;
                 open-link(url) => { root.open-link(url); }
             }
 

@@ -5,6 +5,14 @@ by [release-plz](https://release-plz.dev). Versions follow [Semantic Versioning]
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/RubenVP2/hypatia/compare/v0.7.0...v0.8.0) - 2026-11-25
+
+### Added
+- *(remote)* Pause Mobile Remote server during live games ([#31](https://github.com/RubenVP2/hypatia/pull/31))
+
+### Fixed
+- *(remote)* Align champ-select swap session fields and LCU endpoints ([#30](https://github.com/RubenVP2/hypatia/pull/30))
+
 ## [0.7.0](https://github.com/RubenVP2/hypatia/compare/v0.6.1...v0.7.0) - 2026-11-25
 
 ### Added

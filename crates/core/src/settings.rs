@@ -422,6 +422,9 @@ pub struct Settings {
     pub demo_prefetch: bool,
     /// Start the Mobile Remote LAN server at launch.
     pub mobile_remote: bool,
+    /// Stop the Mobile Remote server while a match is running and resume it automatically
+    /// on the same port and pairing token once the game ends.
+    pub mobile_remote_pause_in_game: bool,
     /// Scan Riot process CPU/RAM and sockets while the Telemetry Lab is open.
     pub system_footprint: bool,
     /// Import the Swagger / `/help` endpoint catalog while the Telemetry Lab is open.
@@ -491,6 +494,7 @@ impl Settings {
                 asset_cache_budget: AssetCacheBudget::Minimal,
                 demo_prefetch: false,
                 mobile_remote: false,
+                mobile_remote_pause_in_game: true,
                 system_footprint: false,
                 endpoint_catalog: false,
                 eco_mode: true,
@@ -513,6 +517,7 @@ impl Settings {
                 asset_cache_budget: AssetCacheBudget::Compact,
                 demo_prefetch: false,
                 mobile_remote: true,
+                mobile_remote_pause_in_game: true,
                 system_footprint: true,
                 endpoint_catalog: true,
                 eco_mode: true,
@@ -535,6 +540,7 @@ impl Settings {
                 asset_cache_budget: AssetCacheBudget::Full,
                 demo_prefetch: false,
                 mobile_remote: true,
+                mobile_remote_pause_in_game: false,
                 system_footprint: true,
                 endpoint_catalog: true,
                 eco_mode: false,
@@ -766,6 +772,7 @@ impl Settings {
             "replay_api" => &mut self.replay_api,
             "game_icons" => &mut self.game_icons,
             "mobile_remote" => &mut self.mobile_remote,
+            "mobile_remote_pause_in_game" => &mut self.mobile_remote_pause_in_game,
             "system_footprint" => &mut self.system_footprint,
             "endpoint_catalog" => &mut self.endpoint_catalog,
             "light_theme" => &mut self.light_theme,
@@ -797,6 +804,7 @@ pub struct Flags {
     splash_backdrops: AtomicBool,
     asset_cache_budget: AtomicU8,
     demo_prefetch: AtomicBool,
+    mobile_remote_pause_in_game: AtomicBool,
     system_footprint: AtomicBool,
     endpoint_catalog: AtomicBool,
     eco_mode: AtomicBool,
@@ -847,6 +855,8 @@ impl Flags {
         self.asset_cache_budget
             .store(s.asset_cache_budget as u8, Ordering::Relaxed);
         self.demo_prefetch.store(s.demo_prefetch, Ordering::Relaxed);
+        self.mobile_remote_pause_in_game
+            .store(s.mobile_remote_pause_in_game, Ordering::Relaxed);
         self.system_footprint
             .store(s.system_footprint, Ordering::Relaxed);
         self.endpoint_catalog
@@ -909,6 +919,10 @@ impl Flags {
 
     pub fn demo_prefetch(&self) -> bool {
         self.demo_prefetch.load(Ordering::Relaxed)
+    }
+
+    pub fn mobile_remote_pause_in_game(&self) -> bool {
+        self.mobile_remote_pause_in_game.load(Ordering::Relaxed)
     }
 
     pub fn eco_mode(&self) -> bool {
@@ -1194,5 +1208,30 @@ mod tests {
         Settings::save_lang_to(&lang_path, Lang::En).unwrap();
         assert_eq!(Settings::load_lang_from(&lang_path), Lang::En);
         assert!(Settings::default_lang_path().ends_with("lang"));
+    }
+
+    #[test]
+    fn mobile_remote_pause_in_game_defaults_and_flags() {
+        let balanced = Settings::for_profile(PerformanceProfile::Balanced);
+        let eco = Settings::for_profile(PerformanceProfile::Eco);
+        let ultra = Settings::for_profile(PerformanceProfile::UltraLight);
+        assert!(!balanced.mobile_remote_pause_in_game);
+        assert!(eco.mobile_remote_pause_in_game);
+        assert!(ultra.mobile_remote_pause_in_game);
+
+        let mut s = balanced;
+        let flags = Flags::new(&s);
+        assert!(!flags.mobile_remote_pause_in_game());
+
+        assert!(s.toggle("mobile_remote_pause_in_game"));
+        assert!(s.mobile_remote_pause_in_game);
+        assert_eq!(s.profile, PerformanceProfile::Custom);
+        flags.apply(&s);
+        assert!(flags.mobile_remote_pause_in_game());
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        s.save_to(&path).unwrap();
+        assert!(Settings::load_from(&path).mobile_remote_pause_in_game);
     }
 }

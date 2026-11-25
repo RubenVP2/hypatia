@@ -53,6 +53,7 @@ export struct PerfSettings {
     splash-backdrops: bool,
     demo-prefetch: bool,
     mobile-remote: bool,
+    mobile-remote-pause-in-game: bool,
     system-footprint: bool,
     endpoint-catalog: bool,
     eco-mode: bool,
@@ -2564,6 +2565,7 @@ export component MainWindow inherits Window {
     in property <string> demo-phase: "";
     in property <string> queue-label;
     in property <bool> remote-enabled: false;
+    in property <bool> remote-paused: false;
     in-out property <bool> remote-panel-open: false;
     in property <int> remote-clients: 0;
     in property <string> remote-url;
@@ -2766,7 +2768,7 @@ export component MainWindow inherits Window {
                     indicator-live: root.remote-enabled;
                     badge: root.remote-clients > 0
                         ? root.remote-clients + " ON"
-                        : (root.remote-enabled ? "QR" : "OFF");
+                        : (root.remote-enabled ? "QR" : (root.remote-paused ? "PAUSE" : "OFF"));
                     clicked => { root.toggle-remote-panel(); }
                 }
 
@@ -3680,6 +3682,12 @@ export component MainWindow inherits Window {
                             detail: @tr("Starts the local pairing server. Off: no port is opened on your network.");
                             checked: root.perf.mobile-remote;
                             toggled => { root.toggle-setting("mobile_remote"); }
+                        }
+                        SettingRow {
+                            title: @tr("Pause Mobile Remote in game");
+                            detail: @tr("Stops the local server while a match is running, then resumes automatically with the same pairing.");
+                            checked: root.perf.mobile-remote-pause-in-game;
+                            toggled => { root.toggle-setting("mobile_remote_pause_in_game"); }
                         }
                         SettingRow {
                             title: @tr("Online stats");

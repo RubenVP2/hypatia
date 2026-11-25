@@ -465,6 +465,15 @@ impl AppState {
         }
     }
 
+    /// True while a League match is launching or running (`GameStart` or `InProgress`).
+    pub fn is_in_game(&self) -> bool {
+        let store = self.store.read().unwrap();
+        matches!(
+            store.phase().as_ref().map(|p| p.phase.as_str()),
+            Some("GameStart" | "InProgress")
+        )
+    }
+
     /// Assembles the Telemetry Lab snapshot (sources with traffic counters, newest events,
     /// system footprint).
     pub fn get_snapshot(&self) -> Snapshot {

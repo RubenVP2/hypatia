@@ -848,6 +848,20 @@ msgctxt "MainWindow"
 msgid "Starts the local pairing server. Off: no port is opened on your network."
 msgstr "Démarre le serveur local d'association. Éteint : aucun port ouvert sur le réseau."
 
+#: ui/app.slint:3687
+msgctxt "MainWindow"
+msgid "Pause Mobile Remote in game"
+msgstr "Mettre l'App Mobile en pause en partie"
+
+#: ui/app.slint:3688
+msgctxt "MainWindow"
+msgid ""
+"Stops the local server while a match is running, then resumes automatically "
+"with the same pairing."
+msgstr ""
+"Arrête le serveur local pendant la partie, puis le relance automatiquement "
+"avec le même appairage."
+
 #: ui/app.slint:3326
 msgctxt "MainWindow"
 msgid "OBSERVATORY (ONLY ACTIVE WHILE IT IS OPEN)"

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use hypatia_core::remote::{start_remote_server, QrCodeVisual, RemoteServerHandle};
+use hypatia_core::remote::{start_remote_server_with_token, QrCodeVisual, RemoteServerHandle};
 use hypatia_core::settings::{
     HardwareSpec, PerformanceProfile, ProcessFootprint, ProcessMonitor, Settings, UiClockRate,
     UpdateCheck,
@@ -85,6 +85,11 @@ struct Ui {
     restore_timer: Timer,
     remote: RefCell<Option<RemoteServerHandle>>,
     remote_starting: Cell<bool>,
+    /// Saved `(port, token)` while Mobile Remote is auto-paused in game so it resumes without
+    /// forcing the player to re-scan the QR code.
+    remote_paused: RefCell<Option<(u16, String)>>,
+    /// Set when the user manually opens Mobile Remote during a match; cleared after the match.
+    remote_in_game_override: Cell<bool>,
     /// Update Check: asks GitHub only while `Settings::update_check` is on.
     updater: Arc<Updater>,
     update: RefCell<UpdateState>,
@@ -128,6 +133,9 @@ impl Ui {
     /// Brings every visible view up to date. Cheap when nothing changed: the companion compares
     /// one `Arc` pointer and the Telemetry Lab one hash.
     fn refresh(&self) {
+        // Keep Mobile Remote pause/resume in sync with match phase even while the window sleeps
+        // minimized during a game.
+        self.sync_remote_for_phase();
         if self.is_ui_sleeping() {
             self.deferred_refresh.set(true);
             self.stop_phase_clock();
@@ -461,13 +469,18 @@ impl Ui {
 
     /// Starts the LAN server in the background so the window never waits on the network.
     fn start_remote(&self, open_drawer: bool) {
+        self.start_remote_with(open_drawer, None);
+    }
+
+    fn start_remote_with(&self, open_drawer: bool, resume: Option<(u16, String)>) {
         if self.remote.borrow().is_some() || self.remote_starting.replace(true) {
             return;
         }
         let app = self.app.clone();
-        let port = self.cli.remote_port;
+        let port = resume.as_ref().map_or(self.cli.remote_port, |(p, _)| *p);
+        let token = resume.map(|(_, t)| t);
         self.rt.spawn(async move {
-            let started = start_remote_server(app, port).await;
+            let started = start_remote_server_with_token(app, port, token).await;
             let _ = slint::invoke_from_event_loop(move || {
                 with_ui(|ui| {
                     ui.remote_starting.set(false);
@@ -479,6 +492,7 @@ impl Ui {
                             }
                             *ui.remote.borrow_mut() = Some(handle);
                             ui.main.set_remote_enabled(true);
+                            ui.main.set_remote_paused(false);
                             if open_drawer {
                                 ui.main.set_settings_open(false);
                             }
@@ -486,6 +500,7 @@ impl Ui {
                             if ui.main.get_settings_open() {
                                 ui.update_perf_metrics(false);
                             }
+                            ui.sync_remote_for_phase();
                         }
                         Err(e) => tracing::error!("Failed to start Mobile Remote: {e}"),
                     }
@@ -498,10 +513,48 @@ impl Ui {
         if let Some(mut handle) = self.remote.borrow_mut().take() {
             handle.stop();
         }
+        self.remote_paused.borrow_mut().take();
+        self.remote_in_game_override.set(false);
         self.main.set_remote_enabled(false);
+        self.main.set_remote_paused(false);
         self.main.set_remote_panel_open(false);
         self.main.set_remote_url(SharedString::default());
         self.main.set_remote_clients(0);
+    }
+
+    /// Pauses the Mobile Remote server during an active match when the option is on, keeping
+    /// `(port, token)` so the paired phone reconnects automatically once the game ends.
+    fn sync_remote_for_phase(&self) {
+        let in_game = self.app.is_in_game();
+        if !in_game {
+            self.remote_in_game_override.set(false);
+        }
+        let should_pause = in_game
+            && self.app.flags.mobile_remote_pause_in_game()
+            && !self.remote_in_game_override.get();
+
+        if should_pause {
+            if let Some(mut handle) = self.remote.borrow_mut().take() {
+                let port = handle.port;
+                let token = handle.token();
+                handle.stop();
+                *self.remote_paused.borrow_mut() = Some((port, token));
+                self.main.set_remote_enabled(false);
+                self.main.set_remote_paused(true);
+                self.main.set_remote_panel_open(false);
+                self.main.set_remote_clients(0);
+                info!("Mobile Remote paused for live game (will resume on port {port})");
+                if self.main.get_settings_open() {
+                    self.update_perf_metrics(false);
+                }
+            }
+        } else if self.remote.borrow().is_none() && !self.remote_starting.get() {
+            if let Some(saved) = self.remote_paused.borrow_mut().take() {
+                info!("Resuming Mobile Remote on port {}", saved.0);
+                self.main.set_remote_paused(false);
+                self.start_remote_with(false, Some(saved));
+            }
+        }
     }
 
     fn toggle_remote_panel(&self) {
@@ -510,7 +563,12 @@ impl Ui {
             self.main
                 .set_remote_panel_open(!self.main.get_remote_panel_open());
         } else {
-            self.start_remote(true);
+            if self.app.is_in_game() {
+                self.remote_in_game_override.set(true);
+            }
+            let resume = self.remote_paused.borrow_mut().take();
+            self.main.set_remote_paused(false);
+            self.start_remote_with(true, resume);
         }
     }
 
@@ -786,6 +844,7 @@ fn perf_settings(s: &Settings, hw: HardwareSpec, lang: Lang) -> PerfSettings {
         splash_backdrops: s.splash_backdrops,
         demo_prefetch: s.demo_prefetch,
         mobile_remote: s.mobile_remote,
+        mobile_remote_pause_in_game: s.mobile_remote_pause_in_game,
         system_footprint: s.system_footprint,
         endpoint_catalog: s.endpoint_catalog,
         eco_mode: s.eco_mode,
@@ -1095,6 +1154,8 @@ fn main() {
         restore_timer: Timer::default(),
         remote: RefCell::new(None),
         remote_starting: Cell::new(false),
+        remote_paused: RefCell::new(None),
+        remote_in_game_override: Cell::new(false),
         updater,
         update: RefCell::default(),
         update_clock: Timer::default(),
@@ -1119,6 +1180,9 @@ fn main() {
         ui.set_telemetry(true);
     }
     if !ui.cli.no_remote && (settings.mobile_remote || ui.cli.remote) {
+        if ui.cli.remote && ui.app.is_in_game() {
+            ui.remote_in_game_override.set(true);
+        }
         ui.start_remote(ui.cli.remote);
     }
 

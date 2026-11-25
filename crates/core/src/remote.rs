@@ -178,6 +178,7 @@ struct RemoteRouterState {
     allowed_hosts: Vec<String>,
     port: u16,
     active_clients: Arc<AtomicUsize>,
+    shutdown_rx: watch::Receiver<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -199,8 +200,12 @@ impl RemoteServerHandle {
         self.active_clients.load(Ordering::Relaxed)
     }
 
+    pub fn token(&self) -> String {
+        self.token.read().unwrap().clone()
+    }
+
     pub fn qr_visual(&self) -> Result<QrCodeVisual> {
-        let tok = self.token.read().unwrap().clone();
+        let tok = self.token();
         let url = format!("http://{}:{}/?token={}", self.lan_ip, self.port, tok);
         render_qr_code(&url, &tok)
     }
@@ -289,16 +294,44 @@ fn check_token(headers: &HeaderMap, query_token: Option<&str>, expected: &str) -
 
 /// Starts the opt-in LAN Mobile Remote server on `0.0.0.0:{port}` (or an OS-assigned port if `0`).
 pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<RemoteServerHandle> {
+    start_remote_server_with_token(app, preferred_port, None).await
+}
+
+/// Starts the Mobile Remote server, optionally reusing a previous pairing token (e.g. after
+/// auto-pausing during a live match so paired phones reconnect without re-scanning the QR code).
+pub async fn start_remote_server_with_token(
+    app: AppState,
+    preferred_port: u16,
+    initial_token: Option<String>,
+) -> Result<RemoteServerHandle> {
     let lan_ip = detect_lan_ip();
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], preferred_port));
-    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
-        Ok(l) => l,
-        Err(_) => tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
+    // Retry briefly on a specific preferred port in case a just-stopped server is still releasing it.
+    let mut listener = None;
+    let attempts = if preferred_port == 0 { 1 } else { 4 };
+    for attempt in 0..attempts {
+        match tokio::net::TcpListener::bind(bind_addr).await {
+            Ok(l) => {
+                listener = Some(l);
+                break;
+            }
+            Err(_) if attempt + 1 < attempts => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(_) => break,
+        }
+    }
+    let listener = match listener {
+        Some(l) => l,
+        None => tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
             .await
             .context("Failed to bind Mobile Remote listener")?,
     };
     let actual_port = listener.local_addr()?.port();
-    let token = Arc::new(RwLock::new(generate_pairing_token()));
+    let pairing_token = initial_token
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(generate_pairing_token);
+    let token = Arc::new(RwLock::new(pairing_token));
     let alerts = Arc::new(RwLock::new(AlertTracker::default()));
     let active_clients = Arc::new(AtomicUsize::new(0));
     let (state_tx, _) = broadcast::channel::<String>(64);
@@ -319,6 +352,7 @@ pub async fn start_remote_server(app: AppState, preferred_port: u16) -> Result<R
         allowed_hosts,
         port: actual_port,
         active_clients: active_clients.clone(),
+        shutdown_rx: shutdown_rx.clone(),
     };
 
     // Pushes a fresh snapshot to paired phones whenever observable state changes. With no
@@ -756,6 +790,7 @@ impl Drop for ClientGuard {
 
 async fn ws_session(mut socket: WebSocket, st: RemoteRouterState) {
     let _guard = ClientGuard::new(&st);
+    let mut shutdown_rx = st.shutdown_rx.clone();
 
     let initial = current_snapshot_json(&st);
     if socket.send(Message::Text(initial.into())).await.is_err() {
@@ -765,6 +800,10 @@ async fn ws_session(mut socket: WebSocket, st: RemoteRouterState) {
     let mut rx = st.state_tx.subscribe();
     loop {
         tokio::select! {
+            _ = shutdown_rx.changed() => {
+                let _ = socket.send(Message::Close(None)).await;
+                break;
+            }
             Ok(msg) = rx.recv() => {
                 if socket.send(Message::Text(msg.into())).await.is_err() {
                     break;
@@ -1527,5 +1566,44 @@ mod tests {
             }
             i += 1;
         }
+    }
+
+    #[tokio::test]
+    async fn test_remote_server_resume_preserves_port_and_token() {
+        let app = AppState::start(true, 1.0);
+        let mut handle = start_remote_server(app.clone(), 0).await.unwrap();
+        let saved_port = handle.port;
+        let saved_token = handle.token();
+        let base = format!("http://127.0.0.1:{saved_port}");
+        let client = reqwest::Client::new();
+
+        // Paired phone can read state before pause.
+        let before = client
+            .get(format!("{base}/api/state?token={saved_token}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(before.status(), reqwest::StatusCode::OK);
+
+        // Stop the server (simulating auto-pause on entering InProgress).
+        handle.stop();
+        drop(handle);
+
+        // Resume with the saved port and pairing token (simulating match end).
+        let mut resumed =
+            start_remote_server_with_token(app, saved_port, Some(saved_token.clone()))
+                .await
+                .unwrap();
+        assert_eq!(resumed.port, saved_port);
+        assert_eq!(resumed.token(), saved_token);
+
+        // The previously paired phone reconnects using the exact same URL and token.
+        let after = client
+            .get(format!("{base}/api/state?token={saved_token}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(after.status(), reqwest::StatusCode::OK);
+        resumed.stop();
     }
 }

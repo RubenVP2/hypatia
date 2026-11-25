@@ -997,7 +997,19 @@ msgctxt "MainWindow"
 msgid "Starts the local pairing server. Off: no port is opened on your network."
 msgstr ""
 
-#: ui/app.slint:3685
+#: ui/app.slint:3687
+msgctxt "MainWindow"
+msgid "Pause Mobile Remote in game"
+msgstr ""
+
+#: ui/app.slint:3688
+msgctxt "MainWindow"
+msgid ""
+"Stops the local server while a match is running, then resumes automatically "
+"with the same pairing."
+msgstr ""
+
+#: ui/app.slint:3693
 msgctxt "MainWindow"
 msgid "Online stats"
 msgstr ""

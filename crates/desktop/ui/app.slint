@@ -820,7 +820,23 @@ component ChampSelectScreen inherits Flickable {
                                 font-weight: 800;
                                 vertical-alignment: center;
                             }
-                            for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; }
+                            VerticalLayout {
+                                spacing: Space.xs;
+                                HorizontalLayout {
+                                    spacing: Space.sm;
+                                    alignment: start;
+                                    for b[idx] in root.cs.my-ban-list: HorizontalLayout {
+                                        if idx < 3: BanChip { ban: b; mine: true; }
+                                    }
+                                }
+                                if root.cs.my-ban-list.length > 3: HorizontalLayout {
+                                    spacing: Space.sm;
+                                    alignment: start;
+                                    for b[idx] in root.cs.my-ban-list: HorizontalLayout {
+                                        if idx >= 3: BanChip { ban: b; mine: true; }
+                                    }
+                                }
+                            }
                         }
                         if root.cs.their-ban-list.length > 0: HorizontalLayout {
                             spacing: Space.sm;
@@ -833,7 +849,23 @@ component ChampSelectScreen inherits Flickable {
                                 font-weight: 800;
                                 vertical-alignment: center;
                             }
-                            for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
+                            VerticalLayout {
+                                spacing: Space.xs;
+                                HorizontalLayout {
+                                    spacing: Space.sm;
+                                    alignment: start;
+                                    for b[idx] in root.cs.their-ban-list: HorizontalLayout {
+                                        if idx < 3: BanChip { ban: b; mine: false; }
+                                    }
+                                }
+                                if root.cs.their-ban-list.length > 3: HorizontalLayout {
+                                    spacing: Space.sm;
+                                    alignment: start;
+                                    for b[idx] in root.cs.their-ban-list: HorizontalLayout {
+                                        if idx >= 3: BanChip { ban: b; mine: false; }
+                                    }
+                                }
+                            }
                         }
                         if root.cs.my-ban-list.length == 0 && root.cs.their-ban-list.length == 0: Text {
                             text: @tr("No champions banned yet");
@@ -900,7 +932,7 @@ component ChampSelectScreen inherits Flickable {
                             font-weight: 800;
                             vertical-alignment: center;
                         }
-                        for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; }
+                        for b in root.cs.my-ban-list: BanChip { ban: b; mine: true; compact: root.cs.my-ban-list.length > 3; }
                     }
                     if root.cs.their-ban-list.length > 0: HorizontalLayout {
                         spacing: Space.xs;
@@ -912,7 +944,7 @@ component ChampSelectScreen inherits Flickable {
                             font-weight: 800;
                             vertical-alignment: center;
                         }
-                        for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; }
+                        for b in root.cs.their-ban-list: BanChip { ban: b; mine: false; compact: root.cs.their-ban-list.length > 3; }
                     }
                 }
             }

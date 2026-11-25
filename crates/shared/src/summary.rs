@@ -1546,10 +1546,11 @@ fn extract_champ_select_summary(
         }
     }
 
+    let my_cell_ids: HashSet<i64> = my_team.iter().map(|m| m.cell_id).collect();
     let (my_team_bans, my_team_ban_ids) =
-        extract_ban_list(cs.get("bans"), "myTeamBans", champions, lang);
+        extract_team_bans(cs, "myTeamBans", true, &my_cell_ids, champions, lang);
     let (their_team_bans, their_team_ban_ids) =
-        extract_ban_list(cs.get("bans"), "theirTeamBans", champions, lang);
+        extract_team_bans(cs, "theirTeamBans", false, &my_cell_ids, champions, lang);
 
     let mut their_team = Vec::new();
     if let Some(arr) = cs.get("theirTeam").and_then(|v| v.as_array()) {
@@ -2158,26 +2159,84 @@ fn extract_rune_pages(pages_val: Option<&Value>, lang: Lang) -> (Vec<RemoteRuneP
     (pages, editable_id)
 }
 
-fn extract_ban_list(
-    bans: Option<&Value>,
+fn extract_team_bans(
+    cs: &Value,
     key: &str,
+    ally_team: bool,
+    my_cell_ids: &HashSet<i64>,
     champions: &dyn ChampionLookup,
     lang: Lang,
 ) -> (Vec<String>, Vec<i64>) {
     let mut names = Vec::new();
     let mut ids = Vec::new();
-    let Some(arr) = bans.and_then(|b| b.get(key)).and_then(|v| v.as_array()) else {
-        return (names, ids);
-    };
-    for entry in arr {
-        if let Some(id) = entry.as_i64() {
+    let push_id = |names: &mut Vec<String>, ids: &mut Vec<i64>, id: i64| {
+        if id > 0 && !ids.contains(&id) {
             names.push(champions.resolve_champion_name_localized(id, lang));
             ids.push(id);
-        } else if let Some(s) = entry.as_str() {
-            ids.push(champions.resolve_champion_id(s));
-            names.push(s.to_string());
+        }
+    };
+
+    if let Some(arr) = cs
+        .get("bans")
+        .and_then(|b| b.get(key))
+        .and_then(|v| v.as_array())
+    {
+        for entry in arr {
+            if let Some(id) = entry.as_i64() {
+                push_id(&mut names, &mut ids, id);
+            } else if let Some(s) = entry.as_str() {
+                let id = champions.resolve_champion_id(s);
+                if id > 0 {
+                    push_id(&mut names, &mut ids, id);
+                } else {
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty() && !is_champion_placeholder(trimmed) {
+                        let owned = trimmed.to_string();
+                        if !names.contains(&owned) {
+                            names.push(owned);
+                            ids.push(0);
+                        }
+                    }
+                }
+            }
         }
     }
+
+    if let Some(turns) = cs.get("actions").and_then(|v| v.as_array()) {
+        for act in turns.iter().filter_map(|t| t.as_array()).flatten() {
+            if act.get("type").and_then(|v| v.as_str()) != Some("ban") {
+                continue;
+            }
+            if act.get("completed").and_then(|v| v.as_bool()) != Some(true) {
+                continue;
+            }
+            let Some(champ_id) = act
+                .get("championId")
+                .and_then(|v| v.as_i64())
+                .filter(|&id| id > 0)
+            else {
+                continue;
+            };
+            let is_ally = act
+                .get("isAllyAction")
+                .and_then(|v| v.as_bool())
+                .unwrap_or_else(|| {
+                    let cell = act
+                        .get("actorCellId")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(-1);
+                    if !my_cell_ids.is_empty() {
+                        my_cell_ids.contains(&cell)
+                    } else {
+                        (0..5).contains(&cell)
+                    }
+                });
+            if is_ally == ally_team {
+                push_id(&mut names, &mut ids, champ_id);
+            }
+        }
+    }
+
     (names, ids)
 }
 
@@ -3554,5 +3613,59 @@ mod tests {
             .unwrap();
         assert!(arena_remote.is_roleless);
         assert!(!arena_remote.spells_editable);
+    }
+
+    #[test]
+    fn extracts_bans_from_completed_actions_when_bans_lists_are_empty_or_partial() {
+        let cs = json!({
+            "localPlayerCellId": 1,
+            "myTeam": [
+                {"cellId": 0, "assignedPosition": "TOP", "championId": 0},
+                {"cellId": 1, "assignedPosition": "JUNGLE", "championId": 0},
+                {"cellId": 2, "assignedPosition": "MIDDLE", "championId": 0},
+                {"cellId": 3, "assignedPosition": "BOTTOM", "championId": 0},
+                {"cellId": 4, "assignedPosition": "UTILITY", "championId": 0}
+            ],
+            "theirTeam": [
+                {"cellId": 5, "championId": 0},
+                {"cellId": 6, "championId": 0},
+                {"cellId": 7, "championId": 0},
+                {"cellId": 8, "championId": 0},
+                {"cellId": 9, "championId": 0}
+            ],
+            "bans": {
+                "myTeamBans": [238, 0, -1],
+                "theirTeamBans": [0]
+            },
+            "actions": [
+                [
+                    {"id": 1, "actorCellId": 0, "type": "ban", "championId": 238, "completed": true, "isAllyAction": true},
+                    {"id": 2, "actorCellId": 1, "type": "ban", "championId": 157, "completed": true, "isAllyAction": true},
+                    {"id": 3, "actorCellId": 2, "type": "ban", "championId": 35, "completed": true},
+                    {"id": 4, "actorCellId": 3, "type": "ban", "championId": 11, "completed": false, "isInProgress": true, "isAllyAction": true},
+                    {"id": 5, "actorCellId": 4, "type": "ban", "championId": -1, "completed": true, "isAllyAction": true},
+                    {"id": 6, "actorCellId": 5, "type": "ban", "championId": 777, "completed": true, "isAllyAction": false},
+                    {"id": 7, "actorCellId": 6, "type": "ban", "championId": 875, "completed": true},
+                    {"id": 8, "actorCellId": 7, "type": "ban", "championId": 0, "completed": true, "isAllyAction": false}
+                ],
+                [
+                    {"id": 101, "actorCellId": -1, "type": "ten_bans_reveal", "championId": 0, "completed": false}
+                ]
+            ]
+        });
+
+        let snap = project_match(
+            &MatchInputs {
+                champ_select: Some(&cs),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let p = snap.champ_select.unwrap();
+        assert_eq!(p.my_team_ban_ids, vec![238, 157, 35]);
+        assert_eq!(p.my_team_bans, vec!["Zed", "Yasuo", "Shaco"]);
+        assert_eq!(p.their_team_ban_ids, vec![777, 875]);
+        assert_eq!(p.their_team_bans, vec!["Yone", "Sett"]);
     }
 }

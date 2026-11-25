@@ -2064,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "hypatia"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
  "embed-resource",
@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "hypatia-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2109,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "hypatia-shared"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",

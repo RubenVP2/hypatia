@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::board::ObjectiveKind;
-use crate::champions::Position;
+use crate::champions::{
+    is_roleless_mode, is_swiftplay_queue, summoner_spells_for_mode_localized, Position,
+};
 use crate::draft_helper::ChampSelectHelper;
 use crate::i18n::Lang;
 use crate::summary::{
-    format_clock_mm_ss, ChampSelectBenchChampion, ChampSelectEnemy, EndOfGameSummary,
-    LiveGamePlayerSummary, SummarySnapshot, SummonerSummary,
+    default_lobby_queues_localized, format_clock_mm_ss, ChampSelectBenchChampion, ChampSelectEnemy,
+    EndOfGameSummary, LiveGamePlayerSummary, SummarySnapshot, SummonerSummary,
 };
 
 /// Strict, closed allowlist of user-initiated commands accepted by the Mobile Remote.
@@ -16,8 +18,14 @@ use crate::summary::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum RemoteCommand {
+    /// Create or switch the League lobby to an allowlisted queue (`POST /lol-lobby/v2/lobby`).
+    CreateLobby { queue_id: i64 },
+    /// Return to the previous lobby from post-game (`POST /lol-lobby/v2/play-again`).
+    PlayAgain,
     /// Choose primary and secondary role in Lobby (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`, `FILL`).
     SetLobbyPositions { first: String, second: String },
+    /// Configure the champion/role/loadout slots in a Swiftplay lobby (`PUT /lol-lobby/v2/lobby/members/localMember/player-slots`).
+    SetSwiftplaySlots { slots: Vec<SwiftplaySlotSelection> },
     /// Start matchmaking queue from Lobby.
     StartMatchmaking,
     /// Cancel matchmaking queue.
@@ -26,16 +34,20 @@ pub enum RemoteCommand {
     AcceptReadyCheck,
     /// Decline the Ready Check.
     DeclineReadyCheck,
-    /// Hover a champion during the player's ban or pick action.
+    /// Hover a champion during the player's ban, pick, or pre-pick intent action.
     HoverChampion { action_id: i64, champion_id: i64 },
     /// Lock in the currently hovered ban or pick action.
     LockAction { action_id: i64 },
+    /// Reroll the assigned ARAM champion (`POST /lol-champ-select/v1/session/my-selection/reroll`).
+    RerollChampion,
     /// Swap with a champion on the ARAM bench (`POST /lol-champ-select/v1/session/bench/swap/{champion_id}`).
     SwapBenchChampion { champion_id: i64 },
     /// Select both summoner spells (`spell1_id` = D, `spell2_id` = F).
     SetSummonerSpells { spell1_id: i64, spell2_id: i64 },
-    /// Select a skin for the locked-in champion.
+    /// Select a skin or chroma (`PATCH /lol-champ-select/v1/session/my-selection`).
     SetSkin { skin_id: i64 },
+    /// Select a ward skin (`PATCH /lol-champ-select/v1/session/my-selection`).
+    SetWardSkin { ward_skin_id: i64 },
     /// Activate an existing rune page by ID.
     SelectRunePage { page_id: i64 },
     /// Save and activate a rune page (recommended preset or custom 1-hand builder).
@@ -69,6 +81,27 @@ pub enum RemoteCommand {
     DemoSimulateIncomingSwap,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteQueueOption {
+    pub queue_id: i64,
+    pub name: String,
+    pub category: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SwiftplaySlotSelection {
+    pub champion_id: i64,
+    #[serde(default)]
+    pub champion_name: String,
+    pub position: String,
+    #[serde(default)]
+    pub skin_id: i64,
+    pub spell1_id: i64,
+    pub spell2_id: i64,
+    #[serde(default)]
+    pub perk_page_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct RemoteStateSnapshot {
     pub phase: String,
@@ -82,6 +115,8 @@ pub struct RemoteStateSnapshot {
     pub summoner_name: String,
     #[serde(default)]
     pub profile_icon_id: i64,
+    #[serde(default)]
+    pub available_queues: Vec<RemoteQueueOption>,
     pub lobby: Option<RemoteLobbyState>,
     pub matchmaking: Option<RemoteMatchmakingState>,
     pub champ_select: Option<RemoteChampSelectState>,
@@ -187,6 +222,20 @@ pub struct RemoteLobbyState {
     pub second_position: String,
     pub is_leader: bool,
     pub member_count: usize,
+    #[serde(default)]
+    pub is_roleless: bool,
+    #[serde(default)]
+    pub is_swiftplay: bool,
+    #[serde(default)]
+    pub swiftplay_slots: Vec<SwiftplaySlotSelection>,
+    #[serde(default)]
+    pub slot_skins: Vec<Vec<RemoteSkinOption>>,
+    #[serde(default)]
+    pub champions: Vec<RemoteChampionOption>,
+    #[serde(default)]
+    pub available_spells: Vec<RemoteSpellOption>,
+    #[serde(default)]
+    pub rune_pages: Vec<RemoteRunePage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -256,12 +305,45 @@ pub struct RemoteChampionOption {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteChromaOption {
+    pub id: i64,
+    pub name: String,
+    #[serde(default)]
+    pub colors: Vec<String>,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteSkinOption {
     pub id: i64,
     pub name: String,
     pub selected: bool,
     #[serde(default)]
     pub tile_path: String,
+    #[serde(default)]
+    pub chromas: Vec<RemoteChromaOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteWardSkinOption {
+    pub id: i64,
+    pub name: String,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteRecommendedCard {
+    pub name: String,
+    pub primary_style_id: i64,
+    pub primary_style_name: String,
+    pub sub_style_id: i64,
+    pub sub_style_name: String,
+    pub keystone_id: i64,
+    pub keystone_name: String,
+    pub selected_perk_ids: Vec<i64>,
+    pub spell1_id: i64,
+    pub spell2_id: i64,
+    pub current: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,9 +398,20 @@ pub struct RemoteChampSelectState {
     pub local_cell_id: i64,
     pub assigned_position: String,
     pub active_action: Option<RemoteActiveAction>,
+    /// Uncompleted local `pick` action so the player can pre-hover pick intent before their turn.
+    #[serde(default)]
+    pub intent_action: Option<RemoteActiveAction>,
     pub spell1_id: i64,
     pub spell2_id: i64,
+    #[serde(default = "default_true")]
+    pub spells_editable: bool,
+    #[serde(default)]
+    pub is_roleless: bool,
     pub selected_skin_id: i64,
+    #[serde(default)]
+    pub ward_skin_id: i64,
+    #[serde(default)]
+    pub available_wards: Vec<RemoteWardSkinOption>,
     pub my_team: Vec<RemoteTeamMember>,
     pub their_team: Vec<ChampSelectEnemy>,
     pub my_team_bans: Vec<String>,
@@ -329,10 +422,14 @@ pub struct RemoteChampSelectState {
     pub their_team_ban_ids: Vec<i64>,
     pub incoming_swaps: Vec<RemoteIncomingSwap>,
     pub champions: Vec<RemoteChampionOption>,
+    #[serde(default)]
+    pub comfort_champion_ids: Vec<i64>,
     pub available_skins: Vec<RemoteSkinOption>,
     pub available_spells: Vec<RemoteSpellOption>,
     pub rune_pages: Vec<RemoteRunePage>,
     pub recommended_rune_pages: Vec<RemoteRunePage>,
+    #[serde(default)]
+    pub recommended_cards: Vec<RemoteRecommendedCard>,
     pub rune_trees: Vec<RemoteRuneTree>,
     /// True in ARAM / ARAM: Mayhem when the bench swap pool is active.
     #[serde(default)]
@@ -340,9 +437,16 @@ pub struct RemoteChampSelectState {
     /// Champions currently available on the ARAM bench.
     #[serde(default)]
     pub bench_champions: Vec<ChampSelectBenchChampion>,
+    /// Available ARAM rerolls (`POST /lol-champ-select/v1/session/my-selection/reroll`).
+    #[serde(default)]
+    pub rerolls_remaining: u32,
     /// The champ-select helper, as projected for the desktop.
     #[serde(default)]
     pub helper: ChampSelectHelper,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 pub use crate::champions::{
@@ -414,13 +518,45 @@ pub fn project_remote_state(
         .map(|s| s.profile_icon_id)
         .unwrap_or(0);
 
-    let lobby = summary.lobby.as_ref().map(|l| RemoteLobbyState {
-        queue_id: l.queue_id,
-        queue_name: l.queue_name.clone(),
-        first_position: l.local_first_position.clone().unwrap_or_default(),
-        second_position: l.local_second_position.clone().unwrap_or_default(),
-        is_leader: l.local_is_leader,
-        member_count: l.members.len(),
+    let queue_id_hint = summary
+        .lobby
+        .as_ref()
+        .map(|l| l.queue_id)
+        .filter(|&id| id > 0)
+        .or_else(|| summary.matchmaking.as_ref().map(|m| m.queue_id))
+        .unwrap_or(0);
+
+    let lobby = summary.lobby.as_ref().map(|l| {
+        let is_swiftplay = is_swiftplay_queue(l.queue_id, &l.queue_name);
+        let is_roleless = is_roleless_mode(l.queue_id, &l.queue_name);
+        let (available_spells, _) = if is_swiftplay {
+            summoner_spells_for_mode_localized(l.queue_id, &l.queue_name, lang)
+        } else {
+            (Vec::new(), true)
+        };
+        RemoteLobbyState {
+            queue_id: l.queue_id,
+            queue_name: l.queue_name.clone(),
+            first_position: l.local_first_position.clone().unwrap_or_default(),
+            second_position: l.local_second_position.clone().unwrap_or_default(),
+            is_leader: l.local_is_leader,
+            member_count: l.members.len(),
+            is_roleless,
+            is_swiftplay,
+            swiftplay_slots: l.swiftplay_slots.clone(),
+            slot_skins: l.swiftplay_slot_skins.clone(),
+            champions: if is_swiftplay {
+                l.swiftplay_champions.clone()
+            } else {
+                Vec::new()
+            },
+            available_spells,
+            rune_pages: if is_swiftplay {
+                l.swiftplay_rune_pages.clone()
+            } else {
+                Vec::new()
+            },
+        }
     });
 
     let matchmaking = Some({
@@ -500,6 +636,10 @@ pub fn project_remote_state(
             })
             .collect();
 
+        let (available_spells, spells_editable) =
+            summoner_spells_for_mode_localized(queue_id_hint, &cs.queue_type, lang);
+        let is_roleless = cs.bench_enabled || is_roleless_mode(queue_id_hint, &cs.queue_type);
+
         RemoteChampSelectState {
             sub_phase: cs.sub_phase.clone(),
             time_left_sec: cs.time_left_sec_at(now_ms),
@@ -508,9 +648,14 @@ pub fn project_remote_state(
             local_cell_id: cs.local_cell_id,
             assigned_position,
             active_action: cs.local_action.clone(),
+            intent_action: cs.intent_action.clone(),
             spell1_id,
             spell2_id,
+            spells_editable,
+            is_roleless,
             selected_skin_id,
+            ward_skin_id: cs.ward_skin_id,
+            available_wards: cs.available_wards.clone(),
             my_team,
             their_team: cs.their_team.clone(),
             my_team_bans: cs.my_team_bans.clone(),
@@ -519,13 +664,16 @@ pub fn project_remote_state(
             their_team_ban_ids: cs.their_team_ban_ids.clone(),
             incoming_swaps: cs.incoming_swaps.clone(),
             champions: cs.champions.clone(),
+            comfort_champion_ids: cs.comfort_champion_ids.clone(),
             available_skins: cs.available_skins.clone(),
-            available_spells: default_summoner_spells_localized(lang),
+            available_spells,
             rune_pages: cs.rune_pages.clone(),
             recommended_rune_pages: cs.recommended_rune_pages.clone(),
+            recommended_cards: cs.recommended_cards.clone(),
             rune_trees: default_rune_trees_localized(lang),
             bench_enabled: cs.bench_enabled,
             bench_champions: cs.bench_champions.clone(),
+            rerolls_remaining: cs.rerolls_remaining,
             helper: cs.helper.clone(),
         }
     });
@@ -759,6 +907,7 @@ pub fn project_remote_state(
         alert_body: alerts.last_body.clone(),
         summoner_name,
         profile_icon_id,
+        available_queues: default_lobby_queues_localized(lang),
         lobby,
         matchmaking,
         champ_select,

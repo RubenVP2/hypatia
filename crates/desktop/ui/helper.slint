@@ -4,7 +4,7 @@
 // and Online values the provider link.
 
 import { Theme, Type, Space } from "theme.slint";
-import { Card, Divider, GameIconBadge, Roundel, SectionLabel } from "parts.slint";
+import { Action, Card, Divider, GameIconBadge, Roundel, SectionLabel } from "parts.slint";
 
 export struct HelperIcon {
     icon: image,
@@ -548,11 +548,12 @@ component CompBlock inherits VerticalLayout {
     }
 }
 
-// The full helper card of the champion select screen. Side by side when wide, stacked when
-// narrow (split Observatory, small window).
+// The full helper card of the champion select screen. Collapsed by default so focus stays on
+// the draft and active loadout; side by side when expanded on a wide window, stacked when narrow.
 export component DraftHelperPanel inherits Card {
     in property <HelperView> h;
     in property <bool> narrow: false;
+    in-out property <bool> expanded: false;
     callback open-link(string);
 
     VerticalLayout {
@@ -561,8 +562,8 @@ export component DraftHelperPanel inherits Card {
 
         HorizontalLayout {
             spacing: Space.sm;
-            height: 22px;
-            SectionLabel { text: @tr("YOUR BUILD"); vertical-alignment: center; }
+            height: 30px;
+            SectionLabel { text: @tr("DRAFT GUIDE"); vertical-alignment: center; }
             if root.h.has-champion: Text {
                 text: root.h.position != "" ? @tr("{0} · {1}", root.h.champion, root.h.position) : root.h.champion;
                 color: Theme.text;
@@ -580,28 +581,34 @@ export component DraftHelperPanel inherits Card {
                 vertical-alignment: center;
             }
             Rectangle { horizontal-stretch: 1; }
-            if root.h.attribution != "": SourceLink {
+            if root.expanded && root.h.attribution != "": SourceLink {
                 y: (parent.height - self.height) / 2;
                 label: root.h.attribution;
                 url: root.h.attribution-url;
                 open(url) => { root.open-link(url); }
             }
+            Action {
+                y: (parent.height - self.height) / 2;
+                text: root.expanded ? @tr("Hide guide") : @tr("Show guide");
+                selected: root.expanded;
+                clicked => { root.expanded = !root.expanded; }
+            }
         }
 
-        if !root.narrow: HorizontalLayout {
+        if root.expanded && !root.narrow: HorizontalLayout {
             spacing: Space.xl;
             BuildBlock { horizontal-stretch: 3; h: root.h; }
             Rectangle { width: 1px; background: Theme.rule; }
             CompBlock { horizontal-stretch: 2; h: root.h; }
         }
-        if root.narrow: VerticalLayout {
+        if root.expanded && root.narrow: VerticalLayout {
             spacing: Space.md;
             BuildBlock { h: root.h; }
             Divider {}
             CompBlock { h: root.h; }
         }
 
-        if root.h.hint != "": Text {
+        if root.expanded && root.h.hint != "": Text {
             text: root.h.hint;
             color: Theme.muted;
             font-size: Type.label;

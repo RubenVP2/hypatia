@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::game_text::{game_name, game_names, GameTextKind};
 use crate::i18n::Lang;
 use crate::remote::{
-    RemoteChampionOption, RemotePerkOption, RemoteRunePage, RemoteRuneTree, RemoteSkinOption,
-    RemoteSpellOption,
+    RemoteChampionOption, RemoteChromaOption, RemotePerkOption, RemoteRunePage, RemoteRuneTree,
+    RemoteSkinOption, RemoteSpellOption, RemoteWardSkinOption,
 };
 
 /// Canonical Summoner's Rift role across lobby preferences, draft assignments,
@@ -1399,8 +1399,93 @@ pub fn default_summoner_spells_localized(lang: Lang) -> Vec<RemoteSpellOption> {
         .collect()
 }
 
+/// Returns `true` when the queue or mode has no lane/position assignment (e.g. ARAM, Arena, ARURF).
+pub fn is_roleless_mode(queue_id: i64, queue_type: &str) -> bool {
+    let qt = queue_type.to_ascii_uppercase();
+    matches!(queue_id, 450 | 870 | 880 | 890 | 900 | 1700 | 1710)
+        || qt.contains("ARAM")
+        || qt.contains("HOWLING")
+        || qt.contains("KIWI")
+        || qt.contains("ARENA")
+        || qt.contains("CHERRY")
+        || qt.contains("ARURF")
+}
+
+/// Returns `true` when the queue uses Swiftplay / Quickplay pre-lobby slots instead of Champ Select.
+pub fn is_swiftplay_queue(queue_id: i64, queue_type: &str) -> bool {
+    let qt = queue_type.to_ascii_uppercase();
+    matches!(queue_id, 480 | 490) || qt.contains("SWIFTPLAY") || qt.contains("QUICKPLAY")
+}
+
+/// Returns `(available_spells, spells_editable)` tailored to the active League game mode.
+pub fn summoner_spells_for_mode_localized(
+    queue_id: i64,
+    queue_type: &str,
+    lang: Lang,
+) -> (Vec<RemoteSpellOption>, bool) {
+    let qt = queue_type.to_ascii_uppercase();
+    if matches!(queue_id, 1700 | 1710) || qt.contains("ARENA") || qt.contains("CHERRY") {
+        return (default_summoner_spells_localized(lang), false);
+    }
+    let rift = default_summoner_spells_localized(lang);
+    if queue_id == 450 || qt.contains("ARAM") || qt.contains("HOWLING") || qt.contains("KIWI") {
+        let mark = RemoteSpellOption {
+            id: 32,
+            name: game_name(GameTextKind::Spell, 32, lang)
+                .unwrap_or(lang.pick("Mark", "Marquage"))
+                .to_string(),
+            key: "M".to_string(),
+            cooldown: "48s".to_string(),
+            description: lang
+                .pick(
+                    "Throw a snowball in a straight line; recast to dash to the marked unit.",
+                    "Lance une boule de neige en ligne droite ; réactivez pour foncer sur la cible marquée.",
+                )
+                .to_string(),
+        };
+        let clarity = RemoteSpellOption {
+            id: 13,
+            name: game_name(GameTextKind::Spell, 13, lang)
+                .unwrap_or(lang.pick("Clarity", "Clarté"))
+                .to_string(),
+            key: "Cl".to_string(),
+            cooldown: "240s".to_string(),
+            description: lang
+                .pick(
+                    "Restores mana to your champion and nearby allies.",
+                    "Rend du mana à votre champion et aux alliés proches.",
+                )
+                .to_string(),
+        };
+        let mut out = Vec::with_capacity(9);
+        for sp in rift {
+            if sp.id == 11 || sp.id == 12 {
+                continue;
+            }
+            out.push(sp);
+            if out.len() == 1 {
+                out.push(mark.clone());
+            }
+        }
+        out.push(clarity);
+        return (out, true);
+    }
+    if matches!(queue_id, 900 | 1900) || qt.contains("URF") {
+        let out = rift
+            .into_iter()
+            .filter(|sp| sp.id != 11 && sp.id != 12)
+            .collect();
+        return (out, true);
+    }
+    (rift, true)
+}
+
 pub fn spell_name_from_id_localized(spell_id: i64, lang: Lang) -> &'static str {
-    game_name(GameTextKind::Spell, spell_id, lang).unwrap_or(lang.pick("Spell", "Sort"))
+    game_name(GameTextKind::Spell, spell_id, lang).unwrap_or(match spell_id {
+        32 => lang.pick("Mark", "Marquage"),
+        13 => lang.pick("Clarity", "Clarté"),
+        _ => lang.pick("Spell", "Sort"),
+    })
 }
 
 fn perk_opt(
@@ -2205,6 +2290,7 @@ pub fn builtin_skins_for_localized(
         ],
     };
 
+    let base_ids: Vec<i64> = themes.iter().map(|(id, _, _)| *id).collect();
     themes
         .into_iter()
         .map(|(id, en, fr)| {
@@ -2216,16 +2302,68 @@ pub fn builtin_skins_for_localized(
             } else {
                 format!("{label} {champion_name}")
             };
+            let chromas = if id != base && !(1..=3).any(|off| base_ids.contains(&(id + off))) {
+                [
+                    (id + 1, lang.pick("Ruby", "Rubis"), ["#d63c48", "#f2a45a"]),
+                    (
+                        id + 2,
+                        lang.pick("Sapphire", "Saphir"),
+                        ["#3b82f6", "#38bdf8"],
+                    ),
+                    (
+                        id + 3,
+                        lang.pick("Obsidian", "Obsidienne"),
+                        ["#27272a", "#a855f7"],
+                    ),
+                ]
+                .into_iter()
+                .map(|(cid, cname, [c1, c2])| RemoteChromaOption {
+                    id: cid,
+                    name: format!("{name} ({cname})"),
+                    colors: vec![c1.to_string(), c2.to_string()],
+                    selected: cid == current,
+                })
+                .collect()
+            } else {
+                Vec::new()
+            };
+            let selected = id == current || chromas.iter().any(|c: &RemoteChromaOption| c.selected);
             RemoteSkinOption {
                 id,
                 name,
-                selected: id == current,
+                selected,
                 tile_path: format!(
                     "/lol-game-data/assets/v1/champion-tiles/{champion_id}/{id}.jpg"
                 ),
+                chromas,
             }
         })
         .collect()
+}
+
+/// Built-in fallback ward skin options when `/lol-ward-skins/v1/ward-skins` is absent (e.g. Demo).
+pub fn builtin_ward_skins_localized(
+    selected_ward_id: i64,
+    lang: Lang,
+) -> Vec<RemoteWardSkinOption> {
+    let cur = if selected_ward_id == 0 {
+        -1
+    } else {
+        selected_ward_id
+    };
+    [
+        (-1, "Default Sight Ward", "Balise de vision par défaut"),
+        (16, "Honor Ward", "Balise Honneur"),
+        (64, "Hextech Ward", "Balise Hextech"),
+        (145, "Spirit Blossom Ward", "Balise Fleur spirituelle"),
+    ]
+    .into_iter()
+    .map(|(id, en, fr)| RemoteWardSkinOption {
+        id,
+        name: lang.pick(en, fr).to_string(),
+        selected: id == cur,
+    })
+    .collect()
 }
 
 #[cfg(test)]

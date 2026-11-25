@@ -28,6 +28,7 @@ pub const LCU_PROJECTED_URIS: &[&str] = &[
     "/lol-champ-select/v1/pickable-champion-ids",
     "/lol-champ-select/v1/bannable-champion-ids",
     "/lol-champ-select/v1/skin-carousel-skins",
+    "/lol-ward-skins/v1/ward-skins",
     "/lol-perks/v1/pages",
     "/lol-end-of-game/v1/eog-stats-block",
 ];

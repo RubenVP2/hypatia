@@ -1717,15 +1717,47 @@ msgctxt "CompBlock"
 msgid "True"
 msgstr "Bruts"
 
-#: ui/helper.slint:466
+#: ui/helper.slint:566
 msgctxt "DraftHelperPanel"
-msgid "YOUR BUILD"
-msgstr "VOTRE BUILD"
+msgid "DRAFT GUIDE"
+msgstr "GUIDE DE DRAFT"
 
-#: ui/helper.slint:468
+#: ui/helper.slint:568
 msgctxt "DraftHelperPanel"
 msgid "{0} · {1}"
 msgstr "{0} · {1}"
+
+msgctxt "DraftHelperPanel"
+msgid "Hide guide"
+msgstr "Masquer le guide"
+
+msgctxt "DraftHelperPanel"
+msgid "Show guide"
+msgstr "Afficher le guide"
+
+msgctxt "ActiveLoadoutCard"
+msgid "ACTIVE LOADOUT"
+msgstr "ÉQUIPEMENT ACTIF"
+
+msgctxt "ActiveLoadoutCard"
+msgid "Missing Smite"
+msgstr "Châtiment manquant"
+
+msgctxt "ActiveLoadoutCard"
+msgid "No rune page active"
+msgstr "Aucune page de runes active"
+
+msgctxt "ActiveLoadoutCard"
+msgid "{0} · {1}"
+msgstr "{0} · {1}"
+
+msgctxt "ActiveLoadoutCard"
+msgid "{0} + {1}"
+msgstr "{0} + {1}"
+
+msgctxt "ActiveLoadoutCard"
+msgid "No spells selected"
+msgstr "Aucun sort sélectionné"
 
 msgctxt "EndScreen"
 msgid "Scoreboard"

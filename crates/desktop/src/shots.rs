@@ -18,9 +18,11 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferTyp
 use slint::platform::{Platform, WindowAdapter};
 use slint::{ComponentHandle, Global, PhysicalSize, PlatformError, Rgb8Pixel};
 
+use crate::companion::Companion;
 use crate::stats_view::StatsView;
 use crate::updates::UpdateState;
 use crate::{MainWindow, Theme};
+use hypatia_shared::RemoteCommand;
 
 struct ShotPlatform {
     window: Rc<MinimalSoftwareWindow>,
@@ -82,17 +84,19 @@ fn shots() {
     main.show().unwrap();
 
     let only = std::env::var("HYPATIA_SHOTS_ONLY").unwrap_or_default();
-    let capture = |shot: &str| {
+    let capture_at = |shot: &str, w: u32, h: u32| {
+        window.set_size(PhysicalSize::new(w, h));
         slint::platform::update_timers_and_animations();
-        let mut pixels = vec![Rgb8Pixel::default(); (width * height) as usize];
+        let mut pixels = vec![Rgb8Pixel::default(); (w * h) as usize];
         window.request_redraw();
         window.draw_if_needed(|renderer| {
-            renderer.render(&mut pixels, width as usize);
+            renderer.render(&mut pixels, w as usize);
         });
         let path = dir.join(format!("{shot}.bmp"));
-        write_bmp(&path, width as usize, height as usize, &pixels);
+        write_bmp(&path, w as usize, h as usize, &pixels);
         println!("{}", path.display());
     };
+    let capture = |shot: &str| capture_at(shot, width, height);
     for (lang, code) in [(Lang::En, "en"), (Lang::Fr, "fr")] {
         app.set_lang(lang);
         slint::select_bundled_translation(code).unwrap();
@@ -182,5 +186,37 @@ fn shots() {
                 main.set_update_open(false);
             }
         }
+    }
+    if only.is_empty() || only.contains("champ-select") {
+        app.set_demo_phase("ChampSelect");
+        {
+            let mut dr = app.demo_remote.write().unwrap();
+            let _ = dr.apply_command(
+                &app,
+                &RemoteCommand::HoverChampion {
+                    action_id: 20,
+                    champion_id: 103,
+                },
+            );
+            let _ = dr.apply_command(&app, &RemoteCommand::SetSkin { skin_id: 103027 });
+        }
+        main.set_demo(true);
+        main.set_stats_open(false);
+        let mut companion = Companion::default();
+        for (lang, code) in [(Lang::En, "en"), (Lang::Fr, "fr")] {
+            app.set_lang(lang);
+            slint::select_bundled_translation(code).unwrap();
+            main.set_language(code.into());
+            Theme::get(&main).set_dark(true);
+            companion.refresh(&main, &app);
+            if let Some(clock) = companion.clock() {
+                main.set_clock_total(clock.total_sec);
+                main.set_clock_down(clock.counts_down());
+                main.set_clock_seconds(clock.seconds_now(std::time::Instant::now()));
+            }
+            capture_at(&format!("champ-select-dark-{code}"), 1280, 900);
+        }
+        main.set_stats_open(true);
+        window.set_size(PhysicalSize::new(width, height));
     }
 }

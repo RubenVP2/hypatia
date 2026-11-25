@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use anyhow::{bail, Result};
 use hypatia_shared::{
-    keystone_name_from_id_localized, rune_style_name_localized, ChampionLookup, EndpointInfo,
-    EndpointOrigin, EventKind, Lang, RemoteCommand, RemoteRunePage, SourceId,
+    is_swiftplay_queue, keystone_name_from_id_localized, rune_style_name_localized, ChampionLookup,
+    EndpointInfo, EndpointOrigin, EventKind, Lang, RemoteCommand, RemoteRunePage, SourceId,
+    SwiftplaySlotSelection,
 };
 use serde_json::{json, Value};
 use tokio::time::Instant;
@@ -118,8 +119,10 @@ fn update_slot_state(states: &mut [String; 5], id: i64, state: &str) {
 pub struct DemoRemoteState {
     pub manual_override: bool,
     pub phase: String,
+    pub queue_id: i64,
     pub first_position: String,
     pub second_position: String,
+    pub swiftplay_slots: Vec<SwiftplaySlotSelection>,
     pub ready_response: String,
     pub sub_phase: String,
     pub my_action_id: i64,
@@ -130,6 +133,9 @@ pub struct DemoRemoteState {
     pub spell1_id: i64,
     pub spell2_id: i64,
     pub selected_skin_id: i64,
+    pub ward_skin_id: i64,
+    pub rerolls_remaining: u32,
+    pub bench_champions: Vec<i64>,
     pub ally_positions: [String; 5],
     pub ally_champions: [i64; 5],
     pub position_swap_state: [String; 5],
@@ -152,8 +158,29 @@ impl Default for DemoRemoteState {
         Self {
             manual_override: false,
             phase: "ChampSelect".to_string(),
+            queue_id: 420,
             first_position: "MIDDLE".to_string(),
             second_position: "TOP".to_string(),
+            swiftplay_slots: vec![
+                SwiftplaySlotSelection {
+                    champion_id: 103,
+                    champion_name: "Ahri".to_string(),
+                    position: "MIDDLE".to_string(),
+                    skin_id: 103027,
+                    spell1_id: 4,
+                    spell2_id: 14,
+                    perk_page_id: 101,
+                },
+                SwiftplaySlotSelection {
+                    champion_id: 266,
+                    champion_name: "Aatrox".to_string(),
+                    position: "TOP".to_string(),
+                    skin_id: 266007,
+                    spell1_id: 4,
+                    spell2_id: 12,
+                    perk_page_id: 102,
+                },
+            ],
             ready_response: "None".to_string(),
             sub_phase: "BAN_PICK".to_string(),
             my_action_id: 10,
@@ -164,6 +191,9 @@ impl Default for DemoRemoteState {
             spell1_id: 4,        // Flash
             spell2_id: 14,       // Ignite
             selected_skin_id: 103027,
+            ward_skin_id: -1,
+            rerolls_remaining: 2,
+            bench_champions: vec![81, 99, 555],
             ally_positions: [
                 "TOP".to_string(),
                 "JUNGLE".to_string(),
@@ -287,10 +317,21 @@ impl DemoRemoteState {
                 self.ready_timer_sec = 12;
             }
             "ChampSelect" => {
-                self.my_action_id = 10;
-                self.my_action_type = "ban".to_string();
-                self.my_action_completed = false;
-                self.sub_phase = "BAN_PICK".to_string();
+                if self.queue_id == 450 {
+                    self.my_action_id = 20;
+                    self.my_action_type = "pick".to_string();
+                    self.my_action_completed = true;
+                    self.sub_phase = "FINALIZATION".to_string();
+                    self.rerolls_remaining = 2;
+                    if self.spell2_id == 12 || self.spell2_id == 11 {
+                        self.spell2_id = 32;
+                    }
+                } else {
+                    self.my_action_id = 10;
+                    self.my_action_type = "ban".to_string();
+                    self.my_action_completed = false;
+                    self.sub_phase = "BAN_PICK".to_string();
+                }
                 self.phase_time_left_ms = 24_000;
                 self.draft_sec = 0;
             }
@@ -310,11 +351,53 @@ impl DemoRemoteState {
         let lang = app_state.lang();
         self.manual_override = true;
         match cmd {
+            RemoteCommand::CreateLobby { queue_id } => {
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                self.queue_id = *queue_id;
+                self.phase = "Lobby".to_string();
+                if *queue_id == 450 {
+                    self.spell1_id = 4;
+                    self.spell2_id = 32;
+                } else if self.spell2_id == 32 {
+                    self.spell2_id = 14;
+                }
+            }
+            RemoteCommand::PlayAgain => {
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                self.phase = "Lobby".to_string();
+            }
             RemoteCommand::SetLobbyPositions { first, second } => {
                 let _ = resolve_lcu_command_localized(cmd, None, lang)?;
                 self.first_position = first.trim().to_ascii_uppercase();
                 self.second_position = second.trim().to_ascii_uppercase();
                 self.ally_positions[2] = self.first_position.clone();
+            }
+            RemoteCommand::SetSwiftplaySlots { slots } => {
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                self.swiftplay_slots = slots.clone();
+                if let Some(primary) = self.swiftplay_slots.first() {
+                    self.first_position = primary.position.trim().to_ascii_uppercase();
+                    self.ally_positions[2] = self.first_position.clone();
+                    if primary.champion_id > 0 {
+                        self.my_champion_id = primary.champion_id;
+                        self.ally_champions[2] = primary.champion_id;
+                        self.selected_skin_id = if primary.skin_id > 0 {
+                            primary.skin_id
+                        } else {
+                            primary.champion_id * 1000
+                        };
+                    }
+                    self.spell1_id = primary.spell1_id;
+                    self.spell2_id = primary.spell2_id;
+                    if primary.perk_page_id > 0 {
+                        for p in &mut self.rune_pages {
+                            p.current = p.id == primary.perk_page_id;
+                        }
+                    }
+                }
+                if let Some(secondary) = self.swiftplay_slots.get(1) {
+                    self.second_position = secondary.position.trim().to_ascii_uppercase();
+                }
             }
             RemoteCommand::StartMatchmaking => {
                 self.phase = "Matchmaking".to_string();
@@ -326,15 +409,20 @@ impl DemoRemoteState {
             }
             RemoteCommand::AcceptReadyCheck => {
                 self.ready_response = "Accepted".to_string();
-                self.phase = "ChampSelect".to_string();
-                self.reset_phase_timers("ChampSelect");
+                if is_swiftplay_queue(self.queue_id, "") {
+                    self.phase = "InProgress".to_string();
+                    self.reset_phase_timers("InProgress");
+                } else {
+                    self.phase = "ChampSelect".to_string();
+                    self.reset_phase_timers("ChampSelect");
+                }
             }
             RemoteCommand::DeclineReadyCheck => {
                 self.ready_response = "Declined".to_string();
                 self.phase = "Lobby".to_string();
             }
             RemoteCommand::HoverChampion {
-                action_id: _,
+                action_id,
                 champion_id,
             } => {
                 if *champion_id <= 0 {
@@ -346,7 +434,7 @@ impl DemoRemoteState {
                         )
                     );
                 }
-                if self.my_action_type == "ban" {
+                if *action_id == 10 && self.my_action_type == "ban" {
                     self.my_banned_id = *champion_id;
                 } else {
                     self.my_champion_id = *champion_id;
@@ -364,8 +452,39 @@ impl DemoRemoteState {
                     self.sub_phase = "FINALIZATION".to_string();
                 }
             }
+            RemoteCommand::RerollChampion => {
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                if self.rerolls_remaining == 0 {
+                    bail!(
+                        "{}",
+                        lang.pick("No rerolls remaining", "Aucune relance disponible")
+                    );
+                }
+                self.rerolls_remaining -= 1;
+                let prev = self.my_champion_id;
+                if prev > 0 && !self.bench_champions.contains(&prev) {
+                    self.bench_champions.push(prev);
+                }
+                const ARAM_POOL: &[i64] = &[103, 81, 99, 555, 202, 134, 236, 115];
+                let next = ARAM_POOL
+                    .iter()
+                    .copied()
+                    .find(|id| *id != prev && !self.bench_champions.contains(id))
+                    .unwrap_or(81);
+                self.my_champion_id = next;
+                self.ally_champions[2] = next;
+                self.selected_skin_id = next * 1000;
+            }
             RemoteCommand::SwapBenchChampion { champion_id } => {
                 let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                let prev = self.my_champion_id;
+                if let Some(pos) = self.bench_champions.iter().position(|id| id == champion_id) {
+                    if prev > 0 {
+                        self.bench_champions[pos] = prev;
+                    } else {
+                        self.bench_champions.remove(pos);
+                    }
+                }
                 self.my_champion_id = *champion_id;
                 self.ally_champions[2] = *champion_id;
                 self.selected_skin_id = *champion_id * 1000;
@@ -381,6 +500,10 @@ impl DemoRemoteState {
             RemoteCommand::SetSkin { skin_id } => {
                 let _ = resolve_lcu_command_localized(cmd, None, lang)?;
                 self.selected_skin_id = *skin_id;
+            }
+            RemoteCommand::SetWardSkin { ward_skin_id } => {
+                let _ = resolve_lcu_command_localized(cmd, None, lang)?;
+                self.ward_skin_id = *ward_skin_id;
             }
             RemoteCommand::SelectRunePage { page_id } => {
                 for p in &mut self.rune_pages {
@@ -618,9 +741,33 @@ impl DemoRemoteState {
     }
 
     fn lobby_payload(&self) -> Value {
+        let player_slots: Vec<Value> = self
+            .swiftplay_slots
+            .iter()
+            .map(|s| {
+                json!({
+                    "championId": s.champion_id,
+                    "positionPreference": s.position,
+                    "skinId": s.skin_id,
+                    "spell1": s.spell1_id,
+                    "spell2": s.spell2_id,
+                    "perkPageId": s.perk_page_id,
+                })
+            })
+            .collect();
         json!({
             "partyId": "party-7878-demo",
-            "queueId": 420,
+            "queueId": self.queue_id,
+            "localMember": {
+                "summonerId": 12345678,
+                "summonerName": "HypatiaObserver#EUW",
+                "puuid": "9a8b7c6d-5e4f-3a2b-1c0d-demo00000001",
+                "isLeader": true,
+                "ready": true,
+                "firstPositionPreference": self.first_position,
+                "secondPositionPreference": self.second_position,
+                "playerSlots": player_slots,
+            },
             "members": [
                 {
                     "summonerId": 12345678,
@@ -629,7 +776,8 @@ impl DemoRemoteState {
                     "isLeader": true,
                     "ready": true,
                     "firstPositionPreference": self.first_position,
-                    "secondPositionPreference": self.second_position
+                    "secondPositionPreference": self.second_position,
+                    "playerSlots": player_slots,
                 },
                 {
                     "summonerId": 87654321,
@@ -649,7 +797,7 @@ impl DemoRemoteState {
             "dodgeData": { "state": "PartyInitialized" },
             "estimatedQueueTime": 68.0,
             "isCurrentlyInQueue": self.phase == "Matchmaking" || self.phase == "ReadyCheck",
-            "queueId": 420,
+            "queueId": self.queue_id,
             "timeInQueue": self.queue_time_sec
         })
     }
@@ -694,6 +842,16 @@ impl DemoRemoteState {
     }
 
     fn champ_select_payload(&self, champions: &dyn ChampionLookup, lang: Lang) -> Value {
+        let is_aram = self.queue_id == 450;
+        let is_arena = self.queue_id == 1700;
+        let queue_type = match self.queue_id {
+            400 => "NORMAL_DRAFT",
+            440 => "RANKED_FLEX_SR",
+            450 => "ARAM",
+            480 => "SWIFTPLAY",
+            1700 => "CHERRY",
+            _ => "RANKED_SOLO_5x5",
+        };
         // Ranked Solo/Duo anonymization: solo teammates (0, 3, 4) keep empty PUUID and
         // summonerId 0, while premade ally 1 and self (cell 2) remain identified.
         let my_team: Vec<Value> = (0..5)
@@ -718,7 +876,7 @@ impl DemoRemoteState {
                 };
                 json!({
                     "cellId": i,
-                    "assignedPosition": self.ally_positions[i],
+                    "assignedPosition": if is_aram || is_arena { "" } else { &self.ally_positions[i] },
                     "championId": cid,
                     "championName": champions.resolve_champion_name_localized(cid, lang),
                     "summonerId": summoner_id,
@@ -728,7 +886,8 @@ impl DemoRemoteState {
                     "isPremade": is_premade,
                     "spell1Id": if i == 2 { self.spell1_id } else { 4 },
                     "spell2Id": if i == 2 { self.spell2_id } else if i == 1 { 11 } else { 12 },
-                    "selectedSkinId": if i == 2 { self.selected_skin_id } else { cid * 1000 }
+                    "selectedSkinId": if i == 2 { self.selected_skin_id } else { cid * 1000 },
+                    "wardSkinId": if i == 2 { self.ward_skin_id } else { -1 }
                 })
             })
             .collect();
@@ -758,25 +917,47 @@ impl DemoRemoteState {
         let my_bans = [self.my_banned_id, 157, 35];
         let their_bans = [777, 875, 233];
         let bans = step.min(6) as usize;
-        let ally_actions: Vec<Value> = DEMO_ALLY_LOCK
+        let mut ally_actions: Vec<Value> = DEMO_ALLY_LOCK
             .iter()
             .map(|&(cell, at)| {
                 json!({
                     "id": 100 + cell,
                     "actorCellId": cell,
                     "championId": self.ally_champions[cell as usize],
-                    "completed": step >= at,
+                    "completed": is_aram || step >= at,
                     "isInProgress": false,
                     "type": "pick"
                 })
             })
             .collect();
+        if self.my_action_type == "ban" {
+            ally_actions.push(json!({
+                "id": 20,
+                "actorCellId": 2,
+                "championId": self.my_champion_id,
+                "completed": false,
+                "isInProgress": false,
+                "type": "pick"
+            }));
+        }
+
+        let bench_list: Vec<Value> = if is_aram {
+            self.bench_champions
+                .iter()
+                .map(|&cid| json!({ "championId": cid }))
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         json!({
             "localPlayerCellId": 2,
-            "queueType": "RANKED_SOLO_5x5",
+            "queueType": queue_type,
+            "benchEnabled": is_aram,
+            "benchChampions": bench_list,
+            "rerollsRemaining": if is_aram { self.rerolls_remaining } else { 0 },
             "myTeam": my_team,
-            "theirTeam": demo_their_team(step),
+            "theirTeam": if is_aram { json!([]) } else { demo_their_team(step) },
             "actions": [
                 [
                     {
@@ -791,11 +972,11 @@ impl DemoRemoteState {
                 ally_actions
             ],
             "bans": {
-                "myTeamBans": &my_bans[..bans.div_ceil(2)],
-                "theirTeamBans": &their_bans[..bans / 2]
+                "myTeamBans": if is_aram { &[][..] } else { &my_bans[..bans.div_ceil(2)] },
+                "theirTeamBans": if is_aram { &[][..] } else { &their_bans[..bans / 2] }
             },
-            "positionSwaps": swap_entries(&self.position_swap_state),
-            "swaps": swap_entries(&self.pick_swap_state),
+            "positionSwaps": if is_aram || is_arena { Vec::new() } else { swap_entries(&self.position_swap_state) },
+            "swaps": if is_aram { Vec::new() } else { swap_entries(&self.pick_swap_state) },
             "trades": swap_entries(&self.trade_state),
             "timer": {
                 "phase": self.sub_phase,

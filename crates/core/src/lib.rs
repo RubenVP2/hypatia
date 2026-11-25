@@ -516,6 +516,7 @@ impl AppState {
         let pickable_champion_ids = lcu("/lol-champ-select/v1/pickable-champion-ids");
         let bannable_champion_ids = lcu("/lol-champ-select/v1/bannable-champion-ids");
         let skin_carousel = lcu("/lol-champ-select/v1/skin-carousel-skins");
+        let ward_skins = lcu("/lol-ward-skins/v1/ward-skins");
         let rune_pages = lcu("/lol-perks/v1/pages");
         let end_of_game = lcu("/lol-end-of-game/v1/eog-stats-block");
         let presences = store.current(SourceId::RiotClient, "/chat/v4/presences");
@@ -538,6 +539,7 @@ impl AppState {
             pickable_champion_ids: pickable_champion_ids.as_deref(),
             bannable_champion_ids: bannable_champion_ids.as_deref(),
             skin_carousel: skin_carousel.as_deref(),
+            ward_skins: ward_skins.as_deref(),
             rune_pages: rune_pages.as_deref(),
             live_allgame: allgame.as_deref(),
             live_active: active.as_deref(),

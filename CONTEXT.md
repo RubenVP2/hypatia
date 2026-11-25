@@ -41,16 +41,16 @@ The dpm.lol-style knowledge about champions and the player: Champion Build (rune
 - **Invariant**: The Mobile Remote's Stats tab reads the same getters through `GET /api/stats/{view}` (`remote_stats`), with the pairing token; it adds no `RemoteCommand`, and the phone cannot switch Online stats. The pushed snapshot's `stats_revision` tells it when a fetch landed.
 
 ### Draft Helper
-The champ-select block of the Match Projection (`ChampSelectSummary::helper`, `crates/shared/src/draft_helper.rs`) for the player's hovered or locked champion: rune page, spells, core items, lane opponent with matchup win rate, both teams' Team Comp profile, and up to four comp tips. Shown on the desktop champ-select view, the mini widget, and the Mobile Remote's Guide tab.
+The champ-select block of the Match Projection (`ChampSelectSummary::helper`, `crates/shared/src/draft_helper.rs`) for the player's hovered or locked champion: rune page, spells, core items, lane opponent with matchup win rate, both teams' Team Comp profile, and up to four comp tips. Shown as a collapsible panel under the desktop champ-select view, a one-row strip in the mini widget, and a dismissible `Guide` bottom sheet on the Mobile Remote.
 - **Invariant**: Projection reads Champion Stats through the `HelperStats` seam, never fetching; each value keeps its `StatsOrigin` (Riot client first for runes and spells, then Online, then Local from the player's own history), and missing data leaves the field empty.
 - **Invariant**: Team comps and the lane opponent use champion IDs only, so Ranked Solo/Duo allies stay as anonymized as the projection left them.
-- **Invariant**: The Mobile Remote's apply button reuses the existing rune page command; the helper adds no Riot write.
+- **Invariant**: The Mobile Remote's apply buttons reuse the allowlisted rune page and summoner spell commands; the helper adds no extra Riot endpoint.
 
 ### Attribution
 The credit an online stats provider requires next to its data: its name and the page the data came from, carried by Online values and shown as a visible link. The provider is MetaBot.GG (`docs/research/online-stats-source.md`).
 
 ### Mobile Remote
-The opt-in LAN companion serving an authenticated local web controller where a paired phone displays current match state and triggers a strictly closed allowlist of League Client actions (role preferences, queueing, ready check, champion hover/lock, spells, skins, rune pages, swaps/trades).
+The opt-in LAN companion serving an authenticated local web controller where a paired phone displays current match state and triggers a strictly closed allowlist of League Client actions (lobby creation, role preferences, Swiftplay slot setup, queueing, ready check, pre-pick intent and champion hover/lock, ARAM reroll and bench swap, spells, skins/chromas, ward skins, rune pages, swaps/trades, and post-game play again).
 - **Invariant**: Arbitrary URIs, HTTP methods, and unvalidated payloads are rejected by the command allowlist; outside explicit opt-in Mobile Remote commands, Riot inspection remains strictly read-only.
 
 ### Telemetry Observatory

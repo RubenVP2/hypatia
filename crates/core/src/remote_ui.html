@@ -942,17 +942,122 @@ button:disabled { cursor: default; }
 .tile.wide b { font-size: 34px; }
 .team-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 4px 6px; }
 
-/* ---- Mode switch (Match | Stats), last row of the dock --------------------------------------- */
-.mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--glass-row); }
-.mode-btn {
-  min-height: var(--tap);
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  border: 1px solid transparent; border-radius: 3px;
-  font: 700 13px var(--font-display); letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--muted);
+/* ---- Secondary Guide sheet, Comfort strip, Chromas, Queue & Swiftplay cards ---------------- */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 26;
+  background: rgba(5, 8, 13, 0.72);
+  display: flex; align-items: flex-end; justify-content: center;
 }
-.mode-btn .icon { width: 17px; height: 17px; }
-.mode-btn.active { background: var(--raised); border-color: var(--text); color: var(--text); }
+[data-theme="light"] .sheet-backdrop { background: rgba(20, 23, 31, 0.48); }
+.sheet-backdrop[hidden] { display: none; }
+.sheet {
+  width: 100%; max-width: 560px; max-height: 82vh;
+  display: flex; flex-direction: column;
+  background: var(--shell);
+  border-top: 1px solid var(--gold-bright);
+  border-radius: var(--r) var(--r) 0 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--rule);
+}
+.sheet-body {
+  padding: 12px 14px 20px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.draft-actions { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.guide-pill {
+  position: relative; height: 30px; padding: 0 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
+  background: var(--glass-row);
+  font: 700 11px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text);
+}
+.guide-pill::after { content: ""; position: absolute; inset: -7px 0; }
+.guide-pill svg { width: 14px; height: 14px; color: var(--accent); }
+.comfort-wrap { margin-bottom: 10px; }
+.comfort-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.comfort-strip {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  margin: 0 -14px; padding: 2px 14px 4px;
+}
+.comfort-strip::-webkit-scrollbar { display: none; }
+.comfort-btn {
+  position: relative; flex-shrink: 0; width: 54px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.comfort-btn .pt { width: 46px; height: 46px; border-color: var(--gold); }
+.comfort-btn.sel .pt { border: 2px solid var(--gold-bright); }
+.comfort-btn .champ-name { font-size: 11px; }
+.fav-pip {
+  position: absolute; top: -2px; right: 2px; z-index: 2;
+  width: 15px; height: 15px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  background: var(--shell); border: 1px solid var(--gold-bright); color: var(--gold-bright);
+}
+.champ { position: relative; }
+.ally-pip {
+  position: absolute; top: 3px; left: 3px; z-index: 2;
+  padding: 1px 4px; border-radius: 3px;
+  background: var(--shell); border: 1px solid var(--blue); color: var(--blue);
+  font: 700 11px/1.1 var(--font-mono);
+}
+.star-btn {
+  min-width: 44px; min-height: 44px; padding: 0 10px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
+  background: var(--glass-row); color: var(--muted); font-size: 12px; font-weight: 700;
+}
+.star-btn.on { border-color: var(--gold-bright); color: var(--gold-bright); background: var(--raised); }
+.smite-warn {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; margin-bottom: 10px;
+  border: 1px solid var(--danger); border-radius: var(--r-sm);
+  background: var(--danger-soft); color: var(--text); font-size: 13px; font-weight: 700;
+}
+.seg.three { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+.seg button { min-height: 44px; }
+.rec-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--glass-row);
+}
+.rec-card.current { border-color: var(--gold-bright); background: var(--raised); }
+.rec-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chroma-sec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.chroma-swatches { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.chroma-btn {
+  width: 44px; height: 44px; border-radius: var(--r-sm);
+  border: 1px solid var(--rule); background: var(--glass-row);
+  display: inline-grid; place-items: center;
+}
+.chroma-btn.sel { border: 2px solid var(--gold-bright); background: var(--raised); }
+.chroma-dot {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.queue-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+.queue-card {
+  min-height: 52px; padding: 10px 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--glass-row); text-align: left; font-weight: 700; font-size: 14px;
+}
+.queue-card.active { border-color: var(--text); background: var(--raised); }
+.swift-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.swift-slot {
+  min-height: 68px; padding: 8px 10px;
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--glass-row); text-align: left; min-width: 0;
+}
+.swift-slot.focus { border-color: var(--gold-bright); background: var(--raised); }
+.stats-back {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px;
+}
 
 /* ---- Stats tab: Champion Stats, read-only ---------------------------------------------------- */
 .st-hero { display: flex; align-items: center; gap: 12px; }
@@ -1093,6 +1198,9 @@ button:disabled { cursor: default; }
         </div>
       </div>
       <div class="top-actions">
+        <button id="stats-top-btn" class="icon-btn" type="button" aria-label="Stats" aria-pressed="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></svg>
+        </button>
         <button id="alert-top-btn" class="icon-btn" type="button" aria-label="Alerts">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </button>
@@ -1157,6 +1265,8 @@ button:disabled { cursor: default; }
   <div id="bottom-dock" class="dock" hidden>
     <div id="dock-content" class="dock-inner"></div>
   </div>
+
+  <div id="guide-sheet" class="sheet-backdrop" hidden></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1458,7 +1568,37 @@ button:disabled { cursor: default; }
       applyShort: "Apply",
       lvlDelta: n => `${n > 0 ? "+" : ""}${n} Lvl`,
       csDelta: n => `${n > 0 ? "+" : ""}${n} CS`,
-      changeSpellHint: "Tap D or F to change"
+      changeSpellHint: "Tap D or F to change",
+      tabPrep: "Runes & Spells",
+      backToMatch: "Back to match",
+      startLobby: "Start a lobby",
+      changeMode: "Change mode",
+      playAgain: "Play again",
+      rolelessReady: "No lane selection in this mode — ready to queue.",
+      saveSlots: "Save slots",
+      savedSlots: "Saved",
+      slotLabel: n => `Slot ${n}`,
+      chooseChampSlot: "Select champion",
+      pickIntent: n => `Intent: ${n}`,
+      declareIntent: "Hover your pick intent",
+      comfortTitle: "Favorites & comfort",
+      starChamp: "Favorite",
+      starredChamp: "Favorited",
+      allyHoverTag: "ALLY",
+      allyHoverWarn: n => `An ally is hovering ${n}`,
+      missingSmite: "Assigned Jungle without Smite",
+      equipSmite: "Equip Smite",
+      arenaFixedSpells: "Summoner spells are fixed in Arena.",
+      recRunes: "Recommended",
+      noRecRunes: "Hover or lock a champion to load recommended runes.",
+      applyBoth: "Runes + Spells",
+      editBuilder: "Customize",
+      applySpells: "Apply spells",
+      chromas: "Chromas",
+      baseSkin: "Base",
+      wardSkins: "Ward skin",
+      reroll: n => `Reroll (${n})`,
+      close: "Close"
     },
     fr: {
       title: "Hypatia — Télécommande mobile",
@@ -1752,7 +1892,37 @@ button:disabled { cursor: default; }
       applyShort: "Appliquer",
       lvlDelta: n => `${n > 0 ? "+" : ""}${n} Niv`,
       csDelta: n => `${n > 0 ? "+" : ""}${n} CS`,
-      changeSpellHint: "Touchez D ou F pour changer"
+      changeSpellHint: "Touchez D ou F pour changer",
+      tabPrep: "Runes & Sorts",
+      backToMatch: "Retour à la partie",
+      startLobby: "Créer un salon",
+      changeMode: "Changer de mode",
+      playAgain: "Rejouer",
+      rolelessReady: "Pas de choix de voie dans ce mode — prêt à lancer.",
+      saveSlots: "Enregistrer",
+      savedSlots: "Enregistré",
+      slotLabel: n => `Emplacement ${n}`,
+      chooseChampSlot: "Choisir un champion",
+      pickIntent: n => `Intention : ${n}`,
+      declareIntent: "Survolez votre intention de choix",
+      comfortTitle: "Favoris & confort",
+      starChamp: "Favori",
+      starredChamp: "En favori",
+      allyHoverTag: "ALLIÉ",
+      allyHoverWarn: n => `Un allié survole ${n}`,
+      missingSmite: "Jungle assigné sans Châtiment",
+      equipSmite: "Équiper Châtiment",
+      arenaFixedSpells: "Les sorts d'invocateur sont fixes en Arène.",
+      recRunes: "Recommandées",
+      noRecRunes: "Survolez ou verrouillez un champion pour charger les runes recommandées.",
+      applyBoth: "Runes + Sorts",
+      editBuilder: "Modifier",
+      applySpells: "Appliquer les sorts",
+      chromas: "Chromas",
+      baseSkin: "Base",
+      wardSkins: "Balise",
+      reroll: n => `Relancer (${n})`,
+      close: "Fermer"
     }
   };
 
@@ -1764,6 +1934,7 @@ button:disabled { cursor: default; }
     7: { en: "Heal", fr: "Soins" },
     11: { en: "Smite", fr: "Châtiment" },
     12: { en: "Teleport", fr: "Téléportation" },
+    13: { en: "Clarity", fr: "Clarté" },
     14: { en: "Ignite", fr: "Embrasement" },
     21: { en: "Barrier", fr: "Barrière" },
     32: { en: "Mark", fr: "Marquage" }
@@ -1809,6 +1980,11 @@ button:disabled { cursor: default; }
   const storedOverride = store.get("hypatia_lang_override") || "";
   const storedServerLang = store.get("hypatia_last_server_lang") || "";
   const browserPrefLang = (navigator.language || "").toLowerCase().startsWith("fr") ? "fr" : "en";
+  let storedFavs = [];
+  try {
+    const parsedFavs = JSON.parse(store.get("hypatia_fav_champs") || "[]");
+    if (Array.isArray(parsedFavs)) storedFavs = parsedFavs.map(Number).filter(n => n > 0);
+  } catch (_) {}
 
   const ui = {
     state: null,
@@ -1819,17 +1995,32 @@ button:disabled { cursor: default; }
     theme: store.get("hypatia_theme")
       || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"),
     csTab: "pick",
+    guideOpen: false,
     draftExpanded: false,
     liveTab: "allies",
     champQuery: "",
     champRole: "ALL",
+    favChamps: storedFavs,
+    lastDraftKey: "",
+    wasPickLocked: false,
+    activePageSig: "",
+    builderDirty: false,
     selectingFirstRole: true,
     lobbyFirst: "MIDDLE",
     lobbySecond: "TOP",
     lobbySynced: false,
+    lobbyQueueId: 0,
+    lobbyQueueOpen: false,
+    swiftSlot: 0,
+    swiftSlots: [],
+    swiftSyncedKey: "",
+    swiftChampOpen: false,
+    swiftQuery: "",
+    swiftSpellSlot: 1,
+    swiftSpellOpen: false,
     spellSlot: 1,
     spellPickerOpen: false,
-    runeSubView: "saved",
+    runeSubView: "recommended",
     customPrimary: 8100,
     customSub: 8200,
     // 9 slots: [keystone, p1, p2, p3, s1, s2, shardOff, shardFlex, shardDef]
@@ -1898,6 +2089,11 @@ button:disabled { cursor: default; }
     document.documentElement.lang = lang;
     document.title = t("title");
     if (!ui.customNameEdited) ui.customName = DEFAULT_CUSTOM_NAMES[lang];
+    const stBtn = $("stats-top-btn");
+    const inStats = ui.mode === "stats";
+    stBtn.classList.toggle("on", inStats);
+    stBtn.setAttribute("aria-pressed", String(inStats));
+    stBtn.setAttribute("aria-label", inStats ? t("backToMatch") : t("modeStats"));
     $("lang-lbl").textContent = t("language");
     $("lang-val").textContent = lang.toUpperCase();
     $("theme-lbl").textContent = t("theme");
@@ -2058,8 +2254,13 @@ button:disabled { cursor: default; }
     const fr = activeLang() === "fr";
     if (u.includes("RANKED_SOLO") || u.includes("SOLO/DUO")) return fr ? "Classée Solo/Duo" : "Ranked Solo/Duo";
     if (u.includes("RANKED_FLEX") || u.includes("FLEX")) return fr ? "Classée Flexible" : "Ranked Flex";
+    if (u.includes("SWIFTPLAY") || u.includes("RAPIDE")) return fr ? "Partie rapide" : "Swiftplay";
     if (u.includes("DRAFT")) return fr ? "Normale Draft" : "Normal Draft";
     if (u.includes("ARAM")) return "ARAM";
+    if (u.includes("ARENA") || u.includes("CHERRY") || u.includes("ARÈNE")) return fr ? "Arène" : "Arena";
+    if (u.includes("ARURF")) return "ARURF";
+    if (u.includes("URF")) return "URF";
+    if (u.includes("BOT") || u.includes("IA") || u.includes("AI")) return fr ? "Coop vs IA" : "Co-op vs AI";
     return String(q || "").replace(/_/g, " ");
   }
   function gameModeLabel(raw) {
@@ -2098,6 +2299,7 @@ button:disabled { cursor: default; }
   const TOWER_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M 6 4 H 9.5 V 7 H 14.5 V 4 H 18 V 9.5 L 16 11.5 V 18 L 19 21 H 5 L 8 18 V 11.5 L 6 9.5 Z"/></svg>`;
   const TAB_ICONS = {
     pick: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+    prep: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>`,
     skins: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.4L20 11l-5.4 2.6L12 19l-2.6-5.4L4 11l5.4-2.6z"/></svg>`,
     loadout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 4v6c0 4.5-3 7.2-7 8-4-.8-7-3.5-7-8V7z"/><path d="M12 8v8M9 12h6"/></svg>`,
     guide: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5.5-5.5 2 2-5.5z"/></svg>`,
@@ -2184,7 +2386,10 @@ button:disabled { cursor: default; }
       const act = cs.active_action;
       let champ = me && me.champion_id > 0 ? me.champion_id : 0;
       if (!champ && act && act.is_my_turn && act.action_type !== "ban") champ = act.champion_id || 0;
-      if (champ > 0) return { cat: "splash", id: skinFor(cs.selected_skin_id, champ), mode: "" };
+      if (!champ && cs.intent_action && cs.intent_action.champion_id > 0) champ = cs.intent_action.champion_id;
+      const activeSkin = (cs.available_skins || []).find(sk => sk.selected);
+      const sceneSkinId = activeSkin ? activeSkin.id : cs.selected_skin_id;
+      if (champ > 0) return { cat: "splash", id: skinFor(sceneSkinId, champ), mode: "" };
     }
     if (s.phase === "InProgress" && s.live_game) {
       const lg = s.live_game;
@@ -2388,21 +2593,17 @@ button:disabled { cursor: default; }
     morphChildren(a, b);
   }
 
-  /** The dock: the view's tabs and action, then the Match | Stats switch, always last. */
+  /** The dock: strictly the active phase's primary CTA and tabs. */
   function renderDock(html) {
     const dock = $("bottom-dock");
-    dock.hidden = false;
-    morphInto($("dock-content"), (html || "") + modeRowHtml());
+    if (!html) {
+      dock.hidden = true;
+      $("dock-content").innerHTML = "";
+    } else {
+      dock.hidden = false;
+      morphInto($("dock-content"), html);
+    }
     syncDockHeight();
-  }
-  const MATCH_SVG = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5M14 5h5v5M5 5l14 14M10 19H5v-5"/></svg>`;
-  const CHART_SVG = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></svg>`;
-  function modeRowHtml() {
-    const stats = ui.mode === "stats";
-    return `<div class="mode-row" role="tablist" aria-label="${esc(t("modeLabel"))}" data-key="mode-row">
-        <button class="mode-btn ${stats ? "" : "active"}" role="tab" aria-selected="${!stats}" data-action="mode" data-mode="match">${MATCH_SVG}<span>${esc(t("modeMatch"))}</span></button>
-        <button class="mode-btn ${stats ? "active" : ""}" role="tab" aria-selected="${stats}" data-action="mode" data-mode="stats">${CHART_SVG}<span>${esc(t("modeStats"))}</span></button>
-      </div>`;
   }
   function syncDockHeight() {
     const dock = $("bottom-dock");
@@ -2417,15 +2618,169 @@ button:disabled { cursor: default; }
     ).join("")}</div>`;
   }
 
-  // ---- Lobby ----------------------------------------------------------------------------------
+  // ---- Lobby & Queue Selector -----------------------------------------------------------------
   const MINI_CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+  const CHEV_RIGHT_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>`;
+
+  function queueGridHtml(queues, activeId) {
+    if (!queues || !queues.length) return "";
+    return `<div class="queue-grid">${queues.map(q => `
+      <button class="queue-card ${q.queue_id === activeId ? "active" : ""}" data-action="create-lobby" data-queue="${q.queue_id}">
+        <span class="ellipsis">${esc(q.name)}</span>
+        ${CHEV_RIGHT_SVG}
+      </button>`).join("")}</div>`;
+  }
+
+  function normalizeSwiftSlot(src, fallbackPos, defPage) {
+    const cid = Number(src && src.champion_id) || 0;
+    return {
+      champion_id: cid,
+      champion_name: (src && src.champion_name) || "",
+      position: (src && src.position) || fallbackPos,
+      skin_id: Number(src && src.skin_id) || (cid > 0 ? cid * 1000 : 0),
+      spell1_id: Number(src && src.spell1_id) || 4,
+      spell2_id: Number(src && src.spell2_id) || 14,
+      perk_page_id: Number(src && src.perk_page_id) || defPage
+    };
+  }
+
+  function syncSwiftplaySlots(l) {
+    const raw = l.swiftplay_slots || [];
+    const defPage = ((l.rune_pages || []).find(p => p.current) || (l.rune_pages || [])[0] || {}).id || 0;
+    const serverPair = [normalizeSwiftSlot(raw[0], "MIDDLE", defPage), normalizeSwiftSlot(raw[1], "TOP", defPage)];
+    const key = `${l.queue_id}:${JSON.stringify(serverPair)}`;
+    if (key !== ui.swiftSyncedKey || ui.swiftSlots.length !== 2) {
+      ui.swiftSyncedKey = key;
+      ui.swiftSlots = serverPair.map(sl => ({ ...sl }));
+      if (ui.swiftSlot > 1) ui.swiftSlot = 0;
+    }
+    return serverPair;
+  }
+
+  function renderSwiftplayBody(l) {
+    const serverPair = syncSwiftplaySlots(l);
+    const dirty = JSON.stringify(ui.swiftSlots) !== JSON.stringify(serverPair);
+    const canSave = ui.swiftSlots.every(sl => sl.champion_id > 0);
+    renderDock(`<div class="dock-row">
+        <button class="btn btn-ghost ${dirty ? "btn-dirty" : ""}" data-action="save-swift-slots" ${canSave ? "" : "disabled"}>${dirty ? esc(t("saveSlots")) : `${MINI_CHECK_SVG}${esc(t("savedSlots"))}`}</button>
+        <button class="btn btn-plate" data-action="start-queue">${esc(t("findMatch"))}</button>
+      </div>`);
+    const cur = ui.swiftSlots[ui.swiftSlot] || ui.swiftSlots[0];
+    const spells = l.available_spells || [];
+    const s1Raw = spells.find(sp => sp.id === cur.spell1_id) || { id: cur.spell1_id || 4, name: "Flash" };
+    const s2Raw = spells.find(sp => sp.id === cur.spell2_id) || { id: cur.spell2_id || 14, name: "Ignite" };
+    const s1Name = spellName(s1Raw.id, s1Raw.name);
+    const s2Name = spellName(s2Raw.id, s2Raw.name);
+    const q = ui.swiftQuery.trim().toLowerCase();
+    const champs = (l.champions || []).filter(c => !q || c.name.toLowerCase().includes(q));
+    const slotSkins = ((l.slot_skins || [])[ui.swiftSlot] || []).filter(sk => Math.floor(sk.id / 1000) === cur.champion_id);
+    const pages = l.rune_pages || [];
+
+    return `
+      <section class="panel" data-key="swift-panel">
+        <div class="swift-slots">
+          ${ui.swiftSlots.map((sl, idx) => {
+            const cName = sl.champion_name || ((l.champions || []).find(c => c.id === sl.champion_id) || {}).name || "";
+            return `<button class="swift-slot ${ui.swiftSlot === idx ? "focus" : ""}" data-action="swift-focus" data-idx="${idx}">
+              ${champPt(sl.champion_id, cName, 40, ui.swiftSlot === idx ? "self" : "")}
+              <span class="grow">
+                <span class="slot-k">${esc(t("slotLabel", idx + 1))} · ${esc(laneInfo(sl.position).label)}</span><br>
+                <b class="ellipsis" style="display:block;font-size:14px">${esc(cName || t("chooseChampSlot"))}</b>
+              </span>
+              ${roundel(sl.position)}
+            </button>`;
+          }).join("")}
+        </div>
+        <div class="prep-sec">
+          <div class="between">
+            <span class="eyebrow">${esc(t("chooseChampSlot"))}</span>
+            <button class="btn btn-ghost btn-sm" data-action="swift-toggle-champs">${esc(ui.swiftChampOpen ? t("close") : t("chooseChampSlot"))}</button>
+          </div>
+          ${ui.swiftChampOpen || !(cur.champion_id > 0) ? `
+            <div class="search-wrap" style="margin-top:8px">
+              <input id="swift-search" class="search" type="search" autocomplete="off" placeholder="${esc(t("filterPick"))}" value="${esc(ui.swiftQuery)}">
+            </div>
+            <div class="champ-grid" style="margin-top:8px;max-height:220px;overflow-y:auto">
+              ${champs.map(c => `<button class="champ ${c.id === cur.champion_id ? "sel" : ""}" data-action="swift-champ" data-id="${c.id}" data-name="${esc(c.name)}">
+                ${pt("champion", c.id, esc(initials(c.name)), 0)}
+                <span class="champ-name">${esc(c.name)}</span>
+              </button>`).join("")}
+            </div>` : ""}
+        </div>
+        <div class="prep-sec">
+          <div class="eyebrow" style="margin-bottom:8px">${esc(t("roles"))}</div>
+          <div class="lane-grid">
+            ${LANE_META_BASE.map(item => `<button class="lane-btn ${cur.position === item.key ? "chosen" : ""}" data-action="swift-lane" data-lane="${item.key}">
+              ${roundel(item.key)}
+              <span>${esc(laneInfo(item.key).label)}</span>
+            </button>`).join("")}
+          </div>
+        </div>
+        <div class="prep-sec">
+          <div class="prep-sec-head"><span class="eyebrow">${esc(t("hlSpells"))}</span><span class="meta">${esc(t("changeSpellHint"))}</span></div>
+          <div class="spell-duel">
+            <button class="spell-btn ${ui.swiftSpellOpen && ui.swiftSpellSlot === 1 ? "focus" : ""}" data-action="swift-spell-slot" data-slot="1">
+              ${pt("spell", s1Raw.id, spellFallbackGlyph(s1Raw.id, s1Name), 44)}
+              <span class="spell-btn-lbl"><span class="keycap">${esc(t("slotD"))}</span><span class="ellipsis">${esc(s1Name)}</span></span>
+            </button>
+            <button class="spell-swap-orb" data-action="swift-swap-spells" aria-label="${esc(t("swapDF"))}">
+              <svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
+            </button>
+            <button class="spell-btn ${ui.swiftSpellOpen && ui.swiftSpellSlot === 2 ? "focus" : ""}" data-action="swift-spell-slot" data-slot="2">
+              ${pt("spell", s2Raw.id, spellFallbackGlyph(s2Raw.id, s2Name), 44)}
+              <span class="spell-btn-lbl"><span class="keycap">${esc(t("slotF"))}</span><span class="ellipsis">${esc(s2Name)}</span></span>
+            </button>
+          </div>
+          ${ui.swiftSpellOpen ? `<div class="chip-grid">
+            ${spells.map(sp => {
+              const nm = spellName(sp.id, sp.name);
+              const on = (ui.swiftSpellSlot === 1 ? cur.spell1_id : cur.spell2_id) === sp.id;
+              return `<button class="chip ${on ? "active" : ""}" data-action="swift-pick-spell" data-id="${sp.id}">${pt("spell", sp.id, spellFallbackGlyph(sp.id, nm), 24, "no-rim")}<span>${esc(nm)}</span></button>`;
+            }).join("")}
+          </div>` : ""}
+        </div>
+        ${pages.length ? `<div class="prep-sec">
+          <div class="eyebrow" style="margin-bottom:8px">${esc(t("runes"))}</div>
+          <div class="chip-grid">${pages.map(pg => `<button class="chip ${cur.perk_page_id === pg.id ? "active" : ""}" data-action="swift-rune" data-id="${pg.id}">${pt("style", pg.primary_style_id, "", 20, "round no-rim")}<span>${esc(pg.name)}</span></button>`).join("")}</div>
+        </div>` : ""}
+        ${slotSkins.length ? `<div class="prep-sec">
+          <div class="eyebrow" style="margin-bottom:8px">${esc(t("tabSkins"))}</div>
+          <div class="chip-grid">${slotSkins.map(sk => `<button class="chip ${cur.skin_id === sk.id ? "active" : ""}" data-action="swift-skin" data-id="${sk.id}"><span>${esc(sk.name)}</span></button>`).join("")}</div>
+        </div>` : ""}
+      </section>`;
+  }
+
   function renderLobby(s) {
     const l = s.lobby;
-    if (!ui.lobbySynced && l) {
+    const qid = l ? l.queue_id : 0;
+    if ((!ui.lobbySynced || ui.lobbyQueueId !== qid) && l) {
       ui.lobbyFirst = l.first_position || "MIDDLE";
       ui.lobbySecond = l.second_position || "TOP";
+      ui.lobbyQueueId = qid;
       ui.lobbySynced = true;
     }
+    const canSwitchMode = (!l || l.is_leader) && (s.available_queues || []).length > 0;
+    const headPanel = `
+      <section class="panel" data-key="lobby-head">
+        <div class="between">
+          <div class="grow">
+            <h2 class="title">${esc((l && queueLabel(l.queue_name)) || t("leagueLobby"))}</h2>
+            <div class="sub-meta">${esc(t("lobby"))}${l && l.member_count ? " · " + esc(t("playersCount", l.member_count)) : ""}</div>
+          </div>
+          ${canSwitchMode ? `<button class="btn btn-ghost btn-sm" data-action="toggle-lobby-queues">${esc(ui.lobbyQueueOpen ? t("close") : t("changeMode"))}</button>`
+            : (l && l.member_count ? `<span class="tag gold">${esc(t("playersCount", l.member_count))}</span>` : "")}
+        </div>
+        ${canSwitchMode && ui.lobbyQueueOpen ? queueGridHtml(s.available_queues, qid) : ""}
+      </section>`;
+
+    if (l && l.is_swiftplay) {
+      return headPanel + renderSwiftplayBody(l);
+    }
+    if (l && l.is_roleless) {
+      renderDock(`<button class="btn btn-plate btn-block" data-action="start-queue">${esc(t("findMatch"))}</button>`);
+      return headPanel + `<section class="panel" data-key="lobby-roleless"><div class="meta">${esc(t("rolelessReady"))}</div></section>`;
+    }
+
     const dirty = !l || ui.lobbyFirst !== (l.first_position || "MIDDLE") || (ui.lobbyFirst !== "FILL" && ui.lobbySecond !== (l.second_position || "TOP"));
     renderDock(`<div class="dock-row">
         <button class="btn btn-ghost ${dirty ? "btn-dirty" : ""}" data-action="save-roles">${dirty ? esc(t("saveRoles")) : `${MINI_CHECK_SVG}${esc(t("savedRoles"))}`}</button>
@@ -2441,16 +2796,7 @@ button:disabled { cursor: default; }
         <span class="grow"><span class="slot-k">${esc(n === 1 ? t("primary") : t("secondary"))}</span><br><span class="slot-v">${esc(optional ? t("optionalRole") : l2.label)}</span></span>
       </button>`;
     };
-    return `
-      <section class="panel">
-        <div class="between">
-          <div class="grow">
-            <h2 class="title">${esc((l && queueLabel(l.queue_name)) || t("leagueLobby"))}</h2>
-            <div class="sub-meta">${esc(t("lobby"))}${l && l.member_count ? " · " + esc(t("playersCount", l.member_count)) : ""}</div>
-          </div>
-          ${l && l.member_count ? `<span class="tag gold">${esc(t("playersCount", l.member_count))}</span>` : ""}
-        </div>
-      </section>
+    return headPanel + `
       <section class="panel">
         <div class="section-head"><span class="eyebrow">${esc(t("roles"))}</span><span class="meta">${esc(t("lobbyHint"))}</span></div>
         <div class="role-pair">${slot(1, ui.lobbyFirst)}${slot(2, ui.lobbySecond)}</div>
@@ -2534,6 +2880,40 @@ button:disabled { cursor: default; }
   }
 
   // ---- Champion select ------------------------------------------------------------------------
+  function loadPerksIntoBuilder(cs, priId, subId, perks, name) {
+    if (!cs || !Array.isArray(perks) || perks.length !== 9) return;
+    ui.customPrimary = Number(priId) || ui.customPrimary;
+    ui.customSub = Number(subId) || ui.customSub;
+    ui.customPerks = perks.slice(0, 9).map(Number);
+    const sTree = (cs.rune_trees || []).find(x => x.id === ui.customSub);
+    const meta = [];
+    if (sTree) {
+      for (const pid of [ui.customPerks[4], ui.customPerks[5]]) {
+        for (const rk of ["slot1", "slot2", "slot3"]) {
+          if ((sTree[rk] || []).some(o => o.id === pid)) {
+            meta.push({ row: rk, id: pid });
+            break;
+          }
+        }
+      }
+    }
+    if (meta.length === 2) ui.customSubMeta = meta;
+    if (name && !ui.customNameEdited) ui.customName = name;
+    syncCustomRunesDefaults(cs);
+  }
+
+  function syncBuilderFromActivePage(cs) {
+    if (!cs) return;
+    const allPages = [...(cs.rune_pages || []), ...(cs.recommended_rune_pages || [])];
+    const active = allPages.find(p => p.current);
+    if (!active || !Array.isArray(active.selected_perk_ids) || active.selected_perk_ids.length !== 9) return;
+    const sig = `${active.id}:${active.primary_style_id}:${active.sub_style_id}:${active.selected_perk_ids.join(",")}`;
+    if (sig !== ui.activePageSig && !ui.builderDirty) {
+      ui.activePageSig = sig;
+      loadPerksIntoBuilder(cs, active.primary_style_id, active.sub_style_id, active.selected_perk_ids, active.name);
+    }
+  }
+
   function syncCustomRunesDefaults(cs) {
     if (!cs || !cs.rune_trees || !cs.rune_trees.length) return;
     const pTree = cs.rune_trees.find(x => x.id === ui.customPrimary) || cs.rune_trees[0];
@@ -2567,8 +2947,23 @@ button:disabled { cursor: default; }
     }
   }
 
+  function hoverTarget(cs) {
+    if (!cs) return null;
+    const act = cs.active_action;
+    if (act && act.is_my_turn && !act.completed) return act;
+    const me = (cs.my_team || []).find(a => a.is_self);
+    if (me && me.pick_locked) return null;
+    if (cs.intent_action && !cs.intent_action.completed) return cs.intent_action;
+    return null;
+  }
+
   const CHEV_DOWN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
   const LOCK_MINI_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+  const STAR_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></svg>`;
+  const STAR_MINI_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></svg>`;
+  const WARD_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>`;
+  const DICE_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/></svg>`;
+  const WARN_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3L2 20h20L12 3z"/><path d="M12 9v5M12 17.5v.01"/></svg>`;
 
   function draftBansMini(cs) {
     const myIds = (cs.my_team_ban_ids && cs.my_team_ban_ids.length) ? cs.my_team_ban_ids : (cs.my_team_bans || []).map(() => 0);
@@ -2580,13 +2975,17 @@ button:disabled { cursor: default; }
   }
 
   function draftHud(cs) {
+    const guideBtn = `<button class="guide-pill" data-action="toggle-guide" aria-expanded="${ui.guideOpen}">${TAB_ICONS.guide}<span>${esc(t("tabGuide"))}</span></button>`;
     if (ui.draftExpanded) {
       return `<section class="panel draft-hud" aria-label="${esc(t("champSelect"))}" data-key="draft-hud">
           <div class="draft-bar" style="padding-top:0;border-top:0">
             <span class="eyebrow">${esc(t("allies"))}</span>
-            <button class="draft-toggle open" data-action="toggle-draft" aria-expanded="true">
-              <span>${esc(t("draftCompact"))}</span>${CHEV_DOWN_SVG}
-            </button>
+            <div class="draft-actions">
+              ${guideBtn}
+              <button class="draft-toggle open" data-action="toggle-draft" aria-expanded="true">
+                <span>${esc(t("draftCompact"))}</span>${CHEV_DOWN_SVG}
+              </button>
+            </div>
           </div>
           ${draftBoard(cs)}
         </section>`;
@@ -2611,12 +3010,14 @@ button:disabled { cursor: default; }
         </div>
         <div class="draft-bar">
           <div class="draft-mini-group">
-            <span class="draft-mini-k blue">${esc(t("bans"))}</span>
-            ${draftBansMini(cs)}
+            ${cs.is_roleless ? "" : `<span class="draft-mini-k blue">${esc(t("bans"))}</span>${draftBansMini(cs)}`}
           </div>
-          <button class="draft-toggle" data-action="toggle-draft" aria-expanded="false">
-            <span>${esc(t("draftDetails"))}</span>${CHEV_DOWN_SVG}
-          </button>
+          <div class="draft-actions">
+            ${guideBtn}
+            <button class="draft-toggle" data-action="toggle-draft" aria-expanded="false">
+              <span>${esc(t("draftDetails"))}</span>${CHEV_DOWN_SVG}
+            </button>
+          </div>
         </div>
       </section>`;
   }
@@ -2630,14 +3031,14 @@ button:disabled { cursor: default; }
       const actLabel = a.acting_type === "ban" ? t("actingBan") : t("actingPick");
       const sub = [
         a.is_self ? t("youTag") : (a.summoner_name || ""),
-        laneInfo(a.assigned_position).label
+        cs.is_roleless ? "" : laneInfo(a.assigned_position).label
       ].filter(Boolean).join(" · ");
       const spellIcons = (a.spell1_id > 0 || a.spell2_id > 0)
         ? [a.spell1_id, a.spell2_id].filter(x => x > 0).map(id => pt("spell", id, spellFallbackGlyph(id, spellName(id, (spells.find(sp => sp.id === id) || {}).name)), 20, "no-rim")).join("")
         : "";
       return `<div class="ally ${state} ${a.is_self ? "self" : ""} ${acting ? "acting" : ""}" data-key="ally-${a.cell_id}">
         ${bannerHtml(a.selected_skin_id, a.champion_id)}
-        ${roundel(a.assigned_position)}
+        ${cs.is_roleless ? "" : roundel(a.assigned_position)}
         ${champPt(a.champion_id, a.champion_name, 38, a.is_self ? "self" : "")}
         <div class="grow">
           <div class="ally-name ellipsis">${esc(has ? a.champion_name : t("pending"))}</div>
@@ -2651,7 +3052,7 @@ button:disabled { cursor: default; }
     return `<div class="board" style="padding:6px 0 0;border-top:1px solid var(--rule)" data-key="draft-expanded">
         ${allies}
         <div class="board-foot">
-          <div class="strip"><span class="strip-lbl blue">${esc(t("bans"))}</span>${draftBansMini(cs)}</div>
+          ${cs.is_roleless ? "" : `<div class="strip"><span class="strip-lbl blue">${esc(t("bans"))}</span>${draftBansMini(cs)}</div>`}
           ${enemies ? `<div class="strip"><span class="strip-lbl red">${esc(t("enemies"))}</span>${enemies}</div>` : ""}
         </div>
       </div>`;
@@ -2663,7 +3064,7 @@ button:disabled { cursor: default; }
     const pos = laneInfo(cs.assigned_position);
     return incoming.map(sw => `<section class="panel spot swap-inline" data-key="isw-${esc(sw.kind)}-${sw.id}">
         <div class="swap-inline-info">
-          ${laneSvg(pos.key, 18, pos.color)}
+          ${cs.is_roleless ? "" : laneSvg(pos.key, 18, pos.color)}
           <div class="grow"><b class="ellipsis" style="display:block;font-size:13px">${esc(sw.caller_name)} · ${esc(swapKindLabel(sw.kind))}</b>${sw.detail ? `<span class="meta ellipsis" style="display:block">${esc(sw.detail)}</span>` : ""}</div>
         </div>
         <div class="swap-inline-btns">
@@ -2674,42 +3075,92 @@ button:disabled { cursor: default; }
   }
 
   function pickTab(cs, act, isBan) {
+    const isTurn = Boolean(act && act.is_my_turn && !act.completed);
+    const isMyBanTurn = Boolean(isTurn && isBan);
+    const target = hoverTarget(cs);
+    const canHover = Boolean(target);
+    const me = (cs.my_team || []).find(a => a.is_self);
+    const selectedId = target ? target.champion_id : (me ? me.champion_id : 0);
+    const selectedChamp = (cs.champions || []).find(c => c.id === selectedId);
+    const selectedName = (target && target.champion_name) || (selectedChamp && selectedChamp.name) || (me && me.champion_name) || "";
+    const favSet = new Set(ui.favChamps);
+    const allyHoveredIds = new Set((cs.my_team || []).filter(a => !a.is_self && a.champion_id > 0).map(a => a.champion_id));
+
     const q = ui.champQuery.trim().toLowerCase();
     const filtered = (cs.champions || []).filter(c => {
       if (q && !c.name.toLowerCase().includes(q)) return false;
-      if (ui.champRole !== "ALL" && !(c.roles || []).includes(ui.champRole)) return false;
+      if (!cs.is_roleless && ui.champRole !== "ALL" && !(c.roles || []).includes(ui.champRole)) return false;
       return true;
     });
-    const selectedId = act ? act.champion_id : 0;
-    const canAct = Boolean(act && act.is_my_turn && !act.completed);
-    const me = (cs.my_team || []).find(a => a.is_self);
-    const statusBar = !canAct ? `<div class="draft-status">
+
+    const comfortIds = [];
+    for (const id of [...ui.favChamps, ...(cs.comfort_champion_ids || [])]) {
+      if (id > 0 && !comfortIds.includes(id)) comfortIds.push(id);
+    }
+    const byId = new Map((cs.champions || []).map(c => [c.id, c]));
+    const comfortChamps = (!q && !isMyBanTurn)
+      ? comfortIds.map(id => byId.get(id)).filter(c => c && c.pickable !== false)
+      : [];
+
+    const statusText = me && me.pick_locked && me.champion_id > 0
+      ? t("lockedIn", me.champion_name)
+      : (target && selectedId > 0 && selectedName)
+        ? t("pickIntent", selectedName)
+        : target
+          ? t("declareIntent")
+          : t("waitingTurn");
+
+    const statusBar = !isTurn ? `<div class="draft-status">
         <div class="grow">
-          <b style="display:block;font-size:14px">${esc(me && me.champion_id > 0 && me.pick_locked ? t("lockedIn", me.champion_name) : t("waitingTurn"))}</b>
+          <b style="display:block;font-size:14px">${esc(statusText)}</b>
         </div>
         <div class="draft-status-links">
-          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="loadout">${esc(t("tabLoadout"))}</button>
-          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="guide">${esc(t("tabGuide"))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="prep">${esc(t("tabPrep"))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="cs-tab" data-tab="skins">${esc(t("tabSkins"))}</button>
         </div>
       </div>` : "";
+
+    const starBtn = (selectedId > 0 && !isMyBanTurn)
+      ? `<button class="star-btn ${favSet.has(selectedId) ? "on" : ""}" type="button" data-action="toggle-fav" data-id="${selectedId}" aria-pressed="${favSet.has(selectedId)}" title="${esc(favSet.has(selectedId) ? t("starredChamp") : t("starChamp"))}">
+          ${STAR_SVG}<span>${esc(favSet.has(selectedId) ? t("starredChamp") : t("starChamp"))}</span>
+        </button>` : "";
+
+    const comfortHtml = comfortChamps.length ? `<div class="comfort-wrap">
+        <div class="comfort-head"><span class="eyebrow">${esc(t("comfortTitle"))}</span></div>
+        <div class="comfort-strip">
+          ${comfortChamps.map(c => `<button class="comfort-btn ${c.id === selectedId ? "sel" : ""}" data-key="cf${c.id}" data-action="hover-champ" data-id="${c.id}" ${canHover ? "" : "disabled"} aria-label="${esc(c.name)}">
+            ${favSet.has(c.id) ? `<span class="fav-pip" aria-hidden="true">${STAR_MINI_SVG}</span>` : ""}
+            ${pt("champion", c.id, esc(initials(c.name)), 46)}
+            <span class="champ-name">${esc(c.name)}</span>
+          </button>`).join("")}
+        </div>
+      </div>` : "";
+
     return `<section class="panel" data-key="pick-panel">
         ${statusBar}
-        <div class="search-wrap">
-          <input id="champ-search" class="search" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(isBan ? t("filterBan") : t("filterPick"))}" value="${esc(ui.champQuery)}">
-          <button class="search-clear" type="button" data-action="clear-champ-search" aria-label="${esc(t("clearSearch"))}" ${ui.champQuery ? "" : "hidden"}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
+        ${comfortHtml}
+        <div class="row" style="gap:8px;margin-bottom:10px">
+          <div class="search-wrap grow" style="margin-bottom:0">
+            <input id="champ-search" class="search" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(isMyBanTurn ? t("filterBan") : t("filterPick"))}" value="${esc(ui.champQuery)}">
+            <button class="search-clear" type="button" data-action="clear-champ-search" aria-label="${esc(t("clearSearch"))}" ${ui.champQuery ? "" : "hidden"}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          ${starBtn}
         </div>
-        <div class="pills">
+        ${cs.is_roleless ? "" : `<div class="pills">
           ${["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"].map(rk => `
             <button class="pill ${ui.champRole === rk ? "active" : ""}" data-action="champ-role" data-role="${rk}">
               ${rk === "ALL" ? esc(t("all")) : `${laneSvg(rk, 14, laneInfo(rk).color)}<span>${esc(laneInfo(rk).label)}</span>`}
             </button>`).join("")}
-        </div>
+        </div>`}
         ${filtered.length ? `<div class="champ-grid">
           ${filtered.map(c => {
-            const allowed = isBan ? c.bannable !== false : c.pickable !== false;
-            return `<button class="champ ${c.id === selectedId ? "sel" + (isBan ? " ban-sel" : "") : ""}" data-key="c${c.id}" data-action="hover-champ" data-id="${c.id}" ${canAct && allowed ? "" : "disabled"} aria-label="${esc(c.name)}">
+            const allowed = isMyBanTurn ? c.bannable !== false : c.pickable !== false;
+            const allyHover = isMyBanTurn && allyHoveredIds.has(c.id);
+            return `<button class="champ ${c.id === selectedId ? "sel" + (isMyBanTurn ? " ban-sel" : "") : ""}" data-key="c${c.id}" data-action="hover-champ" data-id="${c.id}" data-name="${esc(c.name)}" ${canHover && allowed ? "" : "disabled"} aria-label="${esc(c.name)}">
+              ${allyHover ? `<span class="ally-pip">${esc(t("allyHoverTag"))}</span>` : ""}
+              ${favSet.has(c.id) && !isMyBanTurn ? `<span class="fav-pip" aria-hidden="true">${STAR_MINI_SVG}</span>` : ""}
               ${pt("champion", c.id, esc(initials(c.name)), 0)}
               <span class="champ-name">${esc(c.name)}</span>
             </button>`;
@@ -2736,13 +3187,56 @@ button:disabled { cursor: default; }
         ${skins.length <= 24 ? `<div class="carousel-foot" aria-hidden="true">${skins.map(sk => `<i class="${sk.selected ? "on" : ""}"></i>`).join("")}</div>` : ""}`;
   }
 
-  function loadoutTab(cs) {
+  function skinsTab(cs) {
+    const skins = cs.available_skins || [];
+    const activeSkin = skins.find(sk => sk.selected);
+    const chromas = (activeSkin && activeSkin.chromas) || [];
+    const wards = cs.available_wards || [];
+    const baseSelected = Boolean(activeSkin && !chromas.some(ch => ch.selected));
+    const chromaSec = chromas.length ? `
+      <div class="chroma-sec" data-key="chromas-${activeSkin.id}">
+        <div class="eyebrow">${esc(t("chromas"))} · ${esc(activeSkin.name)}</div>
+        <div class="chroma-swatches">
+          <button class="chroma-btn ${baseSelected ? "sel" : ""}" data-action="set-skin" data-id="${activeSkin.id}" title="${esc(t("baseSkin"))}" aria-label="${esc(t("baseSkin"))}">
+            <span class="chroma-dot" style="background:linear-gradient(135deg, var(--gold-bright), var(--raised))"></span>
+          </button>
+          ${chromas.map(ch => {
+            const cols = ch.colors || [];
+            const bg = cols.length >= 2
+              ? `linear-gradient(135deg, ${esc(cols[0])} 50%, ${esc(cols[1])} 50%)`
+              : (cols[0] ? esc(cols[0]) : "var(--gold)");
+            return `<button class="chroma-btn ${ch.selected ? "sel" : ""}" data-action="set-skin" data-id="${ch.id}" title="${esc(ch.name)}" aria-label="${esc(ch.name)}">
+              <span class="chroma-dot" style="background:${bg}"></span>
+            </button>`;
+          }).join("")}
+        </div>
+      </div>` : "";
+
+    const wardSec = wards.length ? `
+      <div class="chroma-sec" data-key="ward-skins">
+        <div class="eyebrow">${esc(t("wardSkins"))}</div>
+        <div class="chip-grid">
+          ${wards.map(w => `<button class="chip ${w.selected ? "active" : ""}" data-action="set-ward-skin" data-id="${w.id}">
+            ${WARD_SVG}<span>${esc(w.name)}</span>
+          </button>`).join("")}
+        </div>
+      </div>` : "";
+
+    return `<section class="panel" data-key="skins-only-panel">
+        ${skinsCarouselHtml(cs)}
+        ${chromaSec}
+        ${wardSec}
+      </section>`;
+  }
+
+  function prepTab(cs) {
     const spells = cs.available_spells || [];
     const s1Raw = spells.find(sp => sp.id === cs.spell1_id) || { id: cs.spell1_id || 4, name: "Flash", cooldown: "" };
     const s2Raw = spells.find(sp => sp.id === cs.spell2_id) || { id: cs.spell2_id || 14, name: "Ignite", cooldown: "" };
     const s1Name = spellName(s1Raw.id, s1Raw.name);
     const s2Name = spellName(s2Raw.id, s2Raw.name);
-    const pages = [...(cs.rune_pages || []), ...(cs.recommended_rune_pages || [])];
+    const savedPages = (cs.rune_pages && cs.rune_pages.length) ? cs.rune_pages : (cs.recommended_rune_pages || []);
+    const recCards = cs.recommended_cards || [];
     const pTree = (cs.rune_trees || []).find(tr => tr.id === ui.customPrimary);
     const sTree = (cs.rune_trees || []).find(tr => tr.id === ui.customSub);
     const spellBtn = (n, raw, name) => `<button class="spell-btn ${ui.spellPickerOpen && ui.spellSlot === n ? "focus" : ""}" data-action="focus-spell-slot" data-slot="${n}">
@@ -2761,21 +3255,90 @@ button:disabled { cursor: default; }
       }
       return "";
     };
-    const runeStrip = `<div class="rune-strip" aria-hidden="true">
-        ${pt("perk", ui.customPerks[0], esc(initials(findPerkName(ui.customPerks[0]))), 32, "round self")}
-        ${[1, 2, 3].map(i => pt("perk", ui.customPerks[i], esc(initials(findPerkName(ui.customPerks[i]))), 22, "round")).join("")}
+    const renderPerkStrip = (perks) => `<div class="rune-strip" style="margin-bottom:0" aria-hidden="true">
+        ${pt("perk", perks[0], esc(initials(findPerkName(perks[0]))), 30, "round self")}
+        ${[1, 2, 3].map(i => pt("perk", perks[i], esc(initials(findPerkName(perks[i]))), 21, "round")).join("")}
         <i class="rdiv"></i>
-        ${[4, 5].map(i => pt("perk", ui.customPerks[i], esc(initials(findPerkName(ui.customPerks[i]))), 22, "round")).join("")}
+        ${[4, 5].map(i => pt("perk", perks[i], esc(initials(findPerkName(perks[i]))), 21, "round")).join("")}
         <i class="rdiv"></i>
-        ${[6, 7, 8].map(i => pt("perk", ui.customPerks[i], shardFallbackGlyph(ui.customPerks[i]), 20, "round")).join("")}
+        ${[6, 7, 8].map(i => pt("perk", perks[i], shardFallbackGlyph(perks[i]), 19, "round")).join("")}
       </div>`;
 
-    const runeBody = ui.runeSubView === "saved"
-      ? `<div class="stack">${pages.map(pg => {
-          const keystoneId = (pg.selected_perk_ids || [])[0] || 0;
-          const pStyle = styleName(pg.primary_style_id, pg.primary_style_name);
-          const sStyle = styleName(pg.sub_style_id, pg.sub_style_name);
-          return `<button class="page-row ${pg.current ? "current" : ""}" data-key="pg${pg.id}" data-action="select-rune-page" data-id="${pg.id}" data-is-preset="${pg.is_preset ? "1" : "0"}" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc((pg.selected_perk_ids || []).join(","))}">
+    const isJungle = !cs.is_roleless && laneInfo(cs.assigned_position).key === "JUNGLE";
+    const hasSmite = cs.spell1_id === 11 || cs.spell2_id === 11;
+    const smiteAvail = spells.some(sp => sp.id === 11);
+    const smiteWarnHtml = (cs.spells_editable !== false && isJungle && !hasSmite && smiteAvail)
+      ? `<div class="smite-warn">
+          <span class="row" style="gap:8px">${WARN_SVG}<span>${esc(t("missingSmite"))}</span></span>
+          <button class="btn btn-ghost btn-sm" data-action="equip-smite">${esc(t("equipSmite"))}</button>
+        </div>` : "";
+
+    const spellsSec = cs.spells_editable === false
+      ? `<div class="prep-sec">
+          <div class="prep-sec-head"><span class="eyebrow">${esc(t("hlSpells"))}</span></div>
+          <div class="empty-note" style="padding:8px 4px">${esc(t("arenaFixedSpells"))}</div>
+        </div>`
+      : `<div class="prep-sec">
+          <div class="prep-sec-head">
+            <span class="eyebrow">${esc(t("hlSpells"))}</span>
+            <span class="meta">${esc(t("changeSpellHint"))}</span>
+          </div>
+          ${smiteWarnHtml}
+          <div class="spell-duel">
+            ${spellBtn(1, s1Raw, s1Name)}
+            <button class="spell-swap-orb" data-action="swap-spells" aria-label="${esc(t("swapDF"))}">
+              <svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
+            </button>
+            ${spellBtn(2, s2Raw, s2Name)}
+          </div>
+          ${ui.spellPickerOpen ? `<div class="chip-grid">
+            ${spells.map(sp => {
+              const active = (ui.spellSlot === 1 ? cs.spell1_id : cs.spell2_id) === sp.id;
+              const nm = spellName(sp.id, sp.name);
+              return chip(active ? "active" : "", "pick-spell", `data-id="${sp.id}"`, pt("spell", sp.id, spellFallbackGlyph(sp.id, nm), 26, "no-rim"), nm);
+            }).join("")}
+          </div>` : ""}
+        </div>`;
+
+    let runeBody;
+    if (ui.runeSubView === "recommended") {
+      runeBody = recCards.length ? `<div class="stack">${recCards.map((card, idx) => {
+        const perks = (card.selected_perk_ids || []).join(",");
+        const pStyle = styleName(card.primary_style_id, card.primary_style_name);
+        const sStyle = styleName(card.sub_style_id, card.sub_style_name);
+        const hasRecSpells = cs.spells_editable !== false && card.spell1_id > 0 && card.spell2_id > 0;
+        const sp1Nm = spellName(card.spell1_id, "");
+        const sp2Nm = spellName(card.spell2_id, "");
+        return `<div class="rec-card ${card.current ? "current" : ""}" data-key="rc-${idx}">
+          <div class="row" style="gap:10px">
+            ${pt("perk", card.keystone_id, esc(initials(card.keystone_name)), 40, "round no-rim")}
+            <div class="grow">
+              <b class="ellipsis" style="display:block">${esc(card.keystone_name || card.name)}</b>
+              <span class="meta row" style="gap:5px;margin-top:2px">
+                ${pt("style", card.primary_style_id, "", 15, "round no-rim")}
+                <span class="ellipsis">${esc(pStyle)} + ${esc(sStyle)} · ${esc(card.name)}</span>
+              </span>
+            </div>
+            ${hasRecSpells ? `<span class="row" style="gap:4px">${pt("spell", card.spell1_id, spellFallbackGlyph(card.spell1_id, sp1Nm), 22)}${pt("spell", card.spell2_id, spellFallbackGlyph(card.spell2_id, sp2Nm), 22)}</span>` : ""}
+            ${card.current ? `<span class="tag green">${esc(t("activeTag"))}</span>` : ""}
+          </div>
+          ${(card.selected_perk_ids || []).length === 9 ? renderPerkStrip(card.selected_perk_ids) : ""}
+          <div class="rec-actions">
+            <button class="btn btn-plate btn-sm" data-action="select-rune-page" data-is-preset="1" data-name="${esc(card.name)}" data-pri="${card.primary_style_id}" data-sub="${card.sub_style_id}" data-perks="${esc(perks)}">${esc(t("applyShort"))}</button>
+            ${hasRecSpells ? `<button class="btn btn-ghost btn-sm" data-action="apply-rec-both" data-name="${esc(card.name)}" data-pri="${card.primary_style_id}" data-sub="${card.sub_style_id}" data-perks="${esc(perks)}" data-s1="${card.spell1_id}" data-s2="${card.spell2_id}">${esc(t("applyBoth"))}</button>` : ""}
+            <button class="btn btn-ghost btn-sm" data-action="edit-rune-page" data-name="${esc(card.name)}" data-pri="${card.primary_style_id}" data-sub="${card.sub_style_id}" data-perks="${esc(perks)}">${esc(t("editBuilder"))}</button>
+          </div>
+        </div>`;
+      }).join("")}</div>` : `<div class="empty-note">${esc(t("noRecRunes"))}</div>`;
+    } else if (ui.runeSubView === "saved") {
+      runeBody = `<div class="stack">${savedPages.map(pg => {
+        const keystoneId = (pg.selected_perk_ids || [])[0] || 0;
+        const pStyle = styleName(pg.primary_style_id, pg.primary_style_name);
+        const sStyle = styleName(pg.sub_style_id, pg.sub_style_name);
+        const perks = (pg.selected_perk_ids || []).join(",");
+        const canEdit = (pg.selected_perk_ids || []).length === 9;
+        return `<div class="page-row ${pg.current ? "current" : ""}" data-key="pg${pg.id}">
+            <button class="grow row" style="gap:10px;text-align:left;min-height:44px" data-action="select-rune-page" data-id="${pg.id}" data-is-preset="${pg.is_preset ? "1" : "0"}" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc(perks)}">
               ${pt("perk", keystoneId, esc(initials(pg.keystone_name)), 36, "round no-rim")}
               <span class="grow">
                 <b class="ellipsis" style="display:block">${esc(pg.name)}</b>
@@ -2785,10 +3348,13 @@ button:disabled { cursor: default; }
                 </span>
               </span>
               ${pg.current ? `<span class="tag green">${esc(t("activeTag"))}</span>` : `<span class="page-apply">${esc(t("applyShort"))}</span>`}
-            </button>`;
-        }).join("")}</div>`
-      : `<div>
-          ${runeStrip}
+            </button>
+            ${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-rune-page" data-name="${esc(pg.name)}" data-pri="${pg.primary_style_id}" data-sub="${pg.sub_style_id}" data-perks="${esc(perks)}">${esc(t("editBuilder"))}</button>` : ""}
+          </div>`;
+      }).join("")}</div>`;
+    } else {
+      runeBody = `<div>
+          <div style="margin-bottom:10px">${renderPerkStrip(ui.customPerks)}</div>
           <input id="custom-rune-name" class="field" type="text" value="${esc(ui.customName)}" placeholder="${esc(t("runeNamePh"))}">
           <div class="sub-k">${esc(t("priPath"))}</div>
           <div class="chip-grid">${(cs.rune_trees || []).map(tr => chip(tr.id === ui.customPrimary ? "active" : "", "rune-pri", `data-id="${tr.id}"`, pt("style", tr.id, "", 22, "round no-rim"), styleName(tr.id, tr.name))).join("")}</div>
@@ -2804,39 +3370,19 @@ button:disabled { cursor: default; }
           ${STAT_SHARD_ROWS.map(sr => `<div class="chip-grid three">${sr.options.map(id => chip(ui.customPerks[sr.slot] === id ? "active" : "", "rune-shard", `data-slot="${sr.slot}" data-id="${id}"`, pt("perk", id, shardFallbackGlyph(id), 20, "round no-rim"), shardName(id))).join("")}</div>`).join("")}
           <button class="btn btn-plate btn-block" style="margin-top:14px" data-action="save-custom-runes">${esc(t("save9Runes"))}</button>
         </div>`;
+    }
 
     return `
       <section class="panel" data-key="loadout-unified">
-        <div class="prep-sec" data-key="skins-panel">
-          ${skinsCarouselHtml(cs)}
-        </div>
-        <div class="prep-sec">
-          <div class="prep-sec-head">
-            <span class="eyebrow">${esc(t("hlSpells"))}</span>
-            <span class="meta">${esc(t("changeSpellHint"))}</span>
-          </div>
-          <div class="spell-duel">
-            ${spellBtn(1, s1Raw, s1Name)}
-            <button class="spell-swap-orb" data-action="swap-spells" aria-label="${esc(t("swapDF"))}">
-              <svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
-            </button>
-            ${spellBtn(2, s2Raw, s2Name)}
-          </div>
-          ${ui.spellPickerOpen ? `<div class="chip-grid">
-            ${spells.map(sp => {
-              const active = (ui.spellSlot === 1 ? cs.spell1_id : cs.spell2_id) === sp.id;
-              const nm = spellName(sp.id, sp.name);
-              return chip(active ? "active" : "", "pick-spell", `data-id="${sp.id}"`, pt("spell", sp.id, spellFallbackGlyph(sp.id, nm), 26, "no-rim"), nm);
-            }).join("")}
-          </div>` : ""}
-        </div>
+        ${spellsSec}
         <div class="prep-sec">
           <div class="prep-sec-head">
             <span class="eyebrow">${esc(t("runes"))}</span>
-            <span class="seg">
-              <button class="${ui.runeSubView === "saved" ? "active" : ""}" data-action="rune-sub" data-mode="saved">${esc(t("pages"))}</button>
-              <button class="${ui.runeSubView === "custom" ? "active" : ""}" data-action="rune-sub" data-mode="custom">${esc(t("builder"))}</button>
-            </span>
+          </div>
+          <div class="seg three" style="margin-bottom:10px" role="tablist">
+            <button class="${ui.runeSubView === "recommended" ? "active" : ""}" role="tab" aria-selected="${ui.runeSubView === "recommended"}" data-action="rune-sub" data-mode="recommended">${esc(t("recRunes"))}</button>
+            <button class="${ui.runeSubView === "saved" ? "active" : ""}" role="tab" aria-selected="${ui.runeSubView === "saved"}" data-action="rune-sub" data-mode="saved">${esc(t("pages"))}</button>
+            <button class="${ui.runeSubView === "custom" ? "active" : ""}" role="tab" aria-selected="${ui.runeSubView === "custom"}" data-action="rune-sub" data-mode="custom">${esc(t("builder"))}</button>
           </div>
           ${runeBody}
         </div>
@@ -2871,15 +3417,15 @@ button:disabled { cursor: default; }
           ${(cs.my_team || []).map(a => `
             <div class="mate ${a.is_self ? "self" : ""}" data-key="m${a.cell_id}">
               <div class="row">
-                ${roundel(a.assigned_position)}
+                ${cs.is_roleless ? "" : roundel(a.assigned_position)}
                 ${champPt(a.champion_id, a.champion_name, 36, a.is_self ? "self" : "")}
                 <div class="grow">
                   <b class="ellipsis" style="display:block">${esc(a.champion_name || t("pending"))}</b>
                   <span class="meta ellipsis" style="display:block">${esc(a.is_self ? t("youTag") : a.summoner_name)}</span>
                 </div>
               </div>
-              ${a.is_self ? "" : `<div class="swap-row">
-                ${swapBtn("position", a.position_swap_id, a.position_swap_state, t("swapLane"))}
+              ${a.is_self ? "" : `<div class="swap-row" style="${cs.is_roleless ? "grid-template-columns:repeat(2,1fr)" : ""}">
+                ${cs.is_roleless ? "" : swapBtn("position", a.position_swap_id, a.position_swap_state, t("swapLane"))}
                 ${swapBtn("pick", a.pick_swap_id, a.pick_swap_state, t("swapOrder"))}
                 ${swapBtn("trade", a.trade_id, a.trade_state, t("tradeChamp"))}
               </div>`}
@@ -2888,7 +3434,7 @@ button:disabled { cursor: default; }
       </section>`;
   }
 
-  // ---- Champ-select helper: read-only, from the projection's `helper` block ------------------
+  // ---- Champ-select helper: secondary Guide bottom sheet --------------------------------------
   function fmtPct(rate) {
     const n = (Number(rate) * 100).toLocaleString(activeLang() === "fr" ? "fr-FR" : "en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     return activeLang() === "fr" ? `${n} %` : `${n}%`;
@@ -2945,6 +3491,9 @@ button:disabled { cursor: default; }
           <span class="grow ellipsis">${esc(spellName(sp.first.id, sp.first.name))} + ${esc(spellName(sp.second.id, sp.second.name))}</span>
           ${originTag(sp.origin)}
         </div>`);
+      if (cs.spells_editable !== false && sp.first.id > 0 && sp.second.id > 0) {
+        rows.push(`<div class="hl-apply"><button class="btn btn-ghost" data-action="apply-guide-spells" data-s1="${sp.first.id}" data-s2="${sp.second.id}">${esc(t("applySpells"))}</button></div>`);
+      }
     }
     if (it && it.items.length) {
       rows.push(`<div class="hl-row">
@@ -2973,13 +3522,17 @@ button:disabled { cursor: default; }
     const link = shownOnline && h.attribution
       ? `<a class="hl-link" href="${esc(h.attribution.url)}" target="_blank" rel="noopener noreferrer">${esc(t("dataFrom", h.attribution.provider))}</a>` : "";
     const tips = (h.tips || []).length ? `<ul class="tips">${h.tips.map(tip => `<li>${esc(tip)}</li>`).join("")}</ul>` : "";
+    const canHoverSugg = Boolean(hoverTarget(cs));
     const sugg = (h.suggested_picks || []).length ? `<section class="panel">
         <div class="eyebrow" style="margin-bottom:8px">${esc(t("hlSuggestedPicks"))}</div>
-        <div class="row" style="gap:8px;flex-wrap:wrap">${h.suggested_picks.map(s => `<div class="row" style="gap:6px;padding:6px 8px;border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--raised)">
-            ${champPt(s.champion_id, s.champion_name, 28)}
+        <div class="row" style="gap:8px;flex-wrap:wrap">${h.suggested_picks.map(s => {
+          const inner = `${champPt(s.champion_id, s.champion_name, 28)}
             <span><b style="display:block;font-size:13px">${esc(s.champion_name)}${s.tier ? ` · ${esc(tierLabel(s.tier))}` : ""}</b>
-            <span class="meta mono" style="font-size:11px">${s.personal_games > 0 ? `${s.personal_games}g${s.personal_win_rate != null ? " " + esc(fmtPct(s.personal_win_rate)) : ""}` : (s.meta_win_rate != null ? esc(fmtPct(s.meta_win_rate)) : "")}</span></span>
-          </div>`).join("")}</div>
+            <span class="meta mono" style="font-size:11px">${s.personal_games > 0 ? `${s.personal_games}g${s.personal_win_rate != null ? " " + esc(fmtPct(s.personal_win_rate)) : ""}` : (s.meta_win_rate != null ? esc(fmtPct(s.meta_win_rate)) : "")}</span></span>`;
+          return canHoverSugg
+            ? `<button class="row" style="gap:6px;min-height:44px;padding:6px 10px;border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--raised);text-align:left" data-action="hover-champ" data-id="${s.champion_id}" data-name="${esc(s.champion_name)}" data-close-guide="1">${inner}</button>`
+            : `<div class="row" style="gap:6px;padding:6px 8px;border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--raised)">${inner}</div>`;
+        }).join("")}</div>
       </section>` : "";
     return `
       ${sugg}
@@ -3001,22 +3554,42 @@ button:disabled { cursor: default; }
       </section>`;
   }
 
+  function renderGuideSheet(s) {
+    const sheetEl = $("guide-sheet");
+    const cs = s && s.phase === "ChampSelect" ? s.champ_select : null;
+    if (!ui.guideOpen || !cs || ui.mode === "stats") {
+      sheetEl.hidden = true;
+      sheetEl.innerHTML = "";
+      return;
+    }
+    sheetEl.hidden = false;
+    const html = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(t("tabGuide"))}" data-key="guide-dialog">
+        <div class="sheet-head">
+          <span class="eyebrow">${esc(t("tabGuide"))}</span>
+          <button class="btn btn-ghost btn-sm" type="button" data-action="close-guide">${esc(t("close"))}</button>
+        </div>
+        <div class="sheet-body">${helperTab(cs)}</div>
+      </div>`;
+    morphInto(sheetEl, html);
+  }
+
   function renderChampSelect(s) {
     const cs = s.champ_select;
     if (!cs) {
       renderDock("");
       return `<section class="panel"><h2 class="title sm">${esc(t("champSelect"))}</h2><div class="meta" style="margin-top:4px">${esc(t("syncDraft"))}</div></section>`;
     }
+    syncBuilderFromActivePage(cs);
     syncCustomRunesDefaults(cs);
-    if (ui.csTab === "skins") ui.csTab = "loadout";
+    if (!["pick", "prep", "skins", "team"].includes(ui.csTab)) ui.csTab = "pick";
     const act = cs.active_action;
     const isTurn = Boolean(act && act.is_my_turn && !act.completed);
     const isBan = Boolean(act && act.action_type === "ban");
     const incoming = (cs.incoming_swaps || []).length > 0;
     const tabs = tabsHtml([
       { id: "pick", label: t("tabPick") },
-      { id: "loadout", label: t("tabLoadout") },
-      { id: "guide", label: t("tabGuide") },
+      { id: "prep", label: t("tabPrep") },
+      { id: "skins", label: t("tabSkins") },
       { id: "team", label: t("tabTeam"), dot: incoming && ui.csTab !== "team" }
     ], ui.csTab, "cs-tab");
     if (isTurn) {
@@ -3030,29 +3603,39 @@ button:disabled { cursor: default; }
       renderDock(tabs);
     }
     const body = ui.csTab === "pick" ? pickTab(cs, act, isBan)
-      : ui.csTab === "loadout" ? loadoutTab(cs)
-      : ui.csTab === "guide" ? helperTab(cs)
+      : ui.csTab === "prep" ? prepTab(cs)
+      : ui.csTab === "skins" ? skinsTab(cs)
       : teamTab(cs);
-    const bench = cs.bench_enabled && cs.bench_champions && cs.bench_champions.length ? `
+    const showAramBar = Boolean(cs.bench_enabled || (cs.rerolls_remaining || 0) > 0);
+    const benchList = cs.bench_champions || [];
+    const bench = showAramBar ? `
       <section class="panel" data-key="aram-bench">
-        <div class="eyebrow" style="margin-bottom:8px">${esc(t("csBench"))}</div>
-        <div class="row" style="gap:8px;flex-wrap:wrap">${cs.bench_champions.map(b => `
+        <div class="between" style="margin-bottom:${benchList.length ? "8px" : "0"}">
+          <span class="eyebrow">${esc(t("csBench"))}</span>
+          <button class="btn btn-plate btn-sm" data-action="reroll-champ" ${(cs.rerolls_remaining || 0) > 0 ? "" : "disabled"}>
+            ${DICE_SVG}<span>${esc(t("reroll", cs.rerolls_remaining || 0))}</span>
+          </button>
+        </div>
+        ${benchList.length ? `<div class="row" style="gap:8px;flex-wrap:wrap">${benchList.map(b => `
           <button class="btn btn-ghost" style="min-height:44px;padding:4px 10px;gap:6px" data-action="bench-swap" data-id="${b.champion_id}" aria-label="${esc(t("csBenchSwap", b.champion_name))}">
             ${champPt(b.champion_id, b.champion_name, 30)}
             <span>${esc(b.champion_name)}</span>
           </button>`).join("")}
-        </div>
+        </div>` : ""}
       </section>` : "";
     const flash = isTurn && Date.now() < ui.turnFlashUntil;
     const pos = laneInfo(cs.assigned_position);
     const totalSec = Math.max(1, cs.total_time_sec || cs.time_left_sec || 30);
     const frac = Math.min(1, Math.max(0, (cs.time_left_sec || 0) / totalSec));
+    const subMetaInner = cs.is_roleless
+      ? `<span class="ellipsis">${esc(queueLabel(cs.queue_type) || subPhaseLabel(cs.sub_phase))}</span>`
+      : `${laneSvg(pos.key, 13, pos.color)}<span class="ellipsis">${esc(pos.label)} · ${esc(queueLabel(cs.queue_type) || subPhaseLabel(cs.sub_phase))}</span>`;
     return `
       <section class="panel cs-turn-plate ${isTurn ? "spot" : ""}${flash ? " turn-start" : ""}" data-key="cs-turn">
         <div class="plate-head">
           <div class="grow">
             <h2 class="title">${esc(isTurn ? (isBan ? t("turnBan") : t("turnPick")) : subPhaseLabel(cs.sub_phase))}</h2>
-            <div class="sub-meta">${laneSvg(pos.key, 13, pos.color)}<span class="ellipsis">${esc(pos.label)} · ${esc(queueLabel(cs.queue_type) || subPhaseLabel(cs.sub_phase))}</span></div>
+            <div class="sub-meta">${subMetaInner}</div>
           </div>
           ${clockHtml(cs.time_left_sec, { down: true, total: totalSec, fmt: "s" })}
         </div>
@@ -3211,7 +3794,7 @@ button:disabled { cursor: default; }
       <path d="M50 34l12 16-12 16-12-16z" fill="currentColor" fill-opacity="0.25"/></svg>`;
   function renderEnd(s) {
     const e = s.end_of_game;
-    renderDock("");
+    renderDock(`<button class="btn btn-plate btn-block" data-action="play-again">${esc(t("playAgain"))}</button>`);
     if (!e || !(e.champion_id > 0 || (e.teams || []).length)) {
       return `<section class="panel hero-center">
           <div class="crest" style="color:var(--gold-bright)">${CREST_SVG}</div>
@@ -3281,13 +3864,18 @@ button:disabled { cursor: default; }
       ${(e.teams || []).map(teamBlock).join("")}`;
   }
 
-  function renderIdle() {
+  function renderIdle(s) {
     renderDock("");
+    const queues = (s && s.available_queues) || [];
     return `<section class="panel hero-center">
         <div class="crest" style="color:var(--gold-bright)">${CREST_SVG}</div>
         <h2 class="title">${esc(t("standingBy"))}</h2>
         <div class="meta">${esc(t("idleDetail"))}</div>
-      </section>`;
+      </section>
+      ${queues.length ? `<section class="panel" data-key="idle-queues">
+        <div class="eyebrow">${esc(t("startLobby"))}</div>
+        ${queueGridHtml(queues, 0)}
+      </section>` : ""}`;
   }
 
   // ---- Stats tab: Champion Stats, read-only ---------------------------------------------------
@@ -3844,19 +4432,23 @@ button:disabled { cursor: default; }
       { id: "mine", label: t("stTabMine") }
     ], ui.statsTab, "st-tab"));
     loadStats(false);
+    const backBar = `<section class="panel stats-back" data-key="st-back">
+        <span class="eyebrow">${esc(t("modeStats"))}</span>
+        <button class="btn btn-ghost btn-sm" data-action="mode" data-mode="match">${esc(t("backToMatch"))}</button>
+      </section>`;
     const tab = ui.statsTab;
     const entry = ui.statsData[tab];
     // A view for another champion, role or language is not shown while the right one loads.
     const v = entry && entry.key === statsKey(tab) ? entry.json : null;
-    if (tab === "tiers") return tierBody(v);
+    if (tab === "tiers") return backBar + tierBody(v);
     if (!v) {
       const failed = ui.statsErr && !ui.statsPending;
       const picker = tab === "build" || tab === "matchups" ? pickerPanel(entry && entry.json) : "";
-      return picker + `<section class="panel">${failed ? `<div class="st-state">${INFO_SVG}<span>${esc(t("stFailed"))}</span></div>` : skeleton()}</section>`;
+      return backBar + picker + `<section class="panel">${failed ? `<div class="st-state">${INFO_SVG}<span>${esc(t("stFailed"))}</span></div>` : skeleton()}</section>`;
     }
-    if (tab === "build") return buildBody(v);
-    if (tab === "matchups") return matchupsBody(v);
-    return myStatsBody(v);
+    if (tab === "build") return backBar + buildBody(v);
+    if (tab === "matchups") return backBar + matchupsBody(v);
+    return backBar + myStatsBody(v);
   }
   /** Behind the Stats tab: the chosen champion's splash on Build and Matchups, else the valley. */
   function statsScene() {
@@ -3918,10 +4510,45 @@ button:disabled { cursor: default; }
         && s.champ_select.active_action.is_my_turn && !s.champ_select.active_action.completed);
     if (turnNow && !ui.wasTurn) {
       ui.turnFlashUntil = Date.now() + 1400;
-      // A ready check or the player's draft turn brings the match back from the Stats tab.
+      // A ready check or the player's draft turn closes secondary views and focuses Pick.
       if (ui.mode === "stats") { ui.mode = "match"; store.set("hypatia_mode", "match"); }
+      ui.guideOpen = false;
+      if (s.phase === "ChampSelect") ui.csTab = "pick";
     }
     ui.wasTurn = turnNow;
+
+    if (s.phase === "ChampSelect" && s.champ_select) {
+      const cs = s.champ_select;
+      const act = cs.active_action;
+      const isMyBan = Boolean(act && act.is_my_turn && !act.completed && act.action_type === "ban");
+      const draftKey = `${cs.local_cell_id}:${cs.assigned_position}:${isMyBan ? "ban" : "pick"}:${cs.is_roleless ? 1 : 0}`;
+      if (draftKey !== ui.lastDraftKey) {
+        ui.lastDraftKey = draftKey;
+        if (cs.is_roleless || isMyBan) {
+          ui.champRole = "ALL";
+        } else {
+          const rk = laneInfo(cs.assigned_position).key;
+          ui.champRole = ROLE_KEYS.includes(rk) ? rk : "ALL";
+        }
+      }
+      const me = (cs.my_team || []).find(a => a.is_self);
+      const pickLocked = Boolean(me && me.pick_locked);
+      if (pickLocked && !ui.wasPickLocked && !turnNow) {
+        ui.csTab = "prep";
+      }
+      ui.wasPickLocked = pickLocked;
+    } else {
+      ui.guideOpen = false;
+      ui.lastDraftKey = "";
+      ui.wasPickLocked = false;
+      ui.builderDirty = false;
+      ui.activePageSig = "";
+    }
+    if (s.phase !== "Lobby") {
+      ui.lobbySynced = false;
+      ui.lobbyQueueOpen = false;
+    }
+
     if (s.stats_revision !== ui.statsRev) {
       const landed = ui.statsRev !== null;
       ui.statsRev = s.stats_revision;
@@ -3954,7 +4581,7 @@ button:disabled { cursor: default; }
     else if (s.phase === "ChampSelect") html = renderChampSelect(s);
     else if (s.phase === "InProgress") html = renderLive(s);
     else if (post) html = renderEnd(s);
-    else html = renderIdle();
+    else html = renderIdle(s);
 
     const root = $("view-root");
     const viewKey = ui.mode === "stats" ? "Stats|" + ui.statsTab
@@ -3971,6 +4598,7 @@ button:disabled { cursor: default; }
     } else {
       morphInto(root, html);
     }
+    renderGuideSheet(s);
     setScene(ui.mode === "stats" ? statsScene() : sceneFor(s));
     tickClocks();
     centerSelectedSkin();
@@ -3997,6 +4625,19 @@ button:disabled { cursor: default; }
   menuBtn.addEventListener("click", (ev) => { ev.stopPropagation(); setMenu(!menu.classList.contains("open")); });
   document.addEventListener("click", (ev) => { if (!menu.contains(ev.target) && ev.target !== menuBtn) setMenu(false); });
 
+  $("stats-top-btn").addEventListener("click", () => {
+    ui.mode = ui.mode === "stats" ? "match" : "stats";
+    ui.guideOpen = false;
+    store.set("hypatia_mode", ui.mode);
+    if (ui.state) renderState(ui.state);
+    window.scrollTo(0, 0);
+  });
+  $("guide-sheet").addEventListener("click", (ev) => {
+    if (ev.target === $("guide-sheet")) {
+      ui.guideOpen = false;
+      if (ui.state) renderState(ui.state);
+    }
+  });
   $("alert-top-btn").addEventListener("click", () => toggleAlerts());
   $("alerts-menu-btn").addEventListener("click", () => { setMenu(false); toggleAlerts(); });
   $("arm-alerts-btn").addEventListener("click", () => armAlerts(false));
@@ -4033,6 +4674,9 @@ button:disabled { cursor: default; }
     if (ev.target.id === "champ-search") {
       ui.champQuery = ev.target.value;
       if (ui.state) renderState(ui.state);
+    } else if (ev.target.id === "swift-search") {
+      ui.swiftQuery = ev.target.value;
+      if (ui.state) renderState(ui.state);
     } else if (ev.target.id === "stats-search") {
       ui.statsSearch = ev.target.value;
       loadRoster();
@@ -4059,6 +4703,7 @@ button:disabled { cursor: default; }
 
     if (act === "mode") {
       ui.mode = btn.dataset.mode === "stats" ? "stats" : "match";
+      ui.guideOpen = false;
       store.set("hypatia_mode", ui.mode);
       renderState(ui.state);
       window.scrollTo(0, 0);
@@ -4117,6 +4762,70 @@ button:disabled { cursor: default; }
       sendCmd({ cmd: "demo_set_phase", phase: btn.dataset.phase });
     } else if (act === "demo-swap") {
       sendCmd({ cmd: "demo_simulate_incoming_swap" });
+    } else if (act === "create-lobby") {
+      ui.lobbyQueueOpen = false;
+      sendCmd({ cmd: "create_lobby", queue_id: Number(btn.dataset.queue) });
+    } else if (act === "play-again") {
+      sendCmd({ cmd: "play_again" });
+    } else if (act === "toggle-lobby-queues") {
+      ui.lobbyQueueOpen = !ui.lobbyQueueOpen;
+      renderState(ui.state);
+    } else if (act === "swift-focus") {
+      ui.swiftSlot = Number(btn.dataset.idx) || 0;
+      ui.swiftSpellOpen = false;
+      renderState(ui.state);
+    } else if (act === "swift-toggle-champs") {
+      ui.swiftChampOpen = !ui.swiftChampOpen;
+      renderState(ui.state);
+    } else if (act === "swift-champ") {
+      const sl = ui.swiftSlots[ui.swiftSlot];
+      if (sl) {
+        const cid = Number(btn.dataset.id);
+        sl.champion_id = cid;
+        sl.champion_name = btn.dataset.name || "";
+        sl.skin_id = cid * 1000;
+        ui.swiftChampOpen = false;
+        ui.swiftQuery = "";
+        renderState(ui.state);
+      }
+    } else if (act === "swift-lane") {
+      const sl = ui.swiftSlots[ui.swiftSlot];
+      if (sl) { sl.position = btn.dataset.lane; renderState(ui.state); }
+    } else if (act === "swift-spell-slot") {
+      const slot = Number(btn.dataset.slot);
+      if (ui.swiftSpellOpen && ui.swiftSpellSlot === slot) ui.swiftSpellOpen = false;
+      else { ui.swiftSpellSlot = slot; ui.swiftSpellOpen = true; }
+      renderState(ui.state);
+    } else if (act === "swift-swap-spells") {
+      const sl = ui.swiftSlots[ui.swiftSlot];
+      if (sl) {
+        const tmp = sl.spell1_id;
+        sl.spell1_id = sl.spell2_id;
+        sl.spell2_id = tmp;
+        renderState(ui.state);
+      }
+    } else if (act === "swift-pick-spell") {
+      const sl = ui.swiftSlots[ui.swiftSlot];
+      if (sl) {
+        const picked = Number(btn.dataset.id);
+        if (ui.swiftSpellSlot === 1) {
+          if (picked === sl.spell2_id) sl.spell2_id = sl.spell1_id;
+          sl.spell1_id = picked;
+        } else {
+          if (picked === sl.spell1_id) sl.spell1_id = sl.spell2_id;
+          sl.spell2_id = picked;
+        }
+        ui.swiftSpellOpen = false;
+        renderState(ui.state);
+      }
+    } else if (act === "swift-rune") {
+      const sl = ui.swiftSlots[ui.swiftSlot];
+      if (sl) { sl.perk_page_id = Number(btn.dataset.id); renderState(ui.state); }
+    } else if (act === "swift-skin") {
+      const sl = ui.swiftSlots[ui.swiftSlot];
+      if (sl) { sl.skin_id = Number(btn.dataset.id); renderState(ui.state); }
+    } else if (act === "save-swift-slots") {
+      sendCmd({ cmd: "set_swiftplay_slots", slots: ui.swiftSlots });
     } else if (act === "focus-slot") {
       ui.selectingFirstRole = btn.dataset.slot === "1";
       renderState(ui.state);
@@ -4144,6 +4853,21 @@ button:disabled { cursor: default; }
     } else if (act === "toggle-draft") {
       ui.draftExpanded = !ui.draftExpanded;
       renderState(ui.state);
+    } else if (act === "toggle-guide") {
+      ui.guideOpen = !ui.guideOpen;
+      renderState(ui.state);
+    } else if (act === "close-guide") {
+      ui.guideOpen = false;
+      renderState(ui.state);
+    } else if (act === "toggle-fav") {
+      const cid = Number(btn.dataset.id);
+      if (cid > 0) {
+        const idx = ui.favChamps.indexOf(cid);
+        if (idx >= 0) ui.favChamps.splice(idx, 1);
+        else ui.favChamps.unshift(cid);
+        store.set("hypatia_fav_champs", JSON.stringify(ui.favChamps));
+        renderState(ui.state);
+      }
     } else if (act === "clear-champ-search") {
       ui.champQuery = "";
       renderState(ui.state);
@@ -4164,15 +4888,34 @@ button:disabled { cursor: default; }
       ui.champRole = btn.dataset.role;
       renderState(ui.state);
     } else if (act === "hover-champ") {
-      if (cs && cs.active_action) {
-        sendCmd({ cmd: "hover_champion", action_id: cs.active_action.action_id, champion_id: Number(btn.dataset.id) });
+      const target = hoverTarget(cs);
+      const cid = Number(btn.dataset.id);
+      if (btn.dataset.closeGuide === "1") ui.guideOpen = false;
+      if (cs && target && cid > 0) {
+        const actObj = cs.active_action;
+        const isMyBan = Boolean(actObj && actObj.is_my_turn && !actObj.completed && actObj.action_type === "ban");
+        if (isMyBan && (cs.my_team || []).some(a => !a.is_self && a.champion_id === cid)) {
+          const nm = btn.dataset.name || ((cs.champions || []).find(c => c.id === cid) || {}).name || "";
+          if (nm) showToast(t("allyHoverWarn", nm));
+        }
+        sendCmd({ cmd: "hover_champion", action_id: target.action_id, champion_id: cid });
       }
     } else if (act === "lock-action") {
       sendCmd({ cmd: "lock_action", action_id: Number(btn.dataset.actionId) });
+    } else if (act === "reroll-champ") {
+      sendCmd({ cmd: "reroll_champion" });
     } else if (act === "bench-swap") {
       sendCmd({ cmd: "swap_bench_champion", champion_id: Number(btn.dataset.id) });
     } else if (act === "set-skin") {
       sendCmd({ cmd: "set_skin", skin_id: Number(btn.dataset.id) });
+    } else if (act === "set-ward-skin") {
+      sendCmd({ cmd: "set_ward_skin", ward_skin_id: Number(btn.dataset.id) });
+    } else if (act === "equip-smite") {
+      if (cs) {
+        const s1 = cs.spell1_id === 4 ? 4 : 11;
+        const s2 = cs.spell1_id === 4 ? 11 : (cs.spell1_id === 11 ? cs.spell2_id : cs.spell1_id);
+        sendCmd({ cmd: "set_summoner_spells", spell1_id: s1, spell2_id: s2 === s1 ? 4 : s2 });
+      }
     } else if (act === "focus-spell-slot") {
       const slot = Number(btn.dataset.slot);
       if (ui.spellPickerOpen && ui.spellSlot === slot) {
@@ -4198,6 +4941,12 @@ button:disabled { cursor: default; }
       }
       ui.spellPickerOpen = false;
       sendCmd({ cmd: "set_summoner_spells", spell1_id: s1, spell2_id: s2 });
+    } else if (act === "apply-guide-spells") {
+      const s1 = Number(btn.dataset.s1);
+      const s2 = Number(btn.dataset.s2);
+      if (s1 > 0 && s2 > 0 && s1 !== s2) {
+        sendCmd({ cmd: "set_summoner_spells", spell1_id: s1, spell2_id: s2 });
+      }
     } else if (act === "rune-sub") {
       ui.runeSubView = btn.dataset.mode;
       renderState(ui.state);
@@ -4213,16 +4962,41 @@ button:disabled { cursor: default; }
       } else {
         sendCmd({ cmd: "select_rune_page", page_id: Number(btn.dataset.id) });
       }
+    } else if (act === "apply-rec-both") {
+      const s1 = Number(btn.dataset.s1);
+      const s2 = Number(btn.dataset.s2);
+      const perks = btn.dataset.perks.split(",").filter(Boolean).map(Number);
+      (async () => {
+        await sendCmd({
+          cmd: "save_rune_page",
+          name: btn.dataset.name,
+          primary_style_id: Number(btn.dataset.pri),
+          sub_style_id: Number(btn.dataset.sub),
+          selected_perk_ids: perks
+        });
+        if (s1 > 0 && s2 > 0 && s1 !== s2) {
+          await sendCmd({ cmd: "set_summoner_spells", spell1_id: s1, spell2_id: s2 });
+        }
+      })();
+    } else if (act === "edit-rune-page") {
+      const perks = (btn.dataset.perks || "").split(",").filter(Boolean).map(Number);
+      loadPerksIntoBuilder(cs, Number(btn.dataset.pri), Number(btn.dataset.sub), perks, btn.dataset.name);
+      ui.builderDirty = true;
+      ui.runeSubView = "custom";
+      renderState(ui.state);
     } else if (act === "rune-pri") {
       ui.customPrimary = Number(btn.dataset.id);
+      ui.builderDirty = true;
       syncCustomRunesDefaults(cs);
       renderState(ui.state);
     } else if (act === "rune-p") {
       ui.customPerks[Number(btn.dataset.slot)] = Number(btn.dataset.id);
+      ui.builderDirty = true;
       renderState(ui.state);
     } else if (act === "rune-sub-tree") {
       ui.customSub = Number(btn.dataset.id);
       ui.customSubMeta = [];
+      ui.builderDirty = true;
       syncCustomRunesDefaults(cs);
       renderState(ui.state);
     } else if (act === "rune-sub-perk") {
@@ -4233,11 +5007,14 @@ button:disabled { cursor: default; }
       else ui.customSubMeta = [ui.customSubMeta[1] || ui.customSubMeta[0], { row, id }].filter(Boolean);
       ui.customPerks[4] = ui.customSubMeta[0] ? ui.customSubMeta[0].id : 0;
       ui.customPerks[5] = ui.customSubMeta[1] ? ui.customSubMeta[1].id : 0;
+      ui.builderDirty = true;
       renderState(ui.state);
     } else if (act === "rune-shard") {
       ui.customPerks[Number(btn.dataset.slot)] = Number(btn.dataset.id);
+      ui.builderDirty = true;
       renderState(ui.state);
     } else if (act === "save-custom-runes") {
+      ui.builderDirty = false;
       sendCmd({
         cmd: "save_rune_page",
         name: (ui.customName || t("defaultSaveName")).trim(),

@@ -5,6 +5,11 @@ by [release-plz](https://release-plz.dev). Versions follow [Semantic Versioning]
 
 ## [Unreleased]
 
+## [0.8.1](https://github.com/RubenVP2/hypatia/compare/v0.8.0...v0.8.1) - 2026-11-25
+
+### Fixed
+- *(draft)* Extract completed ban actions and wrap ban chips in ChampSelect ([#33](https://github.com/RubenVP2/hypatia/pull/33))
+
 ## [0.8.0](https://github.com/RubenVP2/hypatia/compare/v0.7.0...v0.8.0) - 2026-11-25
 
 ### Added

@@ -3392,7 +3392,7 @@ button:disabled { cursor: default; }
   function teamTab(cs) {
     const incoming = cs.incoming_swaps || [];
     const swapBtn = (kind, id, state, label) => {
-      if (id == null || state === "INVALID") return `<button class="btn btn-ghost btn-sm" disabled>${esc(label)}</button>`;
+      if (id == null || (state !== "AVAILABLE" && state !== "SENT")) return `<button class="btn btn-ghost btn-sm" disabled>${esc(label)}</button>`;
       return state === "SENT"
         ? `<button class="btn btn-danger btn-sm" data-action="cancel-swap" data-kind="${kind}" data-id="${id}">${esc(t("cancelLane"))}</button>`
         : `<button class="btn btn-ghost btn-sm" data-action="req-swap" data-kind="${kind}" data-id="${id}">${esc(label)}</button>`;

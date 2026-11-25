@@ -436,7 +436,7 @@ pub fn resolve_lcu_command_with_champion(
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
-                path: format!("/lol-champ-select/v1/session/swaps/{swap_id}/request"),
+                path: format!("/lol-champ-select/v1/session/pick-order-swaps/{swap_id}/request"),
                 body: None,
             }])
         }
@@ -451,7 +451,7 @@ pub fn resolve_lcu_command_with_champion(
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
-                path: format!("/lol-champ-select/v1/session/swaps/{swap_id}/{verb}"),
+                path: format!("/lol-champ-select/v1/session/pick-order-swaps/{swap_id}/{verb}"),
                 body: None,
             }])
         }
@@ -465,7 +465,7 @@ pub fn resolve_lcu_command_with_champion(
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
-                path: format!("/lol-champ-select/v1/session/swaps/{swap_id}/cancel"),
+                path: format!("/lol-champ-select/v1/session/pick-order-swaps/{swap_id}/cancel"),
                 body: None,
             }])
         }
@@ -479,7 +479,7 @@ pub fn resolve_lcu_command_with_champion(
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
-                path: format!("/lol-champ-select/v1/session/trades/{trade_id}/request"),
+                path: format!("/lol-champ-select/v1/session/champion-swaps/{trade_id}/request"),
                 body: None,
             }])
         }
@@ -494,7 +494,7 @@ pub fn resolve_lcu_command_with_champion(
             let verb = if *accept { "accept" } else { "decline" };
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
-                path: format!("/lol-champ-select/v1/session/trades/{trade_id}/{verb}"),
+                path: format!("/lol-champ-select/v1/session/champion-swaps/{trade_id}/{verb}"),
                 body: None,
             }])
         }
@@ -508,7 +508,7 @@ pub fn resolve_lcu_command_with_champion(
             }
             Ok(vec![ResolvedLcuCall {
                 method: Method::POST,
-                path: format!("/lol-champ-select/v1/session/trades/{trade_id}/cancel"),
+                path: format!("/lol-champ-select/v1/session/champion-swaps/{trade_id}/cancel"),
                 body: None,
             }])
         }
@@ -832,6 +832,78 @@ mod tests {
             swap[0].path,
             "/lol-champ-select/v1/session/position-swaps/3/request"
         );
+        assert_eq!(swap[0].body, None);
+
+        for (cmd, expected_path) in [
+            (
+                RemoteCommand::RespondPositionSwap {
+                    swap_id: 3,
+                    accept: true,
+                },
+                "/lol-champ-select/v1/session/position-swaps/3/accept",
+            ),
+            (
+                RemoteCommand::RespondPositionSwap {
+                    swap_id: 3,
+                    accept: false,
+                },
+                "/lol-champ-select/v1/session/position-swaps/3/decline",
+            ),
+            (
+                RemoteCommand::CancelPositionSwap { swap_id: 3 },
+                "/lol-champ-select/v1/session/position-swaps/3/cancel",
+            ),
+            (
+                RemoteCommand::RequestPickOrderSwap { swap_id: 4 },
+                "/lol-champ-select/v1/session/pick-order-swaps/4/request",
+            ),
+            (
+                RemoteCommand::RespondPickOrderSwap {
+                    swap_id: 4,
+                    accept: true,
+                },
+                "/lol-champ-select/v1/session/pick-order-swaps/4/accept",
+            ),
+            (
+                RemoteCommand::RespondPickOrderSwap {
+                    swap_id: 4,
+                    accept: false,
+                },
+                "/lol-champ-select/v1/session/pick-order-swaps/4/decline",
+            ),
+            (
+                RemoteCommand::CancelPickOrderSwap { swap_id: 4 },
+                "/lol-champ-select/v1/session/pick-order-swaps/4/cancel",
+            ),
+            (
+                RemoteCommand::RequestChampionTrade { trade_id: 5 },
+                "/lol-champ-select/v1/session/champion-swaps/5/request",
+            ),
+            (
+                RemoteCommand::RespondChampionTrade {
+                    trade_id: 5,
+                    accept: true,
+                },
+                "/lol-champ-select/v1/session/champion-swaps/5/accept",
+            ),
+            (
+                RemoteCommand::RespondChampionTrade {
+                    trade_id: 5,
+                    accept: false,
+                },
+                "/lol-champ-select/v1/session/champion-swaps/5/decline",
+            ),
+            (
+                RemoteCommand::CancelChampionTrade { trade_id: 5 },
+                "/lol-champ-select/v1/session/champion-swaps/5/cancel",
+            ),
+        ] {
+            let calls = resolve_lcu_command_localized(&cmd, None, Lang::En).unwrap();
+            assert_eq!(calls.len(), 1);
+            assert_eq!(calls[0].method, Method::POST);
+            assert_eq!(calls[0].path, expected_path);
+            assert_eq!(calls[0].body, None);
+        }
 
         let bench = resolve_lcu_command_localized(
             &RemoteCommand::SwapBenchChampion { champion_id: 222 },
@@ -1022,6 +1094,30 @@ mod tests {
         .to_string();
         assert_ne!(en_err, fr_err);
         assert!(fr_err.contains("sorts"));
+
+        for bad in [
+            RemoteCommand::RequestPositionSwap { swap_id: -1 },
+            RemoteCommand::RespondPositionSwap {
+                swap_id: -1,
+                accept: true,
+            },
+            RemoteCommand::CancelPositionSwap { swap_id: -1 },
+            RemoteCommand::RequestPickOrderSwap { swap_id: -1 },
+            RemoteCommand::RespondPickOrderSwap {
+                swap_id: -1,
+                accept: false,
+            },
+            RemoteCommand::CancelPickOrderSwap { swap_id: -1 },
+            RemoteCommand::RequestChampionTrade { trade_id: -1 },
+            RemoteCommand::RespondChampionTrade {
+                trade_id: -1,
+                accept: true,
+            },
+            RemoteCommand::CancelChampionTrade { trade_id: -1 },
+        ] {
+            assert!(resolve_lcu_command_localized(&bad, None, Lang::En).is_err());
+            assert!(resolve_lcu_command_localized(&bad, None, Lang::Fr).is_err());
+        }
     }
 
     #[tokio::test]

@@ -1200,9 +1200,23 @@ fn extract_matchmaking_summary(
     })
 }
 
-fn parse_swap_map(cs: &Value, key: &str) -> HashMap<i64, (i64, String)> {
-    let mut map = HashMap::new();
-    let Some(arr) = cs.get(key).and_then(|v| v.as_array()) else {
+fn swap_state_priority(state: &str) -> u8 {
+    match state {
+        "RECEIVED" => 4,
+        "SENT" => 3,
+        "AVAILABLE" => 2,
+        "BUSY" => 1,
+        _ => 0,
+    }
+}
+
+fn parse_swap_map(cs: &Value, keys: &[&str]) -> HashMap<i64, (i64, String)> {
+    let mut map: HashMap<i64, (i64, String)> = HashMap::new();
+    let Some(arr) = keys.iter().find_map(|key| {
+        cs.get(*key)
+            .and_then(|v| v.as_array())
+            .filter(|a| !a.is_empty())
+    }) else {
         return map;
     };
     for item in arr {
@@ -1214,8 +1228,18 @@ fn parse_swap_map(cs: &Value, key: &str) -> HashMap<i64, (i64, String)> {
                 .get("state")
                 .and_then(|v| v.as_str())
                 .unwrap_or("AVAILABLE")
-                .to_string();
-            map.insert(cell_id, (id, state));
+                .to_ascii_uppercase();
+            let replace = match map.get(&cell_id) {
+                None => true,
+                Some((prev_id, prev_state)) => {
+                    let next_prio = swap_state_priority(&state);
+                    let prev_prio = swap_state_priority(prev_state);
+                    next_prio > prev_prio || (next_prio == prev_prio && id >= *prev_id)
+                }
+            };
+            if replace {
+                map.insert(cell_id, (id, state));
+            }
         }
     }
     map
@@ -1374,9 +1398,9 @@ fn extract_champ_select_summary(
         .unwrap_or("")
         .to_string();
 
-    let pos_swaps = parse_swap_map(cs, "positionSwaps");
-    let pick_swaps = parse_swap_map(cs, "swaps");
-    let trades = parse_swap_map(cs, "trades");
+    let pos_swaps = parse_swap_map(cs, &["positionSwaps"]);
+    let pick_swaps = parse_swap_map(cs, &["pickOrderSwaps", "swaps"]);
+    let trades = parse_swap_map(cs, &["trades"]);
     let ParsedChampSelectActions {
         acting_cell_id,
         acting_type,
@@ -1566,6 +1590,9 @@ fn extract_champ_select_summary(
 
     let mut incoming_swaps = Vec::new();
     for ally in &my_team {
+        if ally.is_self {
+            continue;
+        }
         if let (Some(id), Some(ref st)) = (ally.position_swap_id, &ally.position_swap_state) {
             if st == "RECEIVED" {
                 let their_pos = Position::parse(&ally.assigned_position)
@@ -3114,6 +3141,73 @@ mod tests {
         assert_eq!(p.rune_pages[1].name, "Ahri Burst");
         assert_eq!(p.rune_pages[1].keystone_name, "Électrocution");
         assert!(!p.recommended_rune_pages.is_empty());
+    }
+
+    #[test]
+    fn projects_pick_order_and_champion_swaps_from_lcu_session_fields() {
+        // Real LCU session uses `pickOrderSwaps` (not `swaps`), `positionSwaps`, and `trades`.
+        let cs = json!({
+            "localPlayerCellId": 6,
+            "timer": {"phase": "BAN_PICK", "adjustedTimeLeftInPhase": 25_000, "totalTimeInPhase": 30_000},
+            "pickOrderSwaps": [
+                {"id": 11, "cellId": 5, "state": "RECEIVED"},
+                {"id": 10, "cellId": 5, "state": "DECLINED"},
+                {"id": 12, "cellId": 7, "state": "AVAILABLE"}
+            ],
+            "trades": [
+                {"id": 21, "cellId": 7, "state": "RECEIVED"}
+            ],
+            "myTeam": [
+                {"cellId": 5, "assignedPosition": "TOP", "championId": 266, "summonerId": 0, "puuid": ""},
+                {"cellId": 6, "assignedPosition": "MIDDLE", "championId": 103, "summonerId": 1, "puuid": "p-self"},
+                {"cellId": 7, "assignedPosition": "JUNGLE", "championId": 64, "summonerId": 2, "puuid": "p-duo", "summonerName": "LeeMain"}
+            ]
+        });
+        let snap = project_match(
+            &MatchInputs {
+                champ_select: Some(&cs),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::Fr,
+        );
+        let p = snap.champ_select.unwrap();
+        assert_eq!(p.my_team[0].pick_swap_id, Some(11));
+        assert_eq!(p.my_team[0].pick_swap_state.as_deref(), Some("RECEIVED"));
+        assert_eq!(p.my_team[2].pick_swap_id, Some(12));
+        assert_eq!(p.my_team[2].pick_swap_state.as_deref(), Some("AVAILABLE"));
+        assert_eq!(p.my_team[2].trade_id, Some(21));
+        assert_eq!(p.my_team[2].trade_state.as_deref(), Some("RECEIVED"));
+
+        assert_eq!(p.incoming_swaps.len(), 2);
+        assert_eq!(p.incoming_swaps[0].kind, "pick_order");
+        assert_eq!(p.incoming_swaps[0].id, 11);
+        assert_eq!(p.incoming_swaps[0].caller_name, "Allié 1");
+        assert_eq!(p.incoming_swaps[1].kind, "champion");
+        assert_eq!(p.incoming_swaps[1].id, 21);
+        assert_eq!(p.incoming_swaps[1].caller_name, "LeeMain");
+
+        // Legacy `swaps` fallback still works when `pickOrderSwaps` is absent.
+        let legacy_cs = json!({
+            "localPlayerCellId": 1,
+            "swaps": [{"id": 33, "cellId": 0, "state": "RECEIVED"}],
+            "myTeam": [
+                {"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 0, "puuid": ""},
+                {"cellId": 1, "assignedPosition": "MIDDLE", "championId": 103, "summonerId": 1, "puuid": "p-self"}
+            ]
+        });
+        let legacy_snap = project_match(
+            &MatchInputs {
+                champ_select: Some(&legacy_cs),
+                ..Default::default()
+            },
+            &BuiltinChampionCatalog,
+            Lang::En,
+        );
+        let lp = legacy_snap.champ_select.unwrap();
+        assert_eq!(lp.incoming_swaps.len(), 1);
+        assert_eq!(lp.incoming_swaps[0].kind, "pick_order");
+        assert_eq!(lp.incoming_swaps[0].id, 33);
     }
 
     #[test]

@@ -121,7 +121,7 @@ fn champ_select(tick: u64) -> Value {
         "actions": actions, "bans": {"myTeamBans": [1, 2, 3, 4, 5], "theirTeamBans": [6, 7, 8, 9, 10], "numBans": 10},
         "localPlayerCellId": 2, "myTeam": team(0), "theirTeam": team(5),
         "timer": {"adjustedTimeLeftInPhase": 27_000 - (tick as i64 % 27) * 1000, "phase": "BAN_PICK", "totalTimeInPhase": 30_000},
-        "queueType": "RANKED_FLEX_SR", "trades": [], "swaps": [], "positionSwaps": [],
+        "queueType": "RANKED_FLEX_SR", "trades": [], "pickOrderSwaps": [], "positionSwaps": [],
         "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
     })
 }

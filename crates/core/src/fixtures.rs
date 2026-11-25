@@ -976,7 +976,7 @@ impl DemoRemoteState {
                 "theirTeamBans": if is_aram { &[][..] } else { &their_bans[..bans / 2] }
             },
             "positionSwaps": if is_aram || is_arena { Vec::new() } else { swap_entries(&self.position_swap_state) },
-            "swaps": if is_aram { Vec::new() } else { swap_entries(&self.pick_swap_state) },
+            "pickOrderSwaps": if is_aram { Vec::new() } else { swap_entries(&self.pick_swap_state) },
             "trades": swap_entries(&self.trade_state),
             "timer": {
                 "phase": self.sub_phase,

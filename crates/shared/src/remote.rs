@@ -63,17 +63,17 @@ pub enum RemoteCommand {
     RespondPositionSwap { swap_id: i64, accept: bool },
     /// Cancel an outgoing role / lane swap request.
     CancelPositionSwap { swap_id: i64 },
-    /// Request a pick-order swap with an ally (`swaps/{swap_id}/request`).
+    /// Request a pick-order swap with an ally (`pick-order-swaps/{swap_id}/request`).
     RequestPickOrderSwap { swap_id: i64 },
-    /// Accept or decline an incoming pick-order swap.
+    /// Accept or decline an incoming pick-order swap (`pick-order-swaps/{swap_id}/accept|decline`).
     RespondPickOrderSwap { swap_id: i64, accept: bool },
-    /// Cancel an outgoing pick-order swap.
+    /// Cancel an outgoing pick-order swap (`pick-order-swaps/{swap_id}/cancel`).
     CancelPickOrderSwap { swap_id: i64 },
-    /// Request a champion trade with an ally (`trades/{trade_id}/request`).
+    /// Request a champion trade with an ally (`champion-swaps/{trade_id}/request`).
     RequestChampionTrade { trade_id: i64 },
-    /// Accept or decline an incoming champion trade.
+    /// Accept or decline an incoming champion trade (`champion-swaps/{trade_id}/accept|decline`).
     RespondChampionTrade { trade_id: i64, accept: bool },
-    /// Cancel an outgoing champion trade.
+    /// Cancel an outgoing champion trade (`champion-swaps/{trade_id}/cancel`).
     CancelChampionTrade { trade_id: i64 },
     /// In Demo Mode only: jump directly to a phase (`Lobby`, `Matchmaking`, `ReadyCheck`, `ChampSelect`, `InProgress`).
     DemoSetPhase { phase: String },
@@ -491,6 +491,10 @@ impl AlertTracker {
             self.last_body = Some(body);
         }
     }
+
+    pub fn clear_active(&mut self) {
+        self.last_signature.clear();
+    }
 }
 
 /// Derives the complete [`RemoteStateSnapshot`] purely from the single [`SummarySnapshot`]
@@ -678,8 +682,10 @@ pub fn project_remote_state(
         }
     });
 
+    let mut observed_alert = false;
     if let Some(ref mm) = matchmaking {
         if mm.ready_check_active && mm.player_response == "None" {
+            observed_alert = true;
             alerts.observe(
                 lang,
                 "ready_check_pending".to_string(),
@@ -699,6 +705,7 @@ pub fn project_remote_state(
     if phase == "ChampSelect" {
         if let Some(ref cs) = champ_select {
             if let Some(swap) = cs.incoming_swaps.first() {
+                observed_alert = true;
                 alerts.observe(
                     lang,
                     format!("swap:{}:{}", swap.kind, swap.id),
@@ -712,6 +719,7 @@ pub fn project_remote_state(
                 );
             } else if let Some(ref act) = cs.active_action {
                 if act.is_my_turn {
+                    observed_alert = true;
                     let kind = if act.action_type == "ban" {
                         "your_ban"
                     } else {
@@ -747,6 +755,9 @@ pub fn project_remote_state(
                 }
             }
         }
+    }
+    if !observed_alert {
+        alerts.clear_active();
     }
 
     let live_game = if phase == "InProgress" {
@@ -994,5 +1005,58 @@ mod tests {
             .pits
             .iter()
             .any(|p| p.kind == "drake" && p.label == "Dragon"));
+    }
+
+    #[test]
+    fn incoming_swap_alert_refires_after_clear() {
+        let make_cs = |state: &str| {
+            json!({
+                "localPlayerCellId": 1,
+                "timer": {"phase": "BAN_PICK", "adjustedTimeLeftInPhase": 20_000},
+                "pickOrderSwaps": [{"id": 7, "cellId": 0, "state": state}],
+                "myTeam": [
+                    {"cellId": 0, "assignedPosition": "TOP", "championId": 266, "summonerId": 0, "puuid": ""},
+                    {"cellId": 1, "assignedPosition": "MIDDLE", "championId": 103, "summonerId": 1, "puuid": "p-self"}
+                ]
+            })
+        };
+        let project = |cs: &serde_json::Value| {
+            project_match(
+                &MatchInputs {
+                    phase: Some(crate::event::GamePhase {
+                        phase: "ChampSelect".to_string(),
+                        since: 0,
+                    }),
+                    champ_select: Some(cs),
+                    ..Default::default()
+                },
+                &BuiltinChampionCatalog,
+                Lang::Fr,
+            )
+        };
+        let mut alerts = AlertTracker::default();
+        let first =
+            project_remote_state(&project(&make_cs("RECEIVED")), false, Lang::Fr, &mut alerts);
+        assert_eq!(first.alert_seq, 1);
+        assert_eq!(first.alert_kind.as_deref(), Some("incoming_swap"));
+
+        // Same swap stays active: alert_seq does not bump again.
+        let still =
+            project_remote_state(&project(&make_cs("RECEIVED")), false, Lang::Fr, &mut alerts);
+        assert_eq!(still.alert_seq, 1);
+
+        // Cleared (ally canceled / declined): no new alert.
+        let cleared = project_remote_state(
+            &project(&make_cs("AVAILABLE")),
+            false,
+            Lang::Fr,
+            &mut alerts,
+        );
+        assert_eq!(cleared.alert_seq, 1);
+
+        // Re-requested with the same contract ID: alert_seq bumps again.
+        let again =
+            project_remote_state(&project(&make_cs("RECEIVED")), false, Lang::Fr, &mut alerts);
+        assert_eq!(again.alert_seq, 2);
     }
 }

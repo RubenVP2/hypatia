@@ -5,6 +5,11 @@ by [release-plz](https://release-plz.dev). Versions follow [Semantic Versioning]
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/RubenVP2/hypatia/compare/v0.6.1...v0.7.0) - 2026-11-25
+
+### Added
+- *(remote,desktop)* Focus draft selection, loadout, skins, and modern LoL modes ([#28](https://github.com/RubenVP2/hypatia/pull/28))
+
 ## [0.6.1](https://github.com/RubenVP2/hypatia/compare/v0.6.0...v0.6.1) - 2026-11-22
 
 ### Fixed

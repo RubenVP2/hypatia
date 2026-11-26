@@ -1,6 +1,7 @@
 pub mod art;
 pub mod assets;
 pub mod catalog;
+pub mod coach_llm;
 pub mod connectors;
 pub mod diff;
 pub mod discovery;
@@ -9,6 +10,7 @@ pub mod lcu_actions;
 pub mod redaction;
 pub mod remote;
 pub mod remote_stats;
+pub mod review;
 pub mod riot_http;
 pub mod settings;
 pub mod signal;
@@ -29,6 +31,7 @@ use tracing::info;
 
 use crate::assets::GameAssetCache;
 use crate::catalog::CatalogStore;
+use crate::coach_llm::CoachDebriefService;
 use crate::connectors::{
     spawn_live_client_poller, spawn_replay_poller, spawn_wamp_connector, ConnectorContext,
 };
@@ -40,6 +43,7 @@ use crate::lcu_actions::{
     affected_lcu_uris, resolve_lcu_command_with_champion, LcuActionClient, RemoteActionError,
 };
 use crate::redaction::SecretVault;
+use crate::review::ReviewStore;
 use crate::riot_http::ReadOnlyRiotClient;
 use crate::settings::{Flags, Settings};
 use crate::signal::ChangeSignal;
@@ -76,6 +80,10 @@ pub struct AppState {
     pub signal: ChangeSignal,
     /// Champion Stats (builds, tier list, matchups, My Stats): the one entry point for views.
     pub stats: ChampionStats,
+    /// Local Game Review capture and 50-game trace cache.
+    pub reviews: ReviewStore,
+    /// Opt-in Layer 2 LLM coach narrator (Ollama / LM Studio on 127.0.0.1 or BYOK).
+    pub coach_llm: CoachDebriefService,
     demo_spawned: Arc<AtomicBool>,
     lang: Arc<AtomicU8>,
     lang_path: Option<PathBuf>,
@@ -157,6 +165,28 @@ impl AppState {
             signal.clone(),
             lang.clone(),
         );
+        let reviews_path = if lang_path.is_some() && !demo {
+            Some(ReviewStore::default_path())
+        } else {
+            None
+        };
+        let reviews = ReviewStore::new(
+            discovery.clone(),
+            riot_client.clone(),
+            signal.clone(),
+            reviews_path,
+        );
+        let llm_config_path = if lang_path.is_some() {
+            Some(CoachDebriefService::default_config_path())
+        } else {
+            None
+        };
+        let coach_llm = CoachDebriefService::new(
+            flags.clone(),
+            discovery.clone(),
+            signal.clone(),
+            llm_config_path,
+        );
 
         let state = Self {
             discovery,
@@ -169,6 +199,8 @@ impl AppState {
             flags,
             signal,
             stats,
+            reviews,
+            coach_llm,
             demo_spawned: Arc::new(AtomicBool::new(false)),
             lang,
             lang_path,
@@ -197,7 +229,21 @@ impl AppState {
             client: self.riot_client.clone(),
             flags: self.flags.clone(),
             signal: self.signal.clone(),
+            trace_recorder: self.reviews.recorder(),
         }
+    }
+
+    /// Returns the numeric `gameId` from the latest End-of-Game payload, or `0` if absent.
+    pub fn current_eog_game_id(&self) -> i64 {
+        self.store
+            .read()
+            .unwrap()
+            .current(
+                SourceId::LeagueClient,
+                "/lol-end-of-game/v1/eog-stats-block",
+            )
+            .and_then(|v| v.get("gameId").and_then(Value::as_i64))
+            .unwrap_or(0)
     }
 
     fn ensure_demo_generator(&self, demo_rate: f32) {

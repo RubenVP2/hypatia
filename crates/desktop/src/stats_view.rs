@@ -69,6 +69,8 @@ struct Selection {
     my_queue: i32,
     /// My Stats role filter: -1 All, 0..4 desktop lane index.
     my_role: i32,
+    /// Game currently open in Match inspector (`My Stats`), if any.
+    inspected_game_id: Option<i64>,
     search: String,
 }
 
@@ -92,6 +94,7 @@ impl Default for Selection {
             matchup_show_all: false,
             my_queue: -1,
             my_role: -1,
+            inspected_game_id: None,
             search: String::new(),
         }
     }
@@ -111,6 +114,9 @@ struct Inputs {
     tiers: Option<StatsState<TierList>>,
     matchups: Option<StatsState<MatchupList>>,
     profile: Option<StatsState<PlayerProfile>>,
+    inspected_review: Option<hypatia_shared::GameReview>,
+    llm_enabled: bool,
+    inspected_debrief: hypatia_core::coach_llm::DebriefState,
 }
 
 #[derive(Default)]
@@ -184,6 +190,34 @@ impl StatsView {
 
     pub fn select_my_role(&mut self, role: i32) {
         self.selection.my_role = role.clamp(-1, 4);
+    }
+
+    pub fn inspect_game(&mut self, game_id: &str) {
+        self.selection.inspected_game_id = game_id.parse::<i64>().ok();
+    }
+
+    pub fn request_inspected_debrief(&self, app: &AppState) {
+        let Some(gid) = self.selection.inspected_game_id else {
+            return;
+        };
+        let lang = app.lang();
+        let profile = app.stats.player_profile();
+        let Some(prof) = profile.ready() else {
+            return;
+        };
+        let Some(game) = prof.games.iter().find(|g| g.game_id == gid) else {
+            return;
+        };
+        let personal = prof
+            .champions
+            .iter()
+            .find(|c| c.champion_id == game.champion_id);
+        if let Some(review) = app
+            .reviews
+            .review_for_player_game(game, personal, None, lang)
+        {
+            app.coach_llm.request_debrief(review, lang);
+        }
     }
 
     pub fn select_role(&mut self, lane: i32) {
@@ -300,9 +334,30 @@ impl StatsView {
         let has_champion = self.selection.champion_id > 0;
         let picker = matches!(tab, TAB_BUILD | TAB_MATCHUPS);
         let query = self.query();
+        let lang = app.lang();
+        let profile = (picker || tab == TAB_MY_STATS).then(|| stats.player_profile());
+        let inspected_review = if tab == TAB_MY_STATS {
+            self.selection.inspected_game_id.and_then(|gid| {
+                let prof = profile.as_ref().and_then(|p| p.ready())?;
+                let game = prof.games.iter().find(|g| g.game_id == gid)?;
+                let personal = prof
+                    .champions
+                    .iter()
+                    .find(|c| c.champion_id == game.champion_id);
+                app.reviews
+                    .review_for_player_game(game, personal, None, lang)
+            })
+        } else {
+            None
+        };
+        let llm_enabled = app.coach_llm.is_available();
+        let inspected_debrief = inspected_review
+            .as_ref()
+            .map(|r| app.coach_llm.state(r.game_id, lang))
+            .unwrap_or_default();
         Inputs {
             selection: self.selection.clone(),
-            lang: app.lang(),
+            lang,
             online: stats.online_enabled(),
             icons: (
                 app.flags.game_icons(),
@@ -324,7 +379,10 @@ impl StatsView {
                 )
             }),
             matchups: (tab == TAB_MATCHUPS && has_champion).then(|| stats.matchups(&query)),
-            profile: (picker || tab == TAB_MY_STATS).then(|| stats.player_profile()),
+            profile,
+            inspected_review,
+            llm_enabled,
+            inspected_debrief,
         }
     }
 
@@ -467,6 +525,12 @@ pub fn wire(bridge: &StatsBridge<'_>) {
                 ui.toggle_setting("online_stats");
             }
         })
+    });
+    bridge.on_inspect_game(|id| {
+        with_ui(|ui| ui.update_stats(|s, _| s.inspect_game(&id)));
+    });
+    bridge.on_request_inspected_debrief(|| {
+        with_ui(|ui| ui.update_stats(|s, app| s.request_inspected_debrief(app)));
     });
 }
 
@@ -1147,6 +1211,7 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
             };
             let (session_header, session_summary) = &session_headers[idx];
             StatsGameRow {
+                game_id: g.game_id.to_string().into(),
                 champion: ctx.champion(g.champion_id),
                 win: g.win,
                 remake: g.is_remake(),
@@ -1197,6 +1262,12 @@ fn push_my_stats(bridge: &StatsBridge<'_>, ctx: &mut Ctx<'_>, inputs: &Inputs) {
         })
         .collect();
     bridge.set_games(model(rows));
+    bridge.set_inspected_review(crate::companion::build_review_view(
+        inputs.inspected_review.as_ref(),
+        inputs.llm_enabled,
+        &inputs.inspected_debrief,
+        lang,
+    ));
 }
 
 /// What a push needs to turn ids into names and icons.

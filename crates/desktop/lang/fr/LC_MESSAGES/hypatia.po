@@ -1984,3 +1984,87 @@ msgstr "Plus tard"
 msgctxt "MainWindow"
 msgid "Asks GitHub at launch and twice a day whether a newer Hypatia is out. Sends nothing about you; installs only when you click."
 msgstr "Demande à GitHub au démarrage et deux fois par jour si une nouvelle version d'Hypatia est sortie. N'envoie rien sur vous ; n'installe que sur votre clic."
+
+msgctxt "CoachReviewCard"
+msgid "Coach review"
+msgstr "Revue du coach"
+
+msgctxt "CoachReviewCard"
+msgid "GOOD CHOICES"
+msgstr "BONS CHOIX"
+
+msgctxt "CoachReviewCard"
+msgid "TO IMPROVE"
+msgstr "À AMÉLIORER"
+
+msgctxt "CoachReviewCard"
+msgid "Hide turning points"
+msgstr "Masquer les moments tournants"
+
+msgctxt "CoachReviewCard"
+msgid "Turning points"
+msgstr "Moments tournants"
+
+msgctxt "CoachReviewCard"
+msgid "Generate coach debrief"
+msgstr "Générer le débrief coach"
+
+msgctxt "CoachReviewCard"
+msgid "Writing coach debrief…"
+msgstr "Rédaction du débrief coach…"
+
+msgctxt "CoachReviewCard"
+msgid "COACH DEBRIEF"
+msgstr "DÉBRIEF COACH"
+
+msgctxt "CoachReviewCard"
+msgid "Regenerate"
+msgstr "Régénérer"
+
+msgctxt "CoachReviewCard"
+msgid "Retry"
+msgstr "Réessayer"
+
+msgctxt "MainWindow"
+msgid "Coach LLM debrief"
+msgstr "Débrief coach (LLM)"
+
+msgctxt "MainWindow"
+msgid "Optional narrator turning local Game Review facts into a short coach debrief via Ollama / LM Studio on 127.0.0.1 or your own API key. Off: zero I/O; never sends your Riot ID or PUUID."
+msgstr "Narrateur optionnel qui transforme les faits locaux de la revue en court débrief coach via Ollama / LM Studio sur 127.0.0.1 ou votre propre clé API. Désactivé : zéro I/O ; n'envoie jamais votre Riot ID ni PUUID."
+
+msgctxt "MainWindow"
+msgid "Ollama (local)"
+msgstr "Ollama (local)"
+
+msgctxt "MainWindow"
+msgid "LM Studio (local)"
+msgstr "LM Studio (local)"
+
+msgctxt "MainWindow"
+msgid "Custom / BYOK"
+msgstr "Personnalisé / BYOK"
+
+msgctxt "MainWindow"
+msgid "Endpoint URL"
+msgstr "URL du serveur"
+
+msgctxt "MainWindow"
+msgid "Model"
+msgstr "Modèle"
+
+msgctxt "MainWindow"
+msgid "API key (optional for local servers)"
+msgstr "Clé API (optionnelle en local)"
+
+msgctxt "MainWindow"
+msgid "Save"
+msgstr "Enregistrer"
+
+msgctxt "MainWindow"
+msgid "Testing…"
+msgstr "Test en cours…"
+
+msgctxt "MainWindow"
+msgid "Test connection"
+msgstr "Tester la connexion"

@@ -1,0 +1,345 @@
+import { Theme, Space, Type } from "theme.slint";
+import { Card, Divider, SectionLabel, Action } from "parts.slint";
+
+export struct ReviewItemRow {
+    pillar: string,
+    timestamp: string,
+    title: string,
+    detail: string,
+}
+
+export struct TurningPointRow {
+    timestamp: string,
+    pillar: string,
+    label: string,
+    good: bool,
+}
+
+export struct CoachReviewView {
+    has: bool,
+    coverage: string,
+    good-choices: [ReviewItemRow],
+    improvements: [ReviewItemRow],
+    turning-points: [TurningPointRow],
+    llm-enabled: bool,
+    // 0 idle, 1 loading, 2 ready, 3 failed.
+    debrief-state: int,
+    debrief-text: string,
+    debrief-meta: string,
+}
+
+component FindingTile inherits Rectangle {
+    in property <ReviewItemRow> item;
+    in property <bool> good: true;
+
+    border-radius: Theme.radius-sm;
+    background: root.good ? Theme.live-green-soft : Theme.danger-soft;
+    border-width: 1px;
+    border-color: root.good ? Theme.live-green : Theme.danger;
+
+    VerticalLayout {
+        padding: Space.sm;
+        spacing: Space.xs;
+
+        HorizontalLayout {
+            spacing: Space.sm;
+            alignment: space-between;
+            Text {
+                text: root.item.pillar;
+                color: root.good ? Theme.live-green : Theme.danger;
+                font-family: Type.mono-family;
+                font-size: Type.label;
+                font-weight: 700;
+                letter-spacing: 0.6px;
+                vertical-alignment: center;
+            }
+            if root.item.timestamp != "": Text {
+                text: root.item.timestamp;
+                color: Theme.muted;
+                font-family: Type.mono-family;
+                font-size: Type.label;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.item.title;
+            color: Theme.text;
+            font-size: Type.body;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.item.detail;
+            color: Theme.muted;
+            font-size: Type.small;
+            font-weight: 400;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component TurningPointLine inherits Rectangle {
+    in property <TurningPointRow> point;
+
+    border-radius: Theme.radius-sm;
+    background: Theme.panel-raised;
+    border-width: 1px;
+    border-color: Theme.rule;
+
+    HorizontalLayout {
+        padding-left: Space.sm;
+        padding-right: Space.sm;
+        padding-top: Space.xs;
+        padding-bottom: Space.xs;
+        spacing: Space.sm;
+        alignment: start;
+
+        Text {
+            width: 44px;
+            text: root.point.timestamp;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 8px;
+            height: 8px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            background: root.point.good ? Theme.live-green : Theme.danger;
+        }
+
+        Text {
+            text: root.point.pillar;
+            color: Theme.muted;
+            font-family: Type.mono-family;
+            font-size: Type.label;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.point.label;
+            color: Theme.text;
+            font-size: Type.small;
+            font-weight: 600;
+            wrap: word-wrap;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component CoachReviewCard inherits Card {
+    in property <CoachReviewView> review;
+    in property <bool> compact: false;
+    callback request-debrief();
+    property <bool> show-timeline: false;
+
+    VerticalLayout {
+        padding: Space.lg;
+        spacing: Space.md;
+
+        HorizontalLayout {
+            spacing: Space.sm;
+            alignment: space-between;
+
+            Text {
+                text: @tr("Coach review");
+                color: Theme.text;
+                font-family: Type.display-family;
+                font-size: Type.title;
+                font-weight: 800;
+                vertical-alignment: center;
+            }
+
+            if root.review.coverage != "": Rectangle {
+                height: 24px;
+                y: (parent.height - self.height) / 2;
+                border-radius: Theme.radius-sm;
+                background: Theme.panel-raised;
+                border-width: 1px;
+                border-color: Theme.rule;
+                HorizontalLayout {
+                    padding-left: Space.sm;
+                    padding-right: Space.sm;
+                    Text {
+                        text: root.review.coverage;
+                        color: Theme.muted;
+                        font-family: Type.mono-family;
+                        font-size: Type.label;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if !root.compact: HorizontalLayout {
+            spacing: Space.md;
+            alignment: stretch;
+
+            if root.review.good-choices.length > 0: VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Space.xs;
+                SectionLabel { text: @tr("GOOD CHOICES"); }
+                for item in root.review.good-choices: FindingTile {
+                    item: item;
+                    good: true;
+                }
+            }
+
+            if root.review.improvements.length > 0: VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Space.xs;
+                SectionLabel { text: @tr("TO IMPROVE"); }
+                for item in root.review.improvements: FindingTile {
+                    item: item;
+                    good: false;
+                }
+            }
+        }
+
+        if root.compact: VerticalLayout {
+            spacing: Space.md;
+
+            if root.review.good-choices.length > 0: VerticalLayout {
+                spacing: Space.xs;
+                SectionLabel { text: @tr("GOOD CHOICES"); }
+                for item in root.review.good-choices: FindingTile {
+                    item: item;
+                    good: true;
+                }
+            }
+
+            if root.review.improvements.length > 0: VerticalLayout {
+                spacing: Space.xs;
+                SectionLabel { text: @tr("TO IMPROVE"); }
+                for item in root.review.improvements: FindingTile {
+                    item: item;
+                    good: false;
+                }
+            }
+        }
+
+        if root.review.turning-points.length > 0: VerticalLayout {
+            spacing: Space.sm;
+            Divider { }
+            HorizontalLayout {
+                spacing: Space.sm;
+                alignment: start;
+                Action {
+                    text: root.show-timeline ? @tr("Hide turning points") : @tr("Turning points");
+                    selected: root.show-timeline;
+                    clicked => { root.show-timeline = !root.show-timeline; }
+                }
+                Text {
+                    text: root.review.turning-points.length;
+                    color: Theme.muted;
+                    font-family: Type.mono-family;
+                    font-size: Type.label;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+            if root.show-timeline: VerticalLayout {
+                spacing: Space.xs;
+                for pt in root.review.turning-points: TurningPointLine {
+                    point: pt;
+                }
+            }
+        }
+
+        if root.review.llm-enabled: VerticalLayout {
+            spacing: Space.sm;
+            Divider { }
+
+            if root.review.debrief-state == 0: HorizontalLayout {
+                alignment: start;
+                Action {
+                    text: @tr("Generate coach debrief");
+                    clicked => { root.request-debrief(); }
+                }
+            }
+
+            if root.review.debrief-state == 1: Text {
+                text: @tr("Writing coach debrief…");
+                color: Theme.muted;
+                font-size: Type.small;
+                font-weight: 600;
+            }
+
+            if root.review.debrief-state == 2: Rectangle {
+                border-radius: Theme.radius-sm;
+                background: Theme.panel-raised;
+                border-width: 1px;
+                border-color: Theme.rule;
+
+                VerticalLayout {
+                    padding: Space.md;
+                    spacing: Space.sm;
+
+                    HorizontalLayout {
+                        spacing: Space.sm;
+                        alignment: space-between;
+                        SectionLabel { text: @tr("COACH DEBRIEF"); }
+                        if root.review.debrief-meta != "": Text {
+                            text: root.review.debrief-meta;
+                            color: Theme.muted;
+                            font-family: Type.mono-family;
+                            font-size: Type.label;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Text {
+                        text: root.review.debrief-text;
+                        color: Theme.text;
+                        font-size: Type.body;
+                        font-weight: 400;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        alignment: end;
+                        Action {
+                            text: @tr("Regenerate");
+                            clicked => { root.request-debrief(); }
+                        }
+                    }
+                }
+            }
+
+            if root.review.debrief-state == 3: Rectangle {
+                border-radius: Theme.radius-sm;
+                background: Theme.danger-soft;
+                border-width: 1px;
+                border-color: Theme.danger;
+
+                HorizontalLayout {
+                    padding: Space.sm;
+                    spacing: Space.sm;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.review.debrief-text;
+                        color: Theme.text;
+                        font-size: Type.small;
+                        wrap: word-wrap;
+                        vertical-alignment: center;
+                    }
+                    Action {
+                        text: @tr("Retry");
+                        clicked => { root.request-debrief(); }
+                    }
+                }
+            }
+        }
+    }
+}

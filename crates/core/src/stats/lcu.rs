@@ -565,6 +565,105 @@ pub(crate) async fn load_match_history(
     Ok(games)
 }
 
+/// Best-effort fetch of `/lol-match-history/v1/game-timelines/{gameId}` converted into a
+/// [`hypatia_shared::MatchTrace`]. Returns `None` silently if the client returns 404 or a shape
+/// without timeline frames.
+pub(crate) async fn load_game_timeline(
+    client: &ReadOnlyRiotClient,
+    port: u16,
+    token: &str,
+    game_id: i64,
+    champion_id: i64,
+    position: Option<Position>,
+) -> Option<hypatia_shared::MatchTrace> {
+    let path = format!("/lol-match-history/v1/game-timelines/{game_id}");
+    let (status, _, body) = client.get(port, Some(token), &path).await.ok()?;
+    if !status.is_success() {
+        return None;
+    }
+    parse_game_timeline(&body, game_id, champion_id, position)
+}
+
+fn parse_game_timeline(
+    body: &Value,
+    game_id: i64,
+    champion_id: i64,
+    position: Option<Position>,
+) -> Option<hypatia_shared::MatchTrace> {
+    use hypatia_shared::{DeathEvent, EpicKind, ItemBuyEvent, MatchTrace, ObjectiveEvent};
+
+    let frames = body.get("frames").and_then(Value::as_array)?;
+    if frames.is_empty() {
+        return None;
+    }
+
+    // Without participant mapping in the timeline payload alone, extract epic objectives
+    // (timestamps + types) so turning points and objective context remain available.
+    let mut trace = MatchTrace {
+        game_id: Some(game_id),
+        champion_id,
+        position,
+        ..MatchTrace::default()
+    };
+
+    for frame in frames {
+        let Some(events) = frame.get("events").and_then(Value::as_array) else {
+            continue;
+        };
+        for ev in events {
+            let kind_str = ev.get("type").and_then(Value::as_str).unwrap_or("");
+            let time_sec = ev
+                .get("timestamp")
+                .and_then(Value::as_u64)
+                .map(|ms| (ms / 1000) as u32)
+                .unwrap_or(0);
+            match kind_str {
+                "ELITE_MONSTER_KILL" => {
+                    let monster = ev.get("monsterType").and_then(Value::as_str).unwrap_or("");
+                    let sub = ev
+                        .get("monsterSubType")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let epic = match monster {
+                        "DRAGON" if sub.eq_ignore_ascii_case("ELDER_DRAGON") => EpicKind::Elder,
+                        "DRAGON" => EpicKind::Dragon,
+                        "RIFTHERALD" => EpicKind::Herald,
+                        "HORDE" => EpicKind::Grubs,
+                        "BARON_NASHOR" => EpicKind::Baron,
+                        _ => continue,
+                    };
+                    let killer_id = ev.get("killerId").and_then(Value::as_u64).unwrap_or(0);
+                    trace.objectives.push(ObjectiveEvent {
+                        time_sec,
+                        kind: epic,
+                        by_ally: (1..=5).contains(&killer_id),
+                        player_involved: false,
+                    });
+                }
+                "ITEM_PURCHASED" => {
+                    let pid = ev.get("participantId").and_then(Value::as_u64).unwrap_or(0);
+                    let item_id = ev.get("itemId").and_then(Value::as_i64).unwrap_or(0);
+                    if pid == 1 && item_id > 0 {
+                        trace.item_buys.push(ItemBuyEvent { time_sec, item_id });
+                    }
+                }
+                "CHAMPION_KILL" => {
+                    let victim_id = ev.get("victimId").and_then(Value::as_u64).unwrap_or(0);
+                    if victim_id == 1 {
+                        trace.deaths.push(DeathEvent {
+                            time_sec,
+                            unspent_gold: None,
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    trace.has_timeline_data().then_some(trace)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

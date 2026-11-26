@@ -219,4 +219,21 @@ fn shots() {
         main.set_stats_open(true);
         window.set_size(PhysicalSize::new(width, height));
     }
+    if only.is_empty() || only.contains("end") {
+        app.set_demo_phase("EndOfGame");
+        main.set_demo(true);
+        main.set_stats_open(false);
+        let mut companion = Companion::default();
+        for (lang, code) in [(Lang::En, "en"), (Lang::Fr, "fr")] {
+            app.set_lang(lang);
+            slint::select_bundled_translation(code).unwrap();
+            main.set_language(code.into());
+            Theme::get(&main).set_dark(true);
+            crate::companion::request_end_debrief(&app);
+            companion.refresh(&main, &app);
+            capture_at(&format!("end-dark-{code}"), 1320, 1500);
+        }
+        main.set_stats_open(true);
+        window.set_size(PhysicalSize::new(width, height));
+    }
 }

@@ -444,6 +444,9 @@ pub struct Settings {
     /// Ask GitHub whether a newer Hypatia release exists. `Ask` until the player answers the
     /// first-launch question; only `On` performs any I/O. Profiles keep it as the user set it.
     pub update_check: UpdateCheck,
+    /// Opt-in Layer 2 LLM coach narrator (local Ollama/LM Studio on 127.0.0.1 or BYOK API).
+    /// Off by default; off, performs zero network I/O. Profiles keep it as the user set it.
+    pub coach_llm: bool,
 }
 
 /// The player's answer about update checks.
@@ -501,6 +504,7 @@ impl Settings {
                 pause_when_minimized: true,
                 online_stats: false,
                 update_check: UpdateCheck::Ask,
+                coach_llm: false,
                 light_theme: false,
                 reduce_motion: true,
             },
@@ -524,6 +528,7 @@ impl Settings {
                 pause_when_minimized: true,
                 online_stats: false,
                 update_check: UpdateCheck::Ask,
+                coach_llm: false,
                 light_theme: false,
                 reduce_motion: false,
             },
@@ -547,6 +552,7 @@ impl Settings {
                 pause_when_minimized: false,
                 online_stats: false,
                 update_check: UpdateCheck::Ask,
+                coach_llm: false,
                 light_theme: false,
                 reduce_motion: false,
             },
@@ -661,10 +667,12 @@ impl Settings {
         let light = self.light_theme;
         let online_stats = self.online_stats;
         let update_check = self.update_check;
+        let coach_llm = self.coach_llm;
         *self = Self::for_profile(profile);
         self.light_theme = light;
         self.online_stats = online_stats;
         self.update_check = update_check;
+        self.coach_llm = coach_llm;
         true
     }
 
@@ -688,6 +696,7 @@ impl Settings {
         p.light_theme = self.light_theme;
         p.online_stats = self.online_stats;
         p.update_check = self.update_check;
+        p.coach_llm = self.coach_llm;
         p.profile = self.profile;
         *self == p
     }
@@ -781,6 +790,7 @@ impl Settings {
             "demo_prefetch" => &mut self.demo_prefetch,
             "pause_when_minimized" => &mut self.pause_when_minimized,
             "online_stats" => &mut self.online_stats,
+            "coach_llm" => &mut self.coach_llm,
             _ => return false,
         };
         *field = !*field;
@@ -811,6 +821,7 @@ pub struct Flags {
     pause_when_minimized: AtomicBool,
     online_stats: AtomicBool,
     update_check: AtomicBool,
+    coach_llm: AtomicBool,
     telemetry: AtomicBool,
 }
 
@@ -867,6 +878,7 @@ impl Flags {
         self.online_stats.store(s.online_stats, Ordering::Relaxed);
         self.update_check
             .store(s.update_check == UpdateCheck::On, Ordering::Relaxed);
+        self.coach_llm.store(s.coach_llm, Ordering::Relaxed);
     }
 
     pub fn set_telemetry(&self, on: bool) {
@@ -943,6 +955,11 @@ impl Flags {
     /// `UpdateError::Disabled` before any network access.
     pub fn update_check(&self) -> bool {
         self.update_check.load(Ordering::Relaxed)
+    }
+
+    /// Opt-in Layer 2 LLM coach narrator is enabled. Off, performs zero network I/O.
+    pub fn coach_llm(&self) -> bool {
+        self.coach_llm.load(Ordering::Relaxed)
     }
 
     /// Telemetry Lab is open: record the full event history and the complete WAMP stream.

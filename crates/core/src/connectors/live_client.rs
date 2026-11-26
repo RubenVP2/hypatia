@@ -39,6 +39,7 @@ pub fn spawn_live_client_poller(ctx: ConnectorContext) {
 
             match ctx.client.get(2999, None, ALLGAMEDATA).await {
                 Ok((status, _, body)) if status.is_success() => {
+                    ctx.trace_recorder.record_allgamedata(&body, &*ctx.assets);
                     let new_events = take_new_events(&body, &mut seen_event_ids);
                     let capture = ctx.flags.telemetry();
                     let (poll_bytes, event_bytes) = {

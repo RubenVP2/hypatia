@@ -12,6 +12,7 @@ use crate::assets::GameAssetCache;
 use crate::catalog::CatalogStore;
 use crate::discovery::DiscoveryManager;
 use crate::redaction::SecretVault;
+use crate::review::LiveTraceRecorder;
 use crate::riot_http::ReadOnlyRiotClient;
 use crate::settings::Flags;
 use crate::signal::ChangeSignal;
@@ -28,6 +29,7 @@ pub struct ConnectorContext {
     pub client: ReadOnlyRiotClient,
     pub flags: Arc<Flags>,
     pub signal: ChangeSignal,
+    pub trace_recorder: LiveTraceRecorder,
 }
 
 impl ConnectorContext {

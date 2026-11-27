@@ -11,9 +11,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use hypatia_shared::{
-    analyze_match, extract_raw_champion_alias, ChampionBuild, ChampionLookup, DeathEvent,
-    EndOfGameSummary, EpicKind, GameReview, ItemBuyEvent, Lang, MatchTrace, ObjectiveEvent,
-    PlayerChampionStats, PlayerGame, Position, ReviewInput, TraceSample,
+    analyze_match, build_player_habit_profile, extract_raw_champion_alias, ChampionBuild,
+    ChampionLookup, DeathEvent, EndOfGameSummary, EpicKind, GameReview, ItemBuyEvent, Lang,
+    MatchTrace, ObjectiveEvent, PlayerChampionStats, PlayerGame, PlayerHabitProfile, Position,
+    ReviewInput, TraceSample,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -396,6 +397,21 @@ impl ReviewStore {
             .map(|e| e.trace.clone())
     }
 
+    /// Computes the player's longitudinal [`PlayerHabitProfile`] from local match history + cached traces.
+    pub fn habit_profile(&self, recent_games: &[PlayerGame]) -> Option<PlayerHabitProfile> {
+        if self.discovery.is_demo_override() {
+            return Some(demo_habit_profile());
+        }
+        let traces: Vec<MatchTrace> = self
+            .traces
+            .read()
+            .unwrap()
+            .iter()
+            .map(|e| e.trace.clone())
+            .collect();
+        build_player_habit_profile(recent_games, &traces)
+    }
+
     /// Computes a [`GameReview`] for the active `EndOfGame` screen.
     ///
     /// Uses the recorded live trace when available (or the synthetic demo trace in demo mode).
@@ -405,6 +421,7 @@ impl ReviewStore {
         game_id: i64,
         personal_champ: Option<&PlayerChampionStats>,
         recommended_build: Option<&ChampionBuild>,
+        recent_games: &[PlayerGame],
         lang: Lang,
     ) -> Option<GameReview> {
         let is_demo = self.discovery.is_demo_override();
@@ -419,6 +436,7 @@ impl ReviewStore {
             }
             live.or_else(|| (game_id > 0).then(|| self.get_trace(game_id)).flatten())
         };
+        let habit = self.habit_profile(recent_games);
 
         let input = ReviewInput::from_end_of_game(
             eog,
@@ -427,7 +445,8 @@ impl ReviewStore {
             personal_champ,
             recommended_build,
             is_demo,
-        )?;
+        )?
+        .with_habit_profile(habit.as_ref());
         let rev = analyze_match(&input, lang);
         rev.has_findings().then_some(rev)
     }
@@ -441,6 +460,7 @@ impl ReviewStore {
         game: &PlayerGame,
         personal_champ: Option<&PlayerChampionStats>,
         recommended_build: Option<&ChampionBuild>,
+        recent_games: &[PlayerGame],
         lang: Lang,
     ) -> Option<GameReview> {
         let is_demo = self.discovery.is_demo_override();
@@ -455,6 +475,7 @@ impl ReviewStore {
             }
             cached
         };
+        let habit = self.habit_profile(recent_games);
 
         let input = ReviewInput::from_player_game(
             game,
@@ -462,7 +483,8 @@ impl ReviewStore {
             personal_champ,
             recommended_build,
             is_demo,
-        )?;
+        )?
+        .with_habit_profile(habit.as_ref());
         let rev = analyze_match(&input, lang);
         rev.has_findings().then_some(rev)
     }
@@ -573,6 +595,30 @@ pub fn demo_trace() -> MatchTrace {
                 item_id: 4645,
             },
         ],
+    }
+}
+
+/// Synthetic longitudinal [`PlayerHabitProfile`] matching `--demo` mode.
+pub fn demo_habit_profile() -> PlayerHabitProfile {
+    PlayerHabitProfile {
+        sample_games: 14,
+        wins: 8,
+        losses: 6,
+        win_avg_deaths: Some(2.9),
+        loss_avg_deaths: Some(6.4),
+        win_avg_cs_per_min: Some(7.1),
+        loss_avg_cs_per_min: Some(6.0),
+        win_avg_kp: Some(0.66),
+        loss_avg_kp: Some(0.49),
+        win_avg_vision_per_min: Some(0.84),
+        loss_avg_vision_per_min: Some(0.61),
+        tracked_trace_games: 5,
+        pre_objective_death_games: 3,
+        high_gold_death_games: 3,
+        death_streak_games: 2,
+        session_wins: 2,
+        session_losses: 1,
+        current_streak: 2,
     }
 }
 

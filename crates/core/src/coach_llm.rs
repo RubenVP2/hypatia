@@ -19,7 +19,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use hypatia_shared::{build_coach_prompt, demo_coach_debrief, GameReview, Lang};
+use hypatia_shared::{
+    build_coach_prompt_with_focus, build_followup_messages, demo_coach_debrief_for_focus,
+    demo_coach_followup, CoachFocus, CoachMessage, CoachTurn, GameReview, Lang,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -160,18 +163,25 @@ impl fmt::Debug for CoachLlmConfig {
     }
 }
 
-/// Current state of a coach debrief for one `(game_id, lang)`.
+/// Current state of a coach debrief + follow-up Q&A session for one `(game_id, lang)`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum DebriefState {
     #[default]
     Idle,
-    Loading,
+    Loading(CoachFocus),
     Ready {
         text: String,
         model: String,
         is_demo: bool,
+        focus: CoachFocus,
+        turns: Vec<CoachTurn>,
+        followup_loading: bool,
+        followup_error: Option<String>,
     },
-    Failed(String),
+    Failed {
+        message: String,
+        focus: CoachFocus,
+    },
 }
 
 /// Current state of the Performance sheet's "Test connection" action.
@@ -271,19 +281,28 @@ impl CoachDebriefService {
         self.conn_test.read().unwrap().clone()
     }
 
-    /// Requests a Layer 2 coach debrief for `review` on explicit user click.
+    /// Requests a Layer 2 coach debrief for `review` using the default [`CoachFocus::Overview`].
+    pub fn request_debrief(&self, review: GameReview, lang: Lang) {
+        self.request_debrief_with_focus(review, CoachFocus::Overview, lang);
+    }
+
+    /// Requests a Layer 2 coach debrief for `review` under a specific [`CoachFocus`] lens.
     ///
     /// Performs zero network I/O when `flags.coach_llm()` is off (outside demo mode).
-    pub fn request_debrief(&self, review: GameReview, lang: Lang) {
+    pub fn request_debrief_with_focus(&self, review: GameReview, focus: CoachFocus, lang: Lang) {
         let key = (review.game_id, lang as u8);
         if self.discovery.is_demo_override() {
-            let text = demo_coach_debrief(&review, lang);
+            let text = demo_coach_debrief_for_focus(&review, focus, lang);
             self.debriefs.write().unwrap().insert(
                 key,
                 DebriefState::Ready {
                     text,
                     model: lang.pick("Demo", "Démo").to_string(),
                     is_demo: true,
+                    focus,
+                    turns: Vec::new(),
+                    followup_loading: false,
+                    followup_error: None,
                 },
             );
             self.bump();
@@ -294,10 +313,10 @@ impl CoachDebriefService {
         }
         {
             let mut map = self.debriefs.write().unwrap();
-            if matches!(map.get(&key), Some(DebriefState::Loading)) {
+            if matches!(map.get(&key), Some(DebriefState::Loading(_))) {
                 return;
             }
-            map.insert(key, DebriefState::Loading);
+            map.insert(key, DebriefState::Loading(focus));
         }
         self.bump();
 
@@ -308,16 +327,143 @@ impl CoachDebriefService {
         let revision = self.revision.clone();
 
         tokio::spawn(async move {
-            let outcome = generate_debrief(&http, &cfg, &review, lang).await;
+            let outcome = generate_debrief_with_focus(&http, &cfg, &review, focus, lang).await;
             let next = match outcome {
                 Ok((text, model)) => DebriefState::Ready {
                     text,
                     model,
                     is_demo: false,
+                    focus,
+                    turns: Vec::new(),
+                    followup_loading: false,
+                    followup_error: None,
                 },
-                Err(msg) => DebriefState::Failed(msg),
+                Err(message) => DebriefState::Failed { message, focus },
             };
             debriefs.write().unwrap().insert(key, next);
+            revision.fetch_add(1, Ordering::Relaxed);
+            signal.bump();
+        });
+    }
+
+    /// Asks a grounded follow-up question in the active match's coaching session.
+    ///
+    /// Performs zero network I/O when `flags.coach_llm()` is off (outside demo mode).
+    pub fn ask_followup(&self, review: GameReview, question: String, lang: Lang) {
+        let q = question.trim().to_string();
+        if q.is_empty() {
+            return;
+        }
+        let key = (review.game_id, lang as u8);
+
+        if self.discovery.is_demo_override() {
+            let answer = demo_coach_followup(&review, &q, lang);
+            let mut map = self.debriefs.write().unwrap();
+            let entry = map.entry(key).or_insert_with(|| DebriefState::Ready {
+                text: demo_coach_debrief_for_focus(&review, CoachFocus::Overview, lang),
+                model: lang.pick("Demo", "Démo").to_string(),
+                is_demo: true,
+                focus: CoachFocus::Overview,
+                turns: Vec::new(),
+                followup_loading: false,
+                followup_error: None,
+            });
+            if let DebriefState::Ready {
+                turns,
+                followup_loading,
+                followup_error,
+                ..
+            } = entry
+            {
+                turns.push(CoachTurn {
+                    question: q,
+                    answer,
+                });
+                if turns.len() > 8 {
+                    let excess = turns.len() - 8;
+                    turns.drain(0..excess);
+                }
+                *followup_loading = false;
+                *followup_error = None;
+            }
+            drop(map);
+            self.bump();
+            return;
+        }
+
+        if !self.flags.coach_llm() {
+            return;
+        }
+
+        let (focus, initial_debrief, history) = {
+            let mut map = self.debriefs.write().unwrap();
+            match map.get_mut(&key) {
+                Some(DebriefState::Ready {
+                    text,
+                    focus,
+                    turns,
+                    followup_loading,
+                    followup_error,
+                    ..
+                }) => {
+                    if *followup_loading {
+                        return;
+                    }
+                    *followup_loading = true;
+                    *followup_error = None;
+                    (*focus, text.clone(), turns.clone())
+                }
+                _ => return,
+            }
+        };
+        self.bump();
+
+        let cfg = self.config();
+        let http = self.http.clone();
+        let debriefs = self.debriefs.clone();
+        let signal = self.signal.clone();
+        let revision = self.revision.clone();
+
+        tokio::spawn(async move {
+            let outcome = generate_followup(
+                &http,
+                &cfg,
+                &review,
+                focus,
+                &initial_debrief,
+                &history,
+                &q,
+                lang,
+            )
+            .await;
+            {
+                let mut map = debriefs.write().unwrap();
+                if let Some(DebriefState::Ready {
+                    turns,
+                    followup_loading,
+                    followup_error,
+                    ..
+                }) = map.get_mut(&key)
+                {
+                    *followup_loading = false;
+                    match outcome {
+                        Ok((answer, _)) => {
+                            turns.push(CoachTurn {
+                                question: q,
+                                answer,
+                            });
+                            if turns.len() > 8 {
+                                let excess = turns.len() - 8;
+                                turns.drain(0..excess);
+                            }
+                            *followup_error = None;
+                        }
+                        Err(err) => {
+                            *followup_error = Some(err);
+                        }
+                    }
+                }
+            }
             revision.fetch_add(1, Ordering::Relaxed);
             signal.bump();
         });
@@ -349,11 +495,60 @@ impl CoachDebriefService {
     }
 }
 
-/// Calls an OpenAI-compatible `POST {base_url}/chat/completions` endpoint with anonymized facts.
+/// Calls an OpenAI-compatible `POST {base_url}/chat/completions` endpoint with anonymized facts
+/// using the default [`CoachFocus::Overview`] lens.
 pub async fn generate_debrief(
     http: &Client,
     cfg: &CoachLlmConfig,
     review: &GameReview,
+    lang: Lang,
+) -> Result<(String, String), String> {
+    generate_debrief_with_focus(http, cfg, review, CoachFocus::Overview, lang).await
+}
+
+/// Calls an OpenAI-compatible `POST {base_url}/chat/completions` endpoint for a specific [`CoachFocus`].
+pub async fn generate_debrief_with_focus(
+    http: &Client,
+    cfg: &CoachLlmConfig,
+    review: &GameReview,
+    focus: CoachFocus,
+    lang: Lang,
+) -> Result<(String, String), String> {
+    let prompt = build_coach_prompt_with_focus(review, focus, lang);
+    let messages = vec![
+        CoachMessage {
+            role: "system",
+            content: prompt.system,
+        },
+        CoachMessage {
+            role: "user",
+            content: prompt.user,
+        },
+    ];
+    call_chat_completions(http, cfg, &messages, 520, lang).await
+}
+
+/// Sends a grounded multi-turn follow-up question to the OpenAI-compatible endpoint.
+#[allow(clippy::too_many_arguments)]
+pub async fn generate_followup(
+    http: &Client,
+    cfg: &CoachLlmConfig,
+    review: &GameReview,
+    focus: CoachFocus,
+    initial_debrief: &str,
+    history: &[CoachTurn],
+    question: &str,
+    lang: Lang,
+) -> Result<(String, String), String> {
+    let messages = build_followup_messages(review, focus, initial_debrief, history, question, lang);
+    call_chat_completions(http, cfg, &messages, 320, lang).await
+}
+
+async fn call_chat_completions(
+    http: &Client,
+    cfg: &CoachLlmConfig,
+    messages: &[CoachMessage],
+    max_tokens: u32,
     lang: Lang,
 ) -> Result<(String, String), String> {
     let base = cfg.validate_base_url(lang)?;
@@ -363,16 +558,16 @@ pub async fn generate_debrief(
             .pick("Model name is empty.", "Le nom du modèle est vide.")
             .into());
     }
-    let prompt = build_coach_prompt(review, lang);
     let url = format!("{base}/chat/completions");
+    let wire_messages: Vec<Value> = messages
+        .iter()
+        .map(|m| json!({ "role": m.role, "content": m.content }))
+        .collect();
     let body = json!({
         "model": model,
-        "temperature": 0.3,
-        "max_tokens": 260,
-        "messages": [
-            { "role": "system", "content": prompt.system },
-            { "role": "user", "content": prompt.user }
-        ]
+        "temperature": 0.35,
+        "max_tokens": max_tokens,
+        "messages": wire_messages,
     });
 
     let mut req = http.post(&url).timeout(DEBRIEF_TIMEOUT).json(&body);
@@ -432,11 +627,9 @@ pub async fn generate_debrief(
         )
         .to_string()
     })?;
-    let content = val
+    let raw_content = val
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
         .ok_or_else(|| {
             lang.pick(
                 "The LLM returned an empty debrief.",
@@ -444,13 +637,74 @@ pub async fn generate_debrief(
             )
             .to_string()
         })?;
+    let content = sanitize_debrief(raw_content);
+    if content.is_empty() {
+        return Err(lang
+            .pick(
+                "The LLM returned an empty debrief.",
+                "Le modèle LLM a renvoyé une réponse vide.",
+            )
+            .to_string());
+    }
     let used_model = val
         .get("model")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .unwrap_or(model)
         .to_string();
-    Ok((content.to_string(), used_model))
+    Ok((content, used_model))
+}
+
+/// Cleans an LLM response for plain-text display in Slint:
+/// - Strips `<think>...</think>` blocks emitted by local reasoning models (DeepSeek-R1, Qwen3, QwQ).
+/// - Strips accidental Markdown (`**`, `__`, leading `# ` headings) and normalizes `- ` / `* ` bullets to `• `.
+/// - Collapses excessive blank lines.
+pub fn sanitize_debrief(raw: &str) -> String {
+    // Remove any closed <think>...</think> reasoning sections.
+    let mut without_think = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(start) = rest.find("<think>") {
+        without_think.push_str(&rest[..start]);
+        if let Some(end) = rest[start..].find("</think>") {
+            rest = &rest[start + end + "</think>".len()..];
+        } else {
+            rest = "";
+            break;
+        }
+    }
+    without_think.push_str(rest);
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut prev_blank = false;
+    for line in without_think.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if !prev_blank && !lines.is_empty() {
+                lines.push(String::new());
+                prev_blank = true;
+            }
+            continue;
+        }
+        prev_blank = false;
+        let stripped_heading = trimmed.trim_start_matches('#').trim_start();
+        let cleaned = stripped_heading
+            .replace("**", "")
+            .replace("__", "")
+            .replace('`', "");
+        let normalized = if let Some(body) = cleaned
+            .strip_prefix("- ")
+            .or_else(|| cleaned.strip_prefix("* "))
+        {
+            format!("• {}", body.trim_start())
+        } else {
+            cleaned
+        };
+        lines.push(normalized);
+    }
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    lines.join("\n")
 }
 
 async fn probe_models(http: &Client, cfg: &CoachLlmConfig, lang: Lang) -> Result<String, String> {
@@ -661,5 +915,62 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("401/403"), "got {err}");
+    }
+
+    #[test]
+    fn sanitize_debrief_strips_think_tags_and_markdown() {
+        let raw = "<think>\nChecking CS and death timestamps...\n</think>\n\n### **VERDICT**\nClean lane on **Ahri**.\n\n\n## KEY LEVERS\n- Reset before `Dragon`.\n* Buy **Oblivion Orb** early.\n\n";
+        let cleaned = sanitize_debrief(raw);
+        assert_eq!(
+            cleaned,
+            "VERDICT\nClean lane on Ahri.\n\nKEY LEVERS\n• Reset before Dragon.\n• Buy Oblivion Orb early."
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_followup_sends_multi_turn_history() {
+        let app = Router::new().route(
+            "/v1/chat/completions",
+            post(|Json(payload): Json<Value>| async move {
+                let count = payload["messages"].as_array().map(Vec::len).unwrap_or(0);
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "model": "llama3.1:8b",
+                        "choices": [{"message": {"content": format!("Grounded reply with {count} messages.")}}]
+                    })),
+                )
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let http = Client::new();
+        let cfg = CoachLlmConfig {
+            preset: CoachLlmPreset::OllamaLocal,
+            base_url: format!("http://{addr}/v1"),
+            model: "llama3.1:8b".into(),
+            api_key: String::new(),
+        };
+        let (reply, _) = generate_followup(
+            &http,
+            &cfg,
+            &sample_review(),
+            CoachFocus::Matchup,
+            "Initial matchup breakdown.",
+            &[CoachTurn {
+                question: "When do I spike?".into(),
+                answer: "At Lost Chapter and level 6.".into(),
+            }],
+            "Should I buy Oblivion Orb first?",
+            Lang::En,
+        )
+        .await
+        .expect("followup should succeed");
+        // system + dossier + initial debrief + 1 prior turn (2 msgs) + new question = 6
+        assert!(reply.contains("6 messages"), "got {reply}");
     }
 }

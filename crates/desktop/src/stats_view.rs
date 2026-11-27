@@ -196,7 +196,7 @@ impl StatsView {
         self.selection.inspected_game_id = game_id.parse::<i64>().ok();
     }
 
-    pub fn request_inspected_debrief(&self, app: &AppState) {
+    pub fn request_inspected_debrief(&self, app: &AppState, focus: hypatia_shared::CoachFocus) {
         let Some(gid) = self.selection.inspected_game_id else {
             return;
         };
@@ -212,11 +212,36 @@ impl StatsView {
             .champions
             .iter()
             .find(|c| c.champion_id == game.champion_id);
-        if let Some(review) = app
-            .reviews
-            .review_for_player_game(game, personal, None, lang)
+        if let Some(review) =
+            app.reviews
+                .review_for_player_game(game, personal, None, prof.games.as_slice(), lang)
         {
-            app.coach_llm.request_debrief(review, lang);
+            app.coach_llm
+                .request_debrief_with_focus(review, focus, lang);
+        }
+    }
+
+    pub fn ask_inspected_coach(&self, app: &AppState, question: String) {
+        let Some(gid) = self.selection.inspected_game_id else {
+            return;
+        };
+        let lang = app.lang();
+        let profile = app.stats.player_profile();
+        let Some(prof) = profile.ready() else {
+            return;
+        };
+        let Some(game) = prof.games.iter().find(|g| g.game_id == gid) else {
+            return;
+        };
+        let personal = prof
+            .champions
+            .iter()
+            .find(|c| c.champion_id == game.champion_id);
+        if let Some(review) =
+            app.reviews
+                .review_for_player_game(game, personal, None, prof.games.as_slice(), lang)
+        {
+            app.coach_llm.ask_followup(review, question, lang);
         }
     }
 
@@ -344,8 +369,13 @@ impl StatsView {
                     .champions
                     .iter()
                     .find(|c| c.champion_id == game.champion_id);
-                app.reviews
-                    .review_for_player_game(game, personal, None, lang)
+                app.reviews.review_for_player_game(
+                    game,
+                    personal,
+                    None,
+                    prof.games.as_slice(),
+                    lang,
+                )
             })
         } else {
             None
@@ -529,8 +559,15 @@ pub fn wire(bridge: &StatsBridge<'_>) {
     bridge.on_inspect_game(|id| {
         with_ui(|ui| ui.update_stats(|s, _| s.inspect_game(&id)));
     });
-    bridge.on_request_inspected_debrief(|| {
-        with_ui(|ui| ui.update_stats(|s, app| s.request_inspected_debrief(app)));
+    bridge.on_request_inspected_debrief(|focus| {
+        with_ui(|ui| {
+            ui.update_stats(|s, app| {
+                s.request_inspected_debrief(app, hypatia_shared::CoachFocus::from_index(focus))
+            })
+        });
+    });
+    bridge.on_ask_inspected_coach(|q| {
+        with_ui(|ui| ui.update_stats(|s, app| s.ask_inspected_coach(app, q.to_string())));
     });
 }
 

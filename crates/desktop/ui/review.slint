@@ -15,17 +15,30 @@ export struct TurningPointRow {
     good: bool,
 }
 
+export struct CoachTurnRow {
+    question: string,
+    answer: string,
+}
+
 export struct CoachReviewView {
     has: bool,
     coverage: string,
+    archetype: string,
+    habit-pattern: string,
     good-choices: [ReviewItemRow],
     improvements: [ReviewItemRow],
     turning-points: [TurningPointRow],
     llm-enabled: bool,
     // 0 idle, 1 loading, 2 ready, 3 failed.
     debrief-state: int,
+    // 0 Overview, 1 Matchup, 2 Macro, 3 Build.
+    debrief-focus: int,
     debrief-text: string,
     debrief-meta: string,
+    quick-questions: [string],
+    turns: [CoachTurnRow],
+    followup-loading: bool,
+    followup-error: string,
 }
 
 component FindingTile inherits Rectangle {
@@ -139,8 +152,10 @@ component TurningPointLine inherits Rectangle {
 export component CoachReviewCard inherits Card {
     in property <CoachReviewView> review;
     in property <bool> compact: false;
-    callback request-debrief();
+    callback request-debrief(int);
+    callback ask-coach(string);
     property <bool> show-timeline: false;
+    property <string> draft-question: "";
 
     VerticalLayout {
         padding: Space.lg;
@@ -159,24 +174,83 @@ export component CoachReviewCard inherits Card {
                 vertical-alignment: center;
             }
 
-            if root.review.coverage != "": Rectangle {
-                height: 24px;
-                y: (parent.height - self.height) / 2;
-                border-radius: Theme.radius-sm;
-                background: Theme.panel-raised;
-                border-width: 1px;
-                border-color: Theme.rule;
-                HorizontalLayout {
-                    padding-left: Space.sm;
-                    padding-right: Space.sm;
-                    Text {
-                        text: root.review.coverage;
-                        color: Theme.muted;
-                        font-family: Type.mono-family;
-                        font-size: Type.label;
-                        font-weight: 700;
-                        vertical-alignment: center;
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: end;
+
+                if root.review.archetype != "": Rectangle {
+                    height: 24px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: Theme.radius-sm;
+                    background: Theme.panel-raised;
+                    border-width: 1px;
+                    border-color: Theme.rule-strong;
+                    HorizontalLayout {
+                        padding-left: Space.sm;
+                        padding-right: Space.sm;
+                        Text {
+                            text: root.review.archetype;
+                            color: Theme.signal-text;
+                            font-family: Type.mono-family;
+                            font-size: Type.label;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
                     }
+                }
+
+                if root.review.coverage != "": Rectangle {
+                    height: 24px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: Theme.radius-sm;
+                    background: Theme.panel-raised;
+                    border-width: 1px;
+                    border-color: Theme.rule;
+                    HorizontalLayout {
+                        padding-left: Space.sm;
+                        padding-right: Space.sm;
+                        Text {
+                            text: root.review.coverage;
+                            color: Theme.muted;
+                            font-family: Type.mono-family;
+                            font-size: Type.label;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.review.habit-pattern != "": Rectangle {
+            border-radius: Theme.radius-sm;
+            background: Theme.panel-raised;
+            border-width: 1px;
+            border-color: Theme.rule;
+
+            HorizontalLayout {
+                padding-left: Space.sm;
+                padding-right: Space.sm;
+                padding-top: Space.xs;
+                padding-bottom: Space.xs;
+                spacing: Space.sm;
+
+                Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: Theme.signal;
+                }
+
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.review.habit-pattern;
+                    color: Theme.muted;
+                    font-size: Type.small;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
                 }
             }
         }
@@ -260,11 +334,37 @@ export component CoachReviewCard inherits Card {
             spacing: Space.sm;
             Divider { }
 
+            HorizontalLayout {
+                spacing: Space.xs;
+                alignment: start;
+
+                Action {
+                    text: @tr("Full debrief");
+                    selected: root.review.debrief-state != 0 && root.review.debrief-focus == 0;
+                    clicked => { root.request-debrief(0); }
+                }
+                Action {
+                    text: @tr("Lane & Matchup");
+                    selected: root.review.debrief-state != 0 && root.review.debrief-focus == 1;
+                    clicked => { root.request-debrief(1); }
+                }
+                Action {
+                    text: @tr("Macro & Tempo");
+                    selected: root.review.debrief-state != 0 && root.review.debrief-focus == 2;
+                    clicked => { root.request-debrief(2); }
+                }
+                Action {
+                    text: @tr("Build & Spikes");
+                    selected: root.review.debrief-state != 0 && root.review.debrief-focus == 3;
+                    clicked => { root.request-debrief(3); }
+                }
+            }
+
             if root.review.debrief-state == 0: HorizontalLayout {
                 alignment: start;
                 Action {
                     text: @tr("Generate coach debrief");
-                    clicked => { root.request-debrief(); }
+                    clicked => { root.request-debrief(0); }
                 }
             }
 
@@ -307,11 +407,114 @@ export component CoachReviewCard inherits Card {
                         wrap: word-wrap;
                     }
 
+                    if root.review.turns.length > 0: VerticalLayout {
+                        spacing: Space.xs;
+                        Divider { }
+                        for t in root.review.turns: Rectangle {
+                            border-radius: Theme.radius-sm;
+                            background: Theme.panel;
+                            border-width: 1px;
+                            border-color: Theme.rule;
+                            VerticalLayout {
+                                padding: Space.sm;
+                                spacing: Space.xs;
+                                Text {
+                                    text: t.question;
+                                    color: Theme.signal-text;
+                                    font-size: Type.small;
+                                    font-weight: 700;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: t.answer;
+                                    color: Theme.text;
+                                    font-size: Type.small;
+                                    font-weight: 400;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.review.followup-loading: Text {
+                        text: @tr("Coach is thinking…");
+                        color: Theme.muted;
+                        font-size: Type.small;
+                        font-weight: 600;
+                    }
+
+                    if root.review.followup-error != "": Text {
+                        text: root.review.followup-error;
+                        color: Theme.danger;
+                        font-size: Type.small;
+                        wrap: word-wrap;
+                    }
+
+                    if root.review.quick-questions.length > 0 && !root.review.followup-loading: VerticalLayout {
+                        spacing: Space.xs;
+                        for q in root.review.quick-questions: HorizontalLayout {
+                            alignment: start;
+                            Action {
+                                text: q;
+                                clicked => { root.ask-coach(q); }
+                            }
+                        }
+                    }
+
                     HorizontalLayout {
-                        alignment: end;
+                        spacing: Space.xs;
+                        alignment: stretch;
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: 30px;
+                            background: Theme.backdrop;
+                            border-radius: Theme.radius-sm;
+                            border-width: 1px;
+                            border-color: Theme.rule-strong;
+
+                            if root.draft-question == "": Text {
+                                x: 8px;
+                                width: parent.width - 16px;
+                                height: 100%;
+                                text: @tr("Ask your coach about this match…");
+                                color: Theme.muted;
+                                font-size: Type.small;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+
+                            TextInput {
+                                x: 8px;
+                                width: parent.width - 16px;
+                                height: 100%;
+                                single-line: true;
+                                text <=> root.draft-question;
+                                color: Theme.text;
+                                font-size: Type.small;
+                                vertical-alignment: center;
+                                accepted => {
+                                    if root.draft-question != "" && !root.review.followup-loading {
+                                        root.ask-coach(root.draft-question);
+                                        root.draft-question = "";
+                                    }
+                                }
+                            }
+                        }
+
+                        Action {
+                            text: @tr("Ask");
+                            clicked => {
+                                if root.draft-question != "" && !root.review.followup-loading {
+                                    root.ask-coach(root.draft-question);
+                                    root.draft-question = "";
+                                }
+                            }
+                        }
+
                         Action {
                             text: @tr("Regenerate");
-                            clicked => { root.request-debrief(); }
+                            clicked => { root.request-debrief(root.review.debrief-focus); }
                         }
                     }
                 }
@@ -336,7 +539,7 @@ export component CoachReviewCard inherits Card {
                     }
                     Action {
                         text: @tr("Retry");
-                        clicked => { root.request-debrief(); }
+                        clicked => { root.request-debrief(root.review.debrief-focus); }
                     }
                 }
             }

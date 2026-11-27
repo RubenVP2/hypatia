@@ -10,7 +10,7 @@ import {
 } from "parts.slint";
 import { StatsPage, StatsBridge } from "stats.slint";
 import { HelperView, DraftHelperPanel } from "helper.slint";
-import { CoachReviewCard, CoachReviewView, ReviewItemRow, TurningPointRow } from "review.slint";
+import { CoachReviewCard, CoachReviewView, CoachTurnRow, ReviewItemRow, TurningPointRow } from "review.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
 import "fonts/Overpass-ExtraBold.ttf";
@@ -2433,7 +2433,8 @@ component StatTile inherits Rectangle {
 component EndScreen inherits Flickable {
     in property <EndView> end;
     in property <bool> compact: false;
-    callback request-debrief();
+    callback request-debrief(int);
+    callback ask-coach(string);
     property <int> view-mode: 0;
     content-height: end-body.preferred-height;
 
@@ -2504,7 +2505,8 @@ component EndScreen inherits Flickable {
         if root.end.review.has: CoachReviewCard {
             review: root.end.review;
             compact: root.compact;
-            request-debrief => { root.request-debrief(); }
+            request-debrief(focus) => { root.request-debrief(focus); }
+            ask-coach(q) => { root.ask-coach(q); }
         }
 
         if root.end.allies.length > 0: HorizontalLayout {
@@ -2678,7 +2680,8 @@ export component MainWindow inherits Window {
 
     // Opt-in Layer 2 Coach LLM narrator.
     in-out property <CoachLlmView> coach-llm-cfg;
-    callback request-end-debrief();
+    callback request-end-debrief(int);
+    callback ask-end-coach(string);
     callback select-coach-llm-preset(int);
     callback save-coach-llm-config(string, string, string);
     callback test-coach-llm();
@@ -3121,7 +3124,8 @@ export component MainWindow inherits Window {
                             height: 100%;
                             end: root.end;
                             compact: stage.is-compact;
-                            request-debrief => { root.request-end-debrief(); }
+                            request-debrief(focus) => { root.request-end-debrief(focus); }
+                            ask-coach(q) => { root.ask-end-coach(q); }
                         }
                     }
 

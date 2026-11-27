@@ -1262,13 +1262,20 @@ pub fn build_review_view(
         return crate::CoachReviewView {
             has: false,
             coverage: SharedString::default(),
+            archetype: SharedString::default(),
+            habit_pattern: SharedString::default(),
             good_choices: ModelRc::default(),
             improvements: ModelRc::default(),
             turning_points: ModelRc::default(),
             llm_enabled: false,
             debrief_state: 0,
+            debrief_focus: 0,
             debrief_text: SharedString::default(),
             debrief_meta: SharedString::default(),
+            quick_questions: ModelRc::default(),
+            turns: ModelRc::default(),
+            followup_loading: false,
+            followup_error: SharedString::default(),
         };
     };
     let to_rows = |items: &[hypatia_shared::ReviewFinding]| -> ModelRc<crate::ReviewItemRow> {
@@ -1296,32 +1303,100 @@ pub fn build_review_view(
             good: tp.polarity == hypatia_shared::FindingPolarity::GoodChoice,
         })
         .collect();
-    let (debrief_state, debrief_text, debrief_meta) = match debrief {
-        hypatia_core::coach_llm::DebriefState::Idle => {
-            (0, SharedString::default(), SharedString::default())
-        }
-        hypatia_core::coach_llm::DebriefState::Loading => {
-            (1, SharedString::default(), SharedString::default())
-        }
-        hypatia_core::coach_llm::DebriefState::Ready { text, model, .. } => (
-            2,
-            SharedString::from(text.as_str()),
-            SharedString::from(model.as_str()),
+    let (
+        debrief_state,
+        debrief_focus,
+        debrief_text,
+        debrief_meta,
+        turns,
+        followup_loading,
+        followup_error,
+    ) = match debrief {
+        hypatia_core::coach_llm::DebriefState::Idle => (
+            0,
+            0,
+            SharedString::default(),
+            SharedString::default(),
+            ModelRc::default(),
+            false,
+            SharedString::default(),
         ),
-        hypatia_core::coach_llm::DebriefState::Failed(msg) => {
-            (3, SharedString::from(msg.as_str()), SharedString::default())
+        hypatia_core::coach_llm::DebriefState::Loading(focus) => (
+            1,
+            focus.as_index(),
+            SharedString::default(),
+            SharedString::default(),
+            ModelRc::default(),
+            false,
+            SharedString::default(),
+        ),
+        hypatia_core::coach_llm::DebriefState::Ready {
+            text,
+            model,
+            focus,
+            turns,
+            followup_loading,
+            followup_error,
+            ..
+        } => {
+            let turn_rows: Vec<crate::CoachTurnRow> = turns
+                .iter()
+                .map(|t| crate::CoachTurnRow {
+                    question: SharedString::from(t.question.as_str()),
+                    answer: SharedString::from(t.answer.as_str()),
+                })
+                .collect();
+            (
+                2,
+                focus.as_index(),
+                SharedString::from(text.as_str()),
+                SharedString::from(model.as_str()),
+                ModelRc::new(VecModel::from(turn_rows)),
+                *followup_loading,
+                followup_error
+                    .as_deref()
+                    .map(SharedString::from)
+                    .unwrap_or_default(),
+            )
         }
+        hypatia_core::coach_llm::DebriefState::Failed { message, focus } => (
+            3,
+            focus.as_index(),
+            SharedString::from(message.as_str()),
+            SharedString::default(),
+            ModelRc::default(),
+            false,
+            SharedString::default(),
+        ),
     };
+    let quick_questions: Vec<SharedString> = hypatia_shared::suggested_coach_questions(rev, lang)
+        .into_iter()
+        .map(SharedString::from)
+        .collect();
+    let habit_pattern = rev
+        .context
+        .habit_profile
+        .as_ref()
+        .and_then(|h| h.primary_pattern(lang))
+        .map(SharedString::from)
+        .unwrap_or_default();
     crate::CoachReviewView {
         has: true,
         coverage: SharedString::from(rev.coverage.label(lang)),
+        archetype: SharedString::from(rev.context.archetype.label(lang)),
+        habit_pattern,
         good_choices: to_rows(&rev.good_choices),
         improvements: to_rows(&rev.improvements),
         turning_points: ModelRc::new(VecModel::from(turning)),
         llm_enabled,
         debrief_state,
+        debrief_focus,
         debrief_text,
         debrief_meta,
+        quick_questions: ModelRc::new(VecModel::from(quick_questions)),
+        turns,
+        followup_loading,
+        followup_error,
     }
 }
 
@@ -2092,15 +2167,21 @@ fn apply_summary(
     if let Some(ref eog) = snap.end_of_game {
         let game_id = app_state.current_eog_game_id();
         let profile_state = app_state.stats.player_profile();
-        let personal_champ = profile_state.ready().and_then(|p| {
+        let prof = profile_state.ready();
+        let personal_champ = prof.and_then(|p| {
             p.champions
                 .iter()
                 .find(|c| c.champion_id == eog.champion_id)
         });
-        let review =
-            app_state
-                .reviews
-                .review_for_end_of_game(eog, game_id, personal_champ, None, lang);
+        let recent_games = prof.map(|p| p.games.as_slice()).unwrap_or(&[]);
+        let review = app_state.reviews.review_for_end_of_game(
+            eog,
+            game_id,
+            personal_champ,
+            None,
+            recent_games,
+            lang,
+        );
         let llm_enabled = app_state.coach_llm.is_available();
         let debrief = review
             .as_ref()
@@ -2120,8 +2201,8 @@ fn apply_summary(
     view
 }
 
-/// Triggers an on-demand Layer 2 coach debrief for the active End-of-Game screen.
-pub fn request_end_debrief(app_state: &AppState) {
+/// Triggers an on-demand Layer 2 coach debrief for the active End-of-Game screen under `focus`.
+pub fn request_end_debrief(app_state: &AppState, focus: hypatia_shared::CoachFocus) {
     let snap = app_state.get_summary();
     let Some(ref eog) = snap.end_of_game else {
         return;
@@ -2129,17 +2210,52 @@ pub fn request_end_debrief(app_state: &AppState) {
     let lang = app_state.lang();
     let game_id = app_state.current_eog_game_id();
     let profile_state = app_state.stats.player_profile();
-    let personal_champ = profile_state.ready().and_then(|p| {
+    let prof = profile_state.ready();
+    let personal_champ = prof.and_then(|p| {
         p.champions
             .iter()
             .find(|c| c.champion_id == eog.champion_id)
     });
-    if let Some(review) =
+    let recent_games = prof.map(|p| p.games.as_slice()).unwrap_or(&[]);
+    if let Some(review) = app_state.reviews.review_for_end_of_game(
+        eog,
+        game_id,
+        personal_champ,
+        None,
+        recent_games,
+        lang,
+    ) {
         app_state
-            .reviews
-            .review_for_end_of_game(eog, game_id, personal_champ, None, lang)
-    {
-        app_state.coach_llm.request_debrief(review, lang);
+            .coach_llm
+            .request_debrief_with_focus(review, focus, lang);
+    }
+}
+
+/// Sends a grounded follow-up question for the active End-of-Game screen's coach session.
+pub fn ask_end_coach(app_state: &AppState, question: String) {
+    let snap = app_state.get_summary();
+    let Some(ref eog) = snap.end_of_game else {
+        return;
+    };
+    let lang = app_state.lang();
+    let game_id = app_state.current_eog_game_id();
+    let profile_state = app_state.stats.player_profile();
+    let prof = profile_state.ready();
+    let personal_champ = prof.and_then(|p| {
+        p.champions
+            .iter()
+            .find(|c| c.champion_id == eog.champion_id)
+    });
+    let recent_games = prof.map(|p| p.games.as_slice()).unwrap_or(&[]);
+    if let Some(review) = app_state.reviews.review_for_end_of_game(
+        eog,
+        game_id,
+        personal_champ,
+        None,
+        recent_games,
+        lang,
+    ) {
+        app_state.coach_llm.ask_followup(review, question, lang);
     }
 }
 

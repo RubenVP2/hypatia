@@ -326,7 +326,8 @@ export global StatsBridge {
     callback open-link(string);
     callback refresh-profile();
     callback inspect-game(string);
-    callback request-inspected-debrief();
+    callback request-inspected-debrief(int);
+    callback ask-inspected-coach(string);
 }
 
 // A clickable surface with hover fill, keyboard activation and the focus ring.
@@ -3116,7 +3117,8 @@ export component StatsPage inherits Rectangle {
             if StatsBridge.inspected-review.has: CoachReviewCard {
                 review: StatsBridge.inspected-review;
                 compact: true;
-                request-debrief => { StatsBridge.request-inspected-debrief(); }
+                request-debrief(focus) => { StatsBridge.request-inspected-debrief(focus); }
+                ask-coach(q) => { StatsBridge.ask-inspected-coach(q); }
             }
 
             Divider { }

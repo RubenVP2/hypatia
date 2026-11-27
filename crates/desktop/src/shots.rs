@@ -229,7 +229,7 @@ fn shots() {
             slint::select_bundled_translation(code).unwrap();
             main.set_language(code.into());
             Theme::get(&main).set_dark(true);
-            crate::companion::request_end_debrief(&app);
+            crate::companion::request_end_debrief(&app, hypatia_shared::CoachFocus::Overview);
             companion.refresh(&main, &app);
             capture_at(&format!("end-dark-{code}"), 1320, 1500);
         }

@@ -1087,7 +1087,12 @@ fn wire_callbacks(ui: &Rc<Ui>) {
 
     main.on_answer_update_check(|check| with_ui(|ui| ui.answer_update_check(check)));
     main.on_install_update(|| with_ui(|ui| ui.install_update()));
-    main.on_request_end_debrief(|| with_ui(|ui| companion::request_end_debrief(&ui.app)));
+    main.on_request_end_debrief(|focus| {
+        with_ui(|ui| {
+            companion::request_end_debrief(&ui.app, hypatia_shared::CoachFocus::from_index(focus))
+        })
+    });
+    main.on_ask_end_coach(|q| with_ui(|ui| companion::ask_end_coach(&ui.app, q.to_string())));
     main.on_select_coach_llm_preset(|idx| with_ui(|ui| ui.select_coach_llm_preset(idx)));
     main.on_save_coach_llm_config(|url, model, key| {
         with_ui(|ui| ui.save_coach_llm_config(&url, &model, &key))

@@ -2025,6 +2025,34 @@ msgctxt "CoachReviewCard"
 msgid "Retry"
 msgstr "Réessayer"
 
+msgctxt "CoachReviewCard"
+msgid "Full debrief"
+msgstr "Complet"
+
+msgctxt "CoachReviewCard"
+msgid "Lane & Matchup"
+msgstr "Lane & Matchup"
+
+msgctxt "CoachReviewCard"
+msgid "Macro & Tempo"
+msgstr "Macro & Tempo"
+
+msgctxt "CoachReviewCard"
+msgid "Build & Spikes"
+msgstr "Build & Spikes"
+
+msgctxt "CoachReviewCard"
+msgid "Coach is thinking…"
+msgstr "Le coach réfléchit…"
+
+msgctxt "CoachReviewCard"
+msgid "Ask your coach about this match…"
+msgstr "Pose une question au coach sur cette partie…"
+
+msgctxt "CoachReviewCard"
+msgid "Ask"
+msgstr "Demander"
+
 msgctxt "MainWindow"
 msgid "Coach LLM debrief"
 msgstr "Débrief coach (LLM)"

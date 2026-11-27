@@ -46,6 +46,12 @@ The champ-select block of the Match Projection (`ChampSelectSummary::helper`, `c
 - **Invariant**: Team comps and the lane opponent use champion IDs only, so Ranked Solo/Duo allies stay as anonymized as the projection left them.
 - **Invariant**: The Mobile Remote's apply buttons reuse the allowlisted rune page and summoner spell commands; the helper adds no extra Riot endpoint.
 
+### Game Review
+The local, deterministic Layer 1 coaching summary of a finished Summoner's Rift match (`crates/shared/src/review.rs`, core capture/cache `crates/core/src/review.rs`), evaluating up to five pillars (Objectives, Economy, Build, Discipline, Draft) into at most three **Good choices** and three **To improve** findings plus a collapsible chronological turning-points timeline. Shown on the desktop `EndOfGame` screen and inside `My Stats`'s Match inspector.
+- **Invariant**: Applies only to non-remake Summoner's Rift games; ARAM, Arena, and remakes produce no review.
+- **Invariant**: Live traces (`LiveTraceRecorder`) passively sample `/liveclientdata/allgamedata` while Hypatia is open and persist at most 50 recent traces in `reviews.json` without any player identity (no summoner name, PUUID, or secret). Games played without Hypatia degrade honestly to `PostGameOnly` (or enrich best-effort from local LCU `game-timelines/{gameId}`) without inventing timestamps.
+- **Invariant**: Findings carry structured numeric facts so the optional Layer 2 LLM narrator (`crates/core/src/coach_llm.rs`, behind `Settings::coach_llm`, off by default) can explain verified facts on explicit user click without hallucinating game state or sending any player identity. Plain HTTP is allowed only on loopback (`127.0.0.1`, `localhost`, `[::1]`); remote BYOK endpoints require HTTPS.
+
 ### Attribution
 The credit an online stats provider requires next to its data: its name and the page the data came from, carried by Online values and shown as a visible link. The provider is MetaBot.GG (`docs/research/online-stats-source.md`).
 

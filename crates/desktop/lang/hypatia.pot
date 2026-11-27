@@ -2122,3 +2122,143 @@ msgstr ""
 msgctxt "DraftHelperPanel"
 msgid "Show guide"
 msgstr ""
+
+#: ui/review.slint:154
+msgctxt "CoachReviewCard"
+msgid "Coach review"
+msgstr ""
+
+#: ui/review.slint:191 ui/review.slint:214
+msgctxt "CoachReviewCard"
+msgid "GOOD CHOICES"
+msgstr ""
+
+#: ui/review.slint:201 ui/review.slint:223
+msgctxt "CoachReviewCard"
+msgid "TO IMPROVE"
+msgstr ""
+
+#: ui/review.slint:238
+msgctxt "CoachReviewCard"
+msgid "Hide turning points"
+msgstr ""
+
+#: ui/review.slint:238
+msgctxt "CoachReviewCard"
+msgid "Turning points"
+msgstr ""
+
+#: ui/review.slint:266
+msgctxt "CoachReviewCard"
+msgid "Generate coach debrief"
+msgstr ""
+
+#: ui/review.slint:272
+msgctxt "CoachReviewCard"
+msgid "Writing coach debrief…"
+msgstr ""
+
+#: ui/review.slint:291
+msgctxt "CoachReviewCard"
+msgid "COACH DEBRIEF"
+msgstr ""
+
+#: ui/review.slint:313
+msgctxt "CoachReviewCard"
+msgid "Regenerate"
+msgstr ""
+
+#: ui/review.slint:338
+msgctxt "CoachReviewCard"
+msgid "Retry"
+msgstr ""
+
+#: ui/review.slint:343
+msgctxt "CoachReviewCard"
+msgid "Full debrief"
+msgstr ""
+
+#: ui/review.slint:348
+msgctxt "CoachReviewCard"
+msgid "Lane & Matchup"
+msgstr ""
+
+#: ui/review.slint:353
+msgctxt "CoachReviewCard"
+msgid "Macro & Tempo"
+msgstr ""
+
+#: ui/review.slint:358
+msgctxt "CoachReviewCard"
+msgid "Build & Spikes"
+msgstr ""
+
+#: ui/review.slint:440
+msgctxt "CoachReviewCard"
+msgid "Coach is thinking…"
+msgstr ""
+
+#: ui/review.slint:480
+msgctxt "CoachReviewCard"
+msgid "Ask your coach about this match…"
+msgstr ""
+
+#: ui/review.slint:506
+msgctxt "CoachReviewCard"
+msgid "Ask"
+msgstr ""
+
+#: ui/app.slint:3766
+msgctxt "MainWindow"
+msgid "Coach LLM debrief"
+msgstr ""
+
+#: ui/app.slint:3767
+msgctxt "MainWindow"
+msgid "Optional narrator turning local Game Review facts into a short coach debrief via Ollama / LM Studio on 127.0.0.1 or your own API key. Off: zero I/O; never sends your Riot ID or PUUID."
+msgstr ""
+
+#: ui/app.slint:3786
+msgctxt "MainWindow"
+msgid "Ollama (local)"
+msgstr ""
+
+#: ui/app.slint:3791
+msgctxt "MainWindow"
+msgid "LM Studio (local)"
+msgstr ""
+
+#: ui/app.slint:3796
+msgctxt "MainWindow"
+msgid "Custom / BYOK"
+msgstr ""
+
+#: ui/app.slint:3805
+msgctxt "MainWindow"
+msgid "Endpoint URL"
+msgstr ""
+
+#: ui/app.slint:3835
+msgctxt "MainWindow"
+msgid "Model"
+msgstr ""
+
+#: ui/app.slint:3865
+msgctxt "MainWindow"
+msgid "API key (optional for local servers)"
+msgstr ""
+
+#: ui/app.slint:3898
+msgctxt "MainWindow"
+msgid "Save"
+msgstr ""
+
+#: ui/app.slint:3908
+msgctxt "MainWindow"
+msgid "Testing…"
+msgstr ""
+
+#: ui/app.slint:3908
+msgctxt "MainWindow"
+msgid "Test connection"
+msgstr ""

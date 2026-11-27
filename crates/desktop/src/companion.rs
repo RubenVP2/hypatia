@@ -1250,7 +1250,164 @@ fn format_thousands(value: u32, lang: Lang) -> String {
     out
 }
 
-pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang: Lang) -> EndView {
+/// Converts an optional Layer 1 [`hypatia_shared::GameReview`] and Layer 2 [`hypatia_core::coach_llm::DebriefState`]
+/// into the Slint [`CoachReviewView`].
+pub fn build_review_view(
+    review: Option<&hypatia_shared::GameReview>,
+    llm_enabled: bool,
+    debrief: &hypatia_core::coach_llm::DebriefState,
+    lang: Lang,
+) -> crate::CoachReviewView {
+    let Some(rev) = review.filter(|r| r.has_findings()) else {
+        return crate::CoachReviewView {
+            has: false,
+            coverage: SharedString::default(),
+            archetype: SharedString::default(),
+            habit_pattern: SharedString::default(),
+            good_choices: ModelRc::default(),
+            improvements: ModelRc::default(),
+            turning_points: ModelRc::default(),
+            llm_enabled: false,
+            debrief_state: 0,
+            debrief_focus: 0,
+            debrief_text: SharedString::default(),
+            debrief_meta: SharedString::default(),
+            quick_questions: ModelRc::default(),
+            turns: ModelRc::default(),
+            followup_loading: false,
+            followup_error: SharedString::default(),
+        };
+    };
+    let to_rows = |items: &[hypatia_shared::ReviewFinding]| -> ModelRc<crate::ReviewItemRow> {
+        let rows: Vec<crate::ReviewItemRow> = items
+            .iter()
+            .map(|f| crate::ReviewItemRow {
+                pillar: SharedString::from(f.pillar.label(lang)),
+                timestamp: f
+                    .timestamp_sec
+                    .map(|s| SharedString::from(hypatia_shared::format_mm_ss(s)))
+                    .unwrap_or_default(),
+                title: SharedString::from(f.title.as_str()),
+                detail: SharedString::from(f.detail.as_str()),
+            })
+            .collect();
+        ModelRc::new(VecModel::from(rows))
+    };
+    let turning: Vec<crate::TurningPointRow> = rev
+        .turning_points
+        .iter()
+        .map(|tp| crate::TurningPointRow {
+            timestamp: SharedString::from(hypatia_shared::format_mm_ss(tp.time_sec)),
+            pillar: SharedString::from(tp.pillar.label(lang)),
+            label: SharedString::from(tp.label.as_str()),
+            good: tp.polarity == hypatia_shared::FindingPolarity::GoodChoice,
+        })
+        .collect();
+    let (
+        debrief_state,
+        debrief_focus,
+        debrief_text,
+        debrief_meta,
+        turns,
+        followup_loading,
+        followup_error,
+    ) = match debrief {
+        hypatia_core::coach_llm::DebriefState::Idle => (
+            0,
+            0,
+            SharedString::default(),
+            SharedString::default(),
+            ModelRc::default(),
+            false,
+            SharedString::default(),
+        ),
+        hypatia_core::coach_llm::DebriefState::Loading(focus) => (
+            1,
+            focus.as_index(),
+            SharedString::default(),
+            SharedString::default(),
+            ModelRc::default(),
+            false,
+            SharedString::default(),
+        ),
+        hypatia_core::coach_llm::DebriefState::Ready {
+            text,
+            model,
+            focus,
+            turns,
+            followup_loading,
+            followup_error,
+            ..
+        } => {
+            let turn_rows: Vec<crate::CoachTurnRow> = turns
+                .iter()
+                .map(|t| crate::CoachTurnRow {
+                    question: SharedString::from(t.question.as_str()),
+                    answer: SharedString::from(t.answer.as_str()),
+                })
+                .collect();
+            (
+                2,
+                focus.as_index(),
+                SharedString::from(text.as_str()),
+                SharedString::from(model.as_str()),
+                ModelRc::new(VecModel::from(turn_rows)),
+                *followup_loading,
+                followup_error
+                    .as_deref()
+                    .map(SharedString::from)
+                    .unwrap_or_default(),
+            )
+        }
+        hypatia_core::coach_llm::DebriefState::Failed { message, focus } => (
+            3,
+            focus.as_index(),
+            SharedString::from(message.as_str()),
+            SharedString::default(),
+            ModelRc::default(),
+            false,
+            SharedString::default(),
+        ),
+    };
+    let quick_questions: Vec<SharedString> = hypatia_shared::suggested_coach_questions(rev, lang)
+        .into_iter()
+        .map(SharedString::from)
+        .collect();
+    let habit_pattern = rev
+        .context
+        .habit_profile
+        .as_ref()
+        .and_then(|h| h.primary_pattern(lang))
+        .map(SharedString::from)
+        .unwrap_or_default();
+    crate::CoachReviewView {
+        has: true,
+        coverage: SharedString::from(rev.coverage.label(lang)),
+        archetype: SharedString::from(rev.context.archetype.label(lang)),
+        habit_pattern,
+        good_choices: to_rows(&rev.good_choices),
+        improvements: to_rows(&rev.improvements),
+        turning_points: ModelRc::new(VecModel::from(turning)),
+        llm_enabled,
+        debrief_state,
+        debrief_focus,
+        debrief_text,
+        debrief_meta,
+        quick_questions: ModelRc::new(VecModel::from(quick_questions)),
+        turns,
+        followup_loading,
+        followup_error,
+    }
+}
+
+pub fn build_end_view(
+    eog: &EndOfGameSummary,
+    review: Option<&hypatia_shared::GameReview>,
+    llm_enabled: bool,
+    debrief: &hypatia_core::coach_llm::DebriefState,
+    icons: &mut impl IconLookup,
+    lang: Lang,
+) -> EndView {
     let victory = eog.result.eq_ignore_ascii_case("victory");
     let cid = eog.champion_id;
     let tile = |label: &str, value: String| StatLine {
@@ -1398,6 +1555,7 @@ pub fn build_end_view(eog: &EndOfGameSummary, icons: &mut impl IconLookup, lang:
         enemy_totals: enemy_team.map(team_totals).unwrap_or_default(),
         allies: ModelRc::new(VecModel::from(allies)),
         enemies: ModelRc::new(VecModel::from(enemies)),
+        review: build_review_view(review, llm_enabled, debrief, lang),
     }
 }
 /// Everything besides the Match Projection that influences how views are rendered.
@@ -1408,6 +1566,8 @@ struct RenderContext {
     splash_enabled: bool,
     /// Bumped by the asset cache each time a new icon lands on disk.
     icons_revision: u64,
+    coach_llm_enabled: bool,
+    coach_llm_revision: u64,
 }
 
 /// What the companion windows currently display.
@@ -1792,6 +1952,8 @@ impl Companion {
             icons_enabled: app_state.flags.game_icons(),
             splash_enabled: app_state.flags.splash_backdrops(),
             icons_revision: app_state.assets.image_revision(),
+            coach_llm_enabled: app_state.coach_llm.is_available(),
+            coach_llm_revision: app_state.coach_llm.revision(),
         };
 
         let prev_context = self.shown.as_ref().map(|shown| shown.context);
@@ -2003,13 +2165,98 @@ fn apply_summary(
     }
 
     if let Some(ref eog) = snap.end_of_game {
-        if prev.is_none_or(|p| p.end_of_game.as_ref() != Some(eog)) {
-            let end = build_end_view(eog, &mut icons, lang);
-            main_win.set_end(end);
-        }
+        let game_id = app_state.current_eog_game_id();
+        let profile_state = app_state.stats.player_profile();
+        let prof = profile_state.ready();
+        let personal_champ = prof.and_then(|p| {
+            p.champions
+                .iter()
+                .find(|c| c.champion_id == eog.champion_id)
+        });
+        let recent_games = prof.map(|p| p.games.as_slice()).unwrap_or(&[]);
+        let review = app_state.reviews.review_for_end_of_game(
+            eog,
+            game_id,
+            personal_champ,
+            None,
+            recent_games,
+            lang,
+        );
+        let llm_enabled = app_state.coach_llm.is_available();
+        let debrief = review
+            .as_ref()
+            .map(|r| app_state.coach_llm.state(r.game_id, lang))
+            .unwrap_or_default();
+        let end = build_end_view(
+            eog,
+            review.as_ref(),
+            llm_enabled,
+            &debrief,
+            &mut icons,
+            lang,
+        );
+        main_win.set_end(end);
     }
 
     view
+}
+
+/// Triggers an on-demand Layer 2 coach debrief for the active End-of-Game screen under `focus`.
+pub fn request_end_debrief(app_state: &AppState, focus: hypatia_shared::CoachFocus) {
+    let snap = app_state.get_summary();
+    let Some(ref eog) = snap.end_of_game else {
+        return;
+    };
+    let lang = app_state.lang();
+    let game_id = app_state.current_eog_game_id();
+    let profile_state = app_state.stats.player_profile();
+    let prof = profile_state.ready();
+    let personal_champ = prof.and_then(|p| {
+        p.champions
+            .iter()
+            .find(|c| c.champion_id == eog.champion_id)
+    });
+    let recent_games = prof.map(|p| p.games.as_slice()).unwrap_or(&[]);
+    if let Some(review) = app_state.reviews.review_for_end_of_game(
+        eog,
+        game_id,
+        personal_champ,
+        None,
+        recent_games,
+        lang,
+    ) {
+        app_state
+            .coach_llm
+            .request_debrief_with_focus(review, focus, lang);
+    }
+}
+
+/// Sends a grounded follow-up question for the active End-of-Game screen's coach session.
+pub fn ask_end_coach(app_state: &AppState, question: String) {
+    let snap = app_state.get_summary();
+    let Some(ref eog) = snap.end_of_game else {
+        return;
+    };
+    let lang = app_state.lang();
+    let game_id = app_state.current_eog_game_id();
+    let profile_state = app_state.stats.player_profile();
+    let prof = profile_state.ready();
+    let personal_champ = prof.and_then(|p| {
+        p.champions
+            .iter()
+            .find(|c| c.champion_id == eog.champion_id)
+    });
+    let recent_games = prof.map(|p| p.games.as_slice()).unwrap_or(&[]);
+    if let Some(review) = app_state.reviews.review_for_end_of_game(
+        eog,
+        game_id,
+        personal_champ,
+        None,
+        recent_games,
+        lang,
+    ) {
+        app_state.coach_llm.ask_followup(review, question, lang);
+    }
 }
 
 #[cfg(test)]
@@ -2486,7 +2733,14 @@ mod tests {
         assert!(live_view.dead);
         assert!(live_view.title.contains("9s"));
 
-        let end_view = build_end_view(snap.end_of_game.as_ref().unwrap(), &mut icons, Lang::Fr);
+        let end_view = build_end_view(
+            snap.end_of_game.as_ref().unwrap(),
+            None,
+            false,
+            &hypatia_core::coach_llm::DebriefState::Idle,
+            &mut icons,
+            Lang::Fr,
+        );
         assert!(end_view.victory);
         assert_eq!(end_view.title.as_str(), "VICTOIRE");
     }

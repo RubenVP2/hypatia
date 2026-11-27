@@ -155,6 +155,9 @@ impl Ui {
             .as_ref()
             .map_or(0, |h| h.connected_clients() as i32);
         self.main.set_remote_clients(clients);
+        if self.main.get_settings_open() {
+            self.sync_coach_llm_test_status();
+        }
         self.sync_phase_clock();
     }
 
@@ -657,6 +660,55 @@ impl Ui {
         self.apply_updated_settings(&next, &prev, false);
     }
 
+    fn push_coach_llm_view(&self) {
+        let cfg = self.app.coach_llm.config();
+        let (test_state, test_status) =
+            coach_test_status(&self.app.coach_llm.connection_test_state());
+        self.main.set_coach_llm_cfg(CoachLlmView {
+            preset: cfg.preset.as_index(),
+            base_url: SharedString::from(cfg.base_url),
+            model: SharedString::from(cfg.model),
+            api_key: SharedString::from(cfg.api_key),
+            test_state,
+            test_status,
+        });
+    }
+
+    fn sync_coach_llm_test_status(&self) {
+        let (test_state, test_status) =
+            coach_test_status(&self.app.coach_llm.connection_test_state());
+        let mut current = self.main.get_coach_llm_cfg();
+        if current.test_state != test_state || current.test_status != test_status {
+            current.test_state = test_state;
+            current.test_status = test_status;
+            self.main.set_coach_llm_cfg(current);
+        }
+    }
+
+    fn select_coach_llm_preset(&self, idx: i32) {
+        let preset = hypatia_core::coach_llm::CoachLlmPreset::from_index(idx);
+        let mut cfg = hypatia_core::coach_llm::CoachLlmConfig::for_preset(preset);
+        if preset == hypatia_core::coach_llm::CoachLlmPreset::Custom {
+            cfg.api_key = self.app.coach_llm.config().api_key;
+        }
+        self.app.coach_llm.save_config(cfg);
+        self.push_coach_llm_view();
+    }
+
+    fn save_coach_llm_config(&self, base_url: &str, model: &str, api_key: &str) {
+        let mut cfg = self.app.coach_llm.config();
+        cfg.base_url = base_url.trim().to_string();
+        cfg.model = model.trim().to_string();
+        cfg.api_key = api_key.trim().to_string();
+        self.app.coach_llm.save_config(cfg);
+        self.push_coach_llm_view();
+    }
+
+    fn test_coach_llm(&self) {
+        self.app.coach_llm.test_connection(self.app.lang());
+        self.sync_coach_llm_test_status();
+    }
+
     /// Downloads, verifies and installs the release on the player's click, then restarts.
     fn install_update(&self) {
         let release = {
@@ -852,6 +904,20 @@ fn perf_settings(s: &Settings, hw: HardwareSpec, lang: Lang) -> PerfSettings {
         reduce_motion: s.reduce_motion,
         online_stats: s.online_stats,
         update_check: s.update_check == UpdateCheck::On,
+        coach_llm: s.coach_llm,
+    }
+}
+
+fn coach_test_status(state: &hypatia_core::coach_llm::ConnectionTestState) -> (i32, SharedString) {
+    match state {
+        hypatia_core::coach_llm::ConnectionTestState::Idle => (0, SharedString::default()),
+        hypatia_core::coach_llm::ConnectionTestState::Testing => (1, SharedString::default()),
+        hypatia_core::coach_llm::ConnectionTestState::Ok(msg) => {
+            (2, SharedString::from(msg.as_str()))
+        }
+        hypatia_core::coach_llm::ConnectionTestState::Failed(msg) => {
+            (3, SharedString::from(msg.as_str()))
+        }
     }
 }
 
@@ -1021,6 +1087,17 @@ fn wire_callbacks(ui: &Rc<Ui>) {
 
     main.on_answer_update_check(|check| with_ui(|ui| ui.answer_update_check(check)));
     main.on_install_update(|| with_ui(|ui| ui.install_update()));
+    main.on_request_end_debrief(|focus| {
+        with_ui(|ui| {
+            companion::request_end_debrief(&ui.app, hypatia_shared::CoachFocus::from_index(focus))
+        })
+    });
+    main.on_ask_end_coach(|q| with_ui(|ui| companion::ask_end_coach(&ui.app, q.to_string())));
+    main.on_select_coach_llm_preset(|idx| with_ui(|ui| ui.select_coach_llm_preset(idx)));
+    main.on_save_coach_llm_config(|url, model, key| {
+        with_ui(|ui| ui.save_coach_llm_config(&url, &model, &key))
+    });
+    main.on_test_coach_llm(|| with_ui(|ui| ui.test_coach_llm()));
 
     main.on_open_stats(|| {
         with_ui(|ui| {
@@ -1199,6 +1276,7 @@ fn main() {
     }
     spawn_refresh_bridge(rt.handle(), &ui.app);
     ui.sync_update_checks();
+    ui.push_coach_llm_view();
 
     ui.main.run().expect("Slint event loop exited with error");
 

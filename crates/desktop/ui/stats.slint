@@ -5,6 +5,7 @@
 
 import { Theme, Type, Space } from "theme.slint";
 import { Card, Divider, SectionLabel, Action, GameIconBadge, Roundel, HeroSplash, ModalSheet } from "parts.slint";
+import { CoachReviewCard, CoachReviewView } from "review.slint";
 
 // An item, rune, rune style or summoner spell: its client name and cached icon.
 export struct StatsIcon {
@@ -181,6 +182,7 @@ export struct StatsRoleSummary {
 }
 
 export struct StatsGameRow {
+    game-id: string,
     champion: StatsChampOption,
     win: bool,
     remake: bool,
@@ -299,6 +301,7 @@ export global StatsBridge {
     in property <int> my-role: -1;
     in property <[StatsChampionSummary]> my-champions;
     in property <[StatsGameRow]> games;
+    in property <CoachReviewView> inspected-review;
 
     callback select-tab(int);
     callback select-champion(int);
@@ -322,6 +325,9 @@ export global StatsBridge {
     callback enable-online();
     callback open-link(string);
     callback refresh-profile();
+    callback inspect-game(string);
+    callback request-inspected-debrief(int);
+    callback ask-inspected-coach(string);
 }
 
 // A clickable surface with hover fill, keyboard activation and the focus ring.
@@ -3005,6 +3011,7 @@ export component StatsPage inherits Rectangle {
                 inspect-game(row) => {
                     root.inspected-game = row;
                     root.inspecting = true;
+                    StatsBridge.inspect-game(row.game-id);
                 }
             }
         }
@@ -3105,6 +3112,13 @@ export component StatsPage inherits Rectangle {
                     icon: it.icon;
                     fallback-text: it.initials;
                 }
+            }
+
+            if StatsBridge.inspected-review.has: CoachReviewCard {
+                review: StatsBridge.inspected-review;
+                compact: true;
+                request-debrief(focus) => { StatsBridge.request-inspected-debrief(focus); }
+                ask-coach(q) => { StatsBridge.ask-inspected-coach(q); }
             }
 
             Divider { }

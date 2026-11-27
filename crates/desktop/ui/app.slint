@@ -10,6 +10,7 @@ import {
 } from "parts.slint";
 import { StatsPage, StatsBridge } from "stats.slint";
 import { HelperView, DraftHelperPanel } from "helper.slint";
+import { CoachReviewCard, CoachReviewView, CoachTurnRow, ReviewItemRow, TurningPointRow } from "review.slint";
 import "fonts/Overpass-Regular.ttf";
 import "fonts/Overpass-SemiBold.ttf";
 import "fonts/Overpass-ExtraBold.ttf";
@@ -17,7 +18,7 @@ import "fonts/BarlowCondensed-Bold.ttf";
 import "fonts/BarlowCondensed-ExtraBold.ttf";
 import "fonts/OverpassMono.ttf";
 
-export { Theme, ClientArt, StatsBridge }
+export { Theme, ClientArt, StatsBridge, CoachReviewView, ReviewItemRow, TurningPointRow }
 
 // Which companion screen the client's gameflow phase maps to. Set from Rust.
 export enum Screen {
@@ -61,6 +62,18 @@ export struct PerfSettings {
     reduce-motion: bool,
     online-stats: bool,
     update-check: bool,
+    coach-llm: bool,
+}
+
+export struct CoachLlmView {
+    // 0 Ollama (local), 1 LM Studio (local), 2 Custom / BYOK.
+    preset: int,
+    base-url: string,
+    model: string,
+    api-key: string,
+    // 0 idle, 1 testing, 2 ok, 3 failed.
+    test-state: int,
+    test-status: string,
 }
 
 // A newer Hypatia release, pushed by `updates.rs` once the Update Check found one.
@@ -184,6 +197,7 @@ export struct EndView {
     enemy-totals: string,
     allies: [PlayerLine],
     enemies: [PlayerLine],
+    review: CoachReviewView,
 }
 
 component NoteRow inherits Rectangle {
@@ -2419,6 +2433,8 @@ component StatTile inherits Rectangle {
 component EndScreen inherits Flickable {
     in property <EndView> end;
     in property <bool> compact: false;
+    callback request-debrief(int);
+    callback ask-coach(string);
     property <int> view-mode: 0;
     content-height: end-body.preferred-height;
 
@@ -2484,6 +2500,13 @@ component EndScreen inherits Flickable {
                 horizontal-stretch: 1;
                 stat: t;
             }
+        }
+
+        if root.end.review.has: CoachReviewCard {
+            review: root.end.review;
+            compact: root.compact;
+            request-debrief(focus) => { root.request-debrief(focus); }
+            ask-coach(q) => { root.ask-coach(q); }
         }
 
         if root.end.allies.length > 0: HorizontalLayout {
@@ -2654,6 +2677,14 @@ export component MainWindow inherits Window {
     in property <UpdateView> update;
     callback answer-update-check(bool);
     callback install-update();
+
+    // Opt-in Layer 2 Coach LLM narrator.
+    in-out property <CoachLlmView> coach-llm-cfg;
+    callback request-end-debrief(int);
+    callback ask-end-coach(string);
+    callback select-coach-llm-preset(int);
+    callback save-coach-llm-config(string, string, string);
+    callback test-coach-llm();
 
     callback toggle-remote-panel();
     callback rotate-remote-token();
@@ -3093,6 +3124,8 @@ export component MainWindow inherits Window {
                             height: 100%;
                             end: root.end;
                             compact: stage.is-compact;
+                            request-debrief(focus) => { root.request-end-debrief(focus); }
+                            ask-coach(q) => { root.ask-end-coach(q); }
                         }
                     }
 
@@ -3732,6 +3765,173 @@ export component MainWindow inherits Window {
                             detail: @tr("Asks GitHub at launch and twice a day whether a newer Hypatia is out. Sends nothing about you; installs only when you click.");
                             checked: root.perf.update-check;
                             toggled => { root.toggle-setting("update_check"); }
+                        }
+                        SettingRow {
+                            title: @tr("Coach LLM debrief");
+                            detail: @tr("Optional narrator turning local Game Review facts into a short coach debrief via Ollama / LM Studio on 127.0.0.1 or your own API key. Off: zero I/O; never sends your Riot ID or PUUID.");
+                            checked: root.perf.coach-llm;
+                            toggled => { root.toggle-setting("coach_llm"); }
+                        }
+
+                        if root.perf.coach-llm: Rectangle {
+                            border-radius: Theme.radius-sm;
+                            background: Theme.panel-raised;
+                            border-width: 1px;
+                            border-color: Theme.rule;
+
+                            VerticalLayout {
+                                padding: Space.md;
+                                spacing: Space.sm;
+
+                                HorizontalLayout {
+                                    spacing: Space.xs;
+                                    alignment: start;
+                                    Action {
+                                        text: @tr("Ollama (local)");
+                                        selected: root.coach-llm-cfg.preset == 0;
+                                        clicked => { root.select-coach-llm-preset(0); }
+                                    }
+                                    Action {
+                                        text: @tr("LM Studio (local)");
+                                        selected: root.coach-llm-cfg.preset == 1;
+                                        clicked => { root.select-coach-llm-preset(1); }
+                                    }
+                                    Action {
+                                        text: @tr("Custom / BYOK");
+                                        selected: root.coach-llm-cfg.preset == 2;
+                                        clicked => { root.select-coach-llm-preset(2); }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    spacing: Space.xxs;
+                                    Text {
+                                        text: @tr("Endpoint URL");
+                                        color: Theme.muted;
+                                        font-family: Type.mono-family;
+                                        font-size: Type.label;
+                                        font-weight: 700;
+                                    }
+                                    Rectangle {
+                                        height: 32px;
+                                        border-radius: Theme.radius-sm;
+                                        background: Theme.backdrop;
+                                        border-width: 1px;
+                                        border-color: Theme.rule;
+                                        HorizontalLayout {
+                                            padding-left: Space.sm;
+                                            padding-right: Space.sm;
+                                            llm-url := TextInput {
+                                                text <=> root.coach-llm-cfg.base-url;
+                                                color: Theme.text;
+                                                font-family: Type.mono-family;
+                                                font-size: Type.small;
+                                                vertical-alignment: center;
+                                                single-line: true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    spacing: Space.xxs;
+                                    Text {
+                                        text: @tr("Model");
+                                        color: Theme.muted;
+                                        font-family: Type.mono-family;
+                                        font-size: Type.label;
+                                        font-weight: 700;
+                                    }
+                                    Rectangle {
+                                        height: 32px;
+                                        border-radius: Theme.radius-sm;
+                                        background: Theme.backdrop;
+                                        border-width: 1px;
+                                        border-color: Theme.rule;
+                                        HorizontalLayout {
+                                            padding-left: Space.sm;
+                                            padding-right: Space.sm;
+                                            llm-model := TextInput {
+                                                text <=> root.coach-llm-cfg.model;
+                                                color: Theme.text;
+                                                font-family: Type.mono-family;
+                                                font-size: Type.small;
+                                                vertical-alignment: center;
+                                                single-line: true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    spacing: Space.xxs;
+                                    Text {
+                                        text: @tr("API key (optional for local servers)");
+                                        color: Theme.muted;
+                                        font-family: Type.mono-family;
+                                        font-size: Type.label;
+                                        font-weight: 700;
+                                    }
+                                    Rectangle {
+                                        height: 32px;
+                                        border-radius: Theme.radius-sm;
+                                        background: Theme.backdrop;
+                                        border-width: 1px;
+                                        border-color: Theme.rule;
+                                        HorizontalLayout {
+                                            padding-left: Space.sm;
+                                            padding-right: Space.sm;
+                                            llm-key := TextInput {
+                                                text <=> root.coach-llm-cfg.api-key;
+                                                input-type: InputType.password;
+                                                color: Theme.text;
+                                                font-family: Type.mono-family;
+                                                font-size: Type.small;
+                                                vertical-alignment: center;
+                                                single-line: true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: Space.sm;
+                                    alignment: start;
+                                    Action {
+                                        primary: true;
+                                        text: @tr("Save");
+                                        clicked => {
+                                            root.save-coach-llm-config(
+                                                root.coach-llm-cfg.base-url,
+                                                root.coach-llm-cfg.model,
+                                                root.coach-llm-cfg.api-key,
+                                            );
+                                        }
+                                    }
+                                    Action {
+                                        text: root.coach-llm-cfg.test-state == 1 ? @tr("Testing…") : @tr("Test connection");
+                                        clicked => {
+                                            root.save-coach-llm-config(
+                                                root.coach-llm-cfg.base-url,
+                                                root.coach-llm-cfg.model,
+                                                root.coach-llm-cfg.api-key,
+                                            );
+                                            root.test-coach-llm();
+                                        }
+                                    }
+                                    if root.coach-llm-cfg.test-status != "": Text {
+                                        horizontal-stretch: 1;
+                                        text: root.coach-llm-cfg.test-status;
+                                        color: root.coach-llm-cfg.test-state == 2 ? Theme.live-green
+                                             : root.coach-llm-cfg.test-state == 3 ? Theme.danger
+                                             : Theme.muted;
+                                        font-size: Type.small;
+                                        font-weight: 600;
+                                        wrap: word-wrap;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
                         }
 
                         Divider { }

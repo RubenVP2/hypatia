@@ -341,6 +341,7 @@ mod tests {
             client: ReadOnlyRiotClient::new(),
             flags,
             signal,
+            trace_recorder: crate::review::LiveTraceRecorder::new(),
         }
     }
 
